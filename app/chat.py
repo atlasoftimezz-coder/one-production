@@ -5,6 +5,7 @@ The reply streams to the browser as NDJSON - one JSON object per line:
     {"t":"usage", ...}                           tokens used (and cost if the client reports it)
     {"t":"limit", "windows":{...}}               provider-reported utilisation (Claude)
     {"t":"error","kind":"limit|transient|auth|fatal","message":"...","interrupted":bool}
+    {"t":"switch_offer","reason":"limit|threshold|manual","handoff":"...","eligible":[...]}
     {"t":"done"}
 """
 from __future__ import annotations
@@ -23,7 +24,7 @@ HISTORY_TURNS = 20
 def build_prompt(history: list[dict], message: str) -> str:
     """CLIs take one prompt, so the recent conversation is written out as a transcript."""
     lines = [SYSTEM, ""]
-    recent = history[-HISTORY_TURNS:]
+    recent = [m for m in history if m["role"] in ("user", "assistant")][-HISTORY_TURNS:]
     if recent:
         lines.append("Conversation so far:")
         for m in recent:
@@ -53,4 +54,4 @@ async def reply_events(provider, account: dict, prompt: str, model: str | None, 
                 on_auth(ev)
             yield ndjson({"t": "error", "kind": ev.kind, "message": ev.message,
                           "interrupted": ev.interrupted}), ev
-    yield ndjson({"t": "done"}), None
+    # "done" is sent by the caller, after any switch offer

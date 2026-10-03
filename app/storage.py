@@ -66,6 +66,12 @@ class Store:
         (d / "project.json").write_text(json.dumps(meta), encoding="utf-8")
         return meta
 
+    def project(self, pid: str) -> dict:
+        return json.loads((self._dir(pid) / "project.json").read_text(encoding="utf-8"))
+
+    def project_dir(self, pid: str) -> Path:
+        return self._dir(pid)
+
     # ---- files
     def files_dir(self, pid: str) -> Path:
         return self._dir(pid) / "files"

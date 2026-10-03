@@ -82,7 +82,7 @@ def make_client(tmp_path, fake_cmds, monkeypatch, request):
     monkeypatch.setenv("ONEPROD_RETRY_BACKOFF", "0.01,0.01,0.01")
     monkeypatch.setenv("FAKE_STATE", str(tmp_path / "calls.txt"))
     monkeypatch.setenv("FAKE_LOG", str(tmp_path / "prompts.jsonl"))
-    for k in ("FAKE_MODE", "FAKE_FAILS", "FAKE_EMAIL"):
+    for k in ("FAKE_MODE", "FAKE_FAILS", "FAKE_EMAIL", "FAKE_UTIL"):
         monkeypatch.delenv(k, raising=False)
 
     def make(reply_timeout=20):
@@ -95,7 +95,14 @@ def make_client(tmp_path, fake_cmds, monkeypatch, request):
         # One event loop for the whole test, like the real server; otherwise subprocess pipe
         # handles outlive a per-request loop and Windows reports "Event loop is closed".
         c.__enter__()
-        request.addfinalizer(lambda: c.__exit__(None, None, None))
+        c.closed = False
+
+        def close():
+            if not c.closed:
+                c.closed = True
+                c.__exit__(None, None, None)
+        c.close_app = close          # a test may stop the app itself (shutdown hook test)
+        request.addfinalizer(close)
         c.headers[TOKEN_HEADER] = TOKEN
         c.data_dir = tmp_path / "data"
         c.tmp = tmp_path

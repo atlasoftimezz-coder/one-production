@@ -246,6 +246,56 @@
   .errline { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); color: var(--bad); font-size: 12.5px; }
   .meta-line { color: var(--faint); font-size: 11.5px; margin-top: 4px; }
 
+  /* ---------- switching + usage (P3) ---------- */
+  .note-row { text-align: center; color: var(--faint); font-size: 12px; margin: 2px 0; }
+  .note-row span { display: inline-block; padding: 4px 12px; border-radius: 999px; background: var(--panel);
+                   border: 1px solid var(--line); }
+  .linkbtn { color: var(--accent); font-size: 12px; text-decoration: underline; padding: 0; }
+  .offer { align-self: center; width: min(620px, 100%); border: 1px solid var(--warn); border-radius: 16px;
+           background: var(--panel); padding: 14px 16px; box-shadow: var(--shadow); animation: rise .22s ease-out; }
+  .offer.used { opacity: .6; border-color: var(--line); }
+  .offer-head b { display: block; font-size: 14.5px; }
+  .offer-head span { color: var(--dim); font-size: 12.5px; }
+  .offer-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .offer-none { color: var(--ink); font-size: 13px; background: var(--panel2); border-radius: 10px; padding: 10px 12px; }
+  .offer-blocked { margin-top: 10px; color: var(--faint); font-size: 12px; }
+  .offer-foot { margin-top: 10px; display: flex; gap: 14px; }
+  .modal.wide { width: min(1040px, 100%); }
+  .hobody { white-space: pre-wrap; font: 12.5px/1.55 ui-monospace, Consolas, monospace; background: var(--bg2);
+            border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin: 0; max-height: 64vh; overflow: auto; }
+  .tabs { display: inline-flex; background: var(--panel2); border-radius: 12px; padding: 4px; gap: 4px; }
+  .tabs button { padding: 6px 12px; border-radius: 9px; font-weight: 600; font-size: 13px; color: var(--dim); }
+  .tabs button.on { background: var(--panel); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.15); }
+  .totals { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 14px; }
+  .tot { background: var(--bg2); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; }
+  .tot small { color: var(--dim); display: block; font-size: 12px; }
+  .tot b { font-size: 22px; letter-spacing: -.01em; }
+  .ucard { display: grid; grid-template-columns: auto 1fr auto; gap: 14px; align-items: center; padding: 14px;
+           border: 1px solid var(--line); border-radius: 14px; margin-bottom: 10px; background: var(--bg2); }
+  .ucard.off { opacity: .55; }
+  .ubar { position: relative; height: 10px; border-radius: 6px; background: var(--panel2); margin: 8px 0 6px; overflow: visible; }
+  .ubar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 6px; background: var(--ok); }
+  .ubar i.warn { background: var(--warn); } .ubar i.hot { background: var(--bad); }
+  .ubar .mk { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--faint); }
+  .ubar .mk.sw { background: var(--bad); }
+  .kind { font-size: 10.5px; font-weight: 800; letter-spacing: .05em; padding: 2px 7px; border-radius: 999px; }
+  .kind.exact { background: rgba(52,211,153,.15); color: var(--ok); }
+  .kind.estimated { background: rgba(251,191,36,.15); color: var(--warn); }
+  .kind.none { background: var(--panel2); color: var(--faint); }
+  .ustats { color: var(--dim); font-size: 12.5px; display: flex; flex-wrap: wrap; gap: 4px 14px; }
+  .usets { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; align-items: center; font-size: 12px; color: var(--dim); }
+  .usets input { width: 64px; padding: 4px 6px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); }
+  .usets input.wide { width: 100px; }
+  .uord { display: flex; flex-direction: column; gap: 4px; }
+  .uwarn { color: var(--warn); font-size: 12px; margin-top: 4px; }
+  .ugrid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 760px) { .ugrid { grid-template-columns: 1fr; } }
+  .utable { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .utable th, .utable td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  .utable th { color: var(--faint); font-weight: 600; }
+  .utable td.num, .utable th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .utable .empty { color: var(--faint); text-align: center; padding: 12px; }
+
   @media (max-width: 1100px) { #app { grid-template-columns: 230px 1fr 270px; } }
   @media (max-width: 860px) {
     #app { grid-template-columns: 1fr; grid-template-areas: "top" "main"; }
@@ -270,6 +320,10 @@
   <symbol id="i-drive" viewBox="0 0 24 24"><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M5 13l3-8h8l3 8M7 17h.01"/></symbol>
   <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M16 7l3 3M14 9l2 2"/></symbol>
   <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></symbol>
+  <symbol id="i-swap" viewBox="0 0 24 24"><path d="M7 4L3 8l4 4M3 8h14M17 20l4-4-4-4M21 16H7"/></symbol>
+  <symbol id="i-uparr" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></symbol>
+  <symbol id="i-dnarr" viewBox="0 0 24 24"><path d="M12 5v14M5 12l7 7 7-7"/></symbol>
   <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 11-2.3-5.6M20 4v5h-5"/></symbol>
 </svg>
 
@@ -291,6 +345,7 @@
     <div class="brand">One Production</div>
     <div class="crumb" id="crumb"></div>
     <div class="spacer"></div>
+    <button class="topbtn" id="usagebtn" title="How much each account has used"><svg class="icon"><use href="#i-chart"/></svg>Usage</button>
     <button class="topbtn" id="accbtn" title="Your AI accounts"><svg class="icon"><use href="#i-key"/></svg>Accounts
       <span class="badge" id="accbadge" style="display:none"></span></button>
     <span class="pill" title="The app only listens on this computer"><i class="dot"></i>Local · private</span>
@@ -316,6 +371,7 @@
         <button type="button" class="iconbtn" id="attach" title="Attach files"><svg class="icon"><use href="#i-clip"/></svg></button>
         <label class="picker" title="Which account answers"><i class="pdot" id="pickdot"></i>
           <select id="picker"></select></label>
+        <button type="button" class="iconbtn" id="switchbtn" title="Switch account… (saves a handoff and lets another account carry on)"><svg class="icon"><use href="#i-swap"/></svg></button>
         <textarea id="input" rows="1" placeholder="Pick or create a project to start…" disabled></textarea>
         <button class="send" id="send" disabled title="Send"><svg class="icon"><use href="#i-send"/></svg></button>
       </form>
@@ -367,6 +423,41 @@
           <button class="btn primary" id="addgo">Continue</button></div>
       </form>
     </div>
+  </div>
+</div>
+
+<div class="scrim" id="usagemodal">
+  <div class="modal wide" role="dialog" aria-label="Usage">
+    <div class="mhead">
+      <div class="mark"><svg viewBox="0 0 24 24"><use href="#i-play"/></svg></div>
+      <div style="flex:1"><h3>Usage</h3>
+        <p>What each account has used. <b>Exact</b> = reported by the service itself; <b>estimated</b> = counted here against a budget you set.</p></div>
+      <a class="btn" id="csvbtn" href="#">Export CSV</a>
+      <button class="iconbtn" id="usageclose" title="Close"><svg class="icon"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="mbody">
+      <div class="tabs" id="rangetabs">
+        <button data-r="5h">5 hours</button><button data-r="today" class="on">Today</button>
+        <button data-r="7d">7 days</button><button data-r="month">This month</button>
+      </div>
+      <div class="totals" id="totals"></div>
+      <div class="sect" style="padding:16px 0 6px">Accounts — top of the list is used first when switching</div>
+      <div id="ucards"></div>
+      <div class="ugrid">
+        <div><div class="sect" style="padding:14px 0 6px">By project</div><table class="utable" id="byproject"></table></div>
+        <div><div class="sect" style="padding:14px 0 6px">By model</div><table class="utable" id="bymodel"></table></div>
+      </div>
+      <div class="sect" style="padding:14px 0 6px">Switches</div><table class="utable" id="switchlog"></table>
+      <div class="sect" style="padding:14px 0 6px">Limit hits</div><table class="utable" id="hitlog"></table>
+    </div>
+  </div>
+</div>
+
+<div class="scrim" id="homodal">
+  <div class="modal wide" role="dialog" aria-label="Handoff">
+    <div class="mhead"><div style="flex:1"><h3>Handoff</h3><p id="hotitle"></p></div>
+      <button class="iconbtn" id="hoclose" title="Close"><svg class="icon"><use href="#i-x"/></svg></button></div>
+    <div class="mbody"><pre id="hobody" class="hobody"></pre></div>
   </div>
 </div>
 
@@ -516,20 +607,40 @@ function renderThread(hist, p) {
   }
   $("#messages").innerHTML = `<div class="thread"></div>`;
   hist.forEach(m => {
+    if (m.role === "system") return addNote(m.text, m.handoff);
     const b = addMsg(m.role, m.text);
     if (m.role === "assistant") decorate(b, m);
   });
 }
 
+function thread() {
+  let t = $("#messages .thread");
+  if (!t) { $("#messages").innerHTML = `<div class="thread"></div>`; t = $("#messages .thread"); }
+  return t;
+}
+
+function addNote(text, handoffName) {
+  const d = document.createElement("div");
+  d.className = "note-row";
+  d.innerHTML = `<span>${esc(text)}</span>`;
+  if (handoffName) {
+    const b = document.createElement("button");
+    b.className = "linkbtn"; b.textContent = "view handoff";
+    b.onclick = () => showHandoff(handoffName);
+    d.querySelector("span").appendChild(document.createTextNode(" · ")); d.querySelector("span").appendChild(b);
+  }
+  thread().appendChild(d);
+  $("#messages").scrollTop = $("#messages").scrollHeight;
+}
+
 function addMsg(role, text) {
-  let thread = $("#messages .thread");
-  if (!thread) { $("#messages").innerHTML = `<div class="thread"></div>`; thread = $("#messages .thread"); }
+  const t = thread();
   const row = document.createElement("div");
   row.className = "row " + role;
   row.innerHTML = `<div class="who ${role === "user" ? "me" : "ai"}">${role === "user" ? "You" : "OP"}</div>
     <div><div class="bubble"></div></div>`;
   row.querySelector(".bubble").textContent = text;
-  thread.appendChild(row);
+  t.appendChild(row);
   $("#messages").scrollTop = $("#messages").scrollHeight;
   return row.querySelector(".bubble");
 }
@@ -573,17 +684,22 @@ $("#composer").onsubmit = async e => {
   e.preventDefault();
   const text = $("#input").value;
   if (!text.trim() || !state.current || state.busy) return;
-  state.busy = true; $("#send").disabled = true;
   $("#input").value = ""; grow();
   addMsg("user", text);
+  const accountId = $("#picker").value || "demo";
+  await streamReply(`/api/projects/${state.current}/chat`, { message: text, account_id: accountId }, accountId);
+};
+
+// One streamer for normal replies and for "continue on another account".
+async function streamReply(url, body, accountId) {
+  state.busy = true; $("#send").disabled = true;
   const bubble = addMsg("assistant", "");
   bubble.innerHTML = `<span class="typing"><i></i><i></i><i></i></span>`;
-  const accountId = $("#picker").value || "demo";
   const meta = { account: accountId };
+  let offer = null;
   try {
-    const r = await api(`/api/projects/${state.current}/chat`, { method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: text, account_id: accountId }) });
+    const r = await api(url, { method: "POST", headers: { "Content-Type": "application/json" },
+                               body: JSON.stringify(body) });
     const reader = r.body.getReader(), dec = new TextDecoder();
     let buf = "", first = true;
     const handle = ev => {
@@ -598,6 +714,8 @@ $("#composer").onsubmit = async e => {
       } else if (ev.t === "error") {
         meta.error = { kind: ev.kind, message: ev.message }; meta.interrupted = ev.interrupted;
         if (ev.kind === "auth") loadAccounts();
+      } else if (ev.t === "switch_offer") {
+        offer = ev;
       }
     };
     for (;;) {
@@ -613,9 +731,69 @@ $("#composer").onsubmit = async e => {
     }
     if (first) bubble.textContent = "";
     decorate(bubble, meta);
-    renderPicker();
+    if (offer) showOffer(offer);
+    loadAccounts().catch(() => {});
   } catch (err) { bubble.textContent = "Couldn't get a reply: " + err.message; bubble.classList.add("err"); }
   state.busy = false; $("#send").disabled = false; $("#input").focus();
+}
+
+// ---------- switching accounts (plan R3)
+const OFFER_TITLE = {
+  limit: "hit its usage limit",
+  threshold: "is running low",
+  manual: "— switch to another account?",
+};
+function fmtReset(ts) {
+  return ts ? new Date(ts * 1000).toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" }) : "";
+}
+function showOffer(o) {
+  const from = state.accounts.find(a => a.id === o.from);
+  const name = from ? accName(from) : "This account";
+  const pct = o.usage_pct != null ? ` (${Math.round(o.usage_pct)}%${o.usage_kind === "estimated" ? ", estimated" : ""})` : "";
+  const ok = o.eligible.filter(e => e.ok), blocked = o.eligible.filter(e => !e.ok);
+  const card = document.createElement("div");
+  card.className = "offer";
+  card.innerHTML = `
+    <div class="offer-head"><b>${esc(name)} ${OFFER_TITLE[o.reason] || ""}${pct}</b>
+      <span>Your conversation is saved in a handoff file — the next account picks up from it.</span></div>
+    <div class="offer-list">${ok.map(e => `<button class="btn primary" data-to="${e.id}">Continue on ${esc(PROV[e.provider].short)} · ${esc(e.label)}${
+        e.usage_pct != null ? ` (${Math.round(e.usage_pct)}%)` : ""}</button>`).join("")}
+      ${ok.length ? "" : `<div class="offer-none">No other account can take over right now.${
+        o.from_resets_at ? " " + esc(name) + " resets " + esc(fmtReset(o.from_resets_at)) + "." : ""}
+        Your work is saved — add an account in Accounts, or come back after the reset.</div>`}
+    </div>
+    ${blocked.length ? `<div class="offer-blocked">${blocked.map(e => `<div>${esc(PROV[e.provider].short)} · ${esc(e.label)} — ${esc(e.why)}</div>`).join("")}</div>` : ""}
+    <div class="offer-foot"><button class="linkbtn" data-view>view handoff</button>
+      ${o.reason === "manual" ? `<button class="linkbtn" data-dismiss>not now</button>` : ""}</div>`;
+  card.querySelectorAll("[data-to]").forEach(b => b.onclick = async () => {
+    card.querySelectorAll("button").forEach(x => x.disabled = true);
+    const to = state.accounts.find(a => a.id === b.dataset.to);
+    addNote(`Continued on ${to ? accName(to) : b.dataset.to}`, o.handoff);
+    $("#picker").value = b.dataset.to; state.userPicked = true; renderPicker();
+    card.classList.add("used");
+    await streamReply(`/api/projects/${state.current}/continue`,
+      { to_account: b.dataset.to, from_account: o.from, handoff: o.handoff, trigger: o.reason }, b.dataset.to);
+  });
+  card.querySelector("[data-view]").onclick = () => showHandoff(o.handoff);
+  const d = card.querySelector("[data-dismiss]");
+  if (d) d.onclick = () => card.remove();
+  thread().appendChild(card);
+  $("#messages").scrollTop = $("#messages").scrollHeight;
+}
+
+async function showHandoff(name) {
+  const text = await (await api(`/api/projects/${state.current}/handoffs/${encodeURIComponent(name)}`)).text();
+  $("#hotitle").textContent = name;
+  $("#hobody").textContent = text;
+  $("#homodal").classList.add("open");
+}
+
+$("#switchbtn").onclick = async () => {
+  if (!state.current || state.busy) return;
+  const accountId = $("#picker").value || "demo";
+  const o = await (await api(`/api/projects/${state.current}/switch`, { method: "POST",
+    headers: { "Content-Type": "application/json" }, body: JSON.stringify({ account_id: accountId }) })).json();
+  showOffer(o);
 };
 
 // ---------- files
@@ -825,6 +1003,122 @@ $("#acccheck").onclick = async () => {
   toast("Checking all accounts…");
   state.accounts = await (await api("/api/accounts/check", { method: "POST" })).json();
   renderPicker(); renderAccounts();
+};
+
+// ---------- usage page (plan R2)
+state.range = "today";
+const num = n => (n || 0).toLocaleString();
+const money = v => v == null ? "—" : "$" + Number(v).toFixed(v < 1 ? 4 : 2);
+const when = ts => ts ? new Date(ts * 1000).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—";
+
+async function openUsage() { $("#usagemodal").classList.add("open"); await loadUsage(); }
+function closeUsage() { $("#usagemodal").classList.remove("open"); }
+
+async function loadUsage() {
+  const [u, sw, hits] = await Promise.all([
+    api("/api/usage?range=" + state.range).then(r => r.json()),
+    api("/api/usage/switches").then(r => r.json()),
+    api("/api/usage/limit-hits").then(r => r.json()),
+  ]);
+  document.querySelectorAll("#rangetabs button").forEach(b => b.classList.toggle("on", b.dataset.r === state.range));
+  const t = u.totals;
+  $("#totals").innerHTML = `
+    <div class="tot"><small>Replies</small><b>${num(t.requests)}</b></div>
+    <div class="tot"><small>Tokens in</small><b>${num(t.in_tok)}</b></div>
+    <div class="tot"><small>Tokens out</small><b>${num(t.out_tok)}</b></div>
+    <div class="tot"><small>Cost (where reported)</small><b>${money(t.cost_usd)}</b></div>`;
+
+  $("#ucards").innerHTML = u.cards.length ? u.cards.map((c, i) => {
+    const p = PROV[c.provider];
+    const pct = c.usage_pct;
+    const cls = pct == null ? "" : pct >= c.switch_pct ? "hot" : pct >= c.warn_pct ? "warn" : "";
+    const kindLabel = { exact: "EXACT", estimated: "ESTIMATED", none: "NO LIMIT DATA" }[c.usage_kind];
+    const resets = c.rate_limit && c.rate_limit.windows ? Object.entries(c.rate_limit.windows).map(([k, w]) =>
+      `${k === "five_hour" ? "5-hour" : k === "seven_day" ? "7-day" : k} ${Math.round((w.utilization || 0) * 100)}%, resets ${fmtReset(w.resets_at)}`).join(" · ") : "";
+    const acc = c.accuracy;
+    return `<div class="ucard ${c.enabled ? "" : "off"}" data-id="${c.id}">
+      <div class="plogo" style="background:${p.color}">${p.logo}</div>
+      <div style="min-width:0">
+        <div class="aname">${esc(accName(c))} <span class="kind ${c.usage_kind}">${kindLabel}</span>
+          ${c.enabled ? "" : '<span class="stat unchecked">off</span>'}</div>
+        ${pct != null ? `<div class="ubar"><i class="${cls}" style="width:${Math.min(pct, 100)}%"></i>
+            <span class="mk" style="left:${c.warn_pct}%" title="warning at ${c.warn_pct}%"></span>
+            <span class="mk sw" style="left:${c.switch_pct}%" title="switch at ${c.switch_pct}%"></span></div>
+          <div class="ustats"><b style="color:var(--ink)">${pct}% used</b>${resets ? `<span>${esc(resets)}</span>` : ""}</div>`
+          : `<div class="ustats" style="margin-top:6px">${c.provider === "claude"
+              ? "Send one message with this account to see its exact usage."
+              : "This service doesn't report its limit. Set a 5-hour token budget below to get an estimate."}</div>`}
+        <div class="ustats" style="margin-top:4px"><span>${num(c.requests)} replies</span>
+          <span>${num(c.in_tok)} in · ${num(c.out_tok)} out tokens</span><span>cost ${money(c.cost_usd)}</span>
+          <span>last used ${when(c.last_used)}</span>${c.errors ? `<span style="color:var(--bad)">${c.errors} errors</span>` : ""}</div>
+        ${acc ? `<div class="uwarn">${acc.reliable ? "Estimate checked against real limit hits: reliable." :
+            `Estimate unreliable: at the last ${acc.hits} real limit hit(s) it read ${acc.median_est_at_hit}% (should read ~100%). ` +
+            "Early switching is off for this account; it still switches when the real limit hits. Adjust the budget."}</div>` : ""}
+        <div class="usets">warn at <input type="number" min="1" max="99" value="${c.warn_pct}" data-k="warn_pct">%
+          switch at <input type="number" min="2" max="100" value="${c.switch_pct}" data-k="switch_pct">%
+          ${c.usage_kind !== "exact" ? `· 5-hour budget <input class="wide" type="number" min="1" placeholder="tokens"
+               value="${c.budget_tokens_5h || ""}" data-k="budget_tokens_5h"> tokens` : ""}</div>
+      </div>
+      <div class="uord">
+        <button class="iconbtn" data-move="-1" ${i === 0 ? "disabled" : ""} title="Use earlier"><svg class="icon"><use href="#i-uparr"/></svg></button>
+        <button class="iconbtn" data-move="1" ${i === u.cards.length - 1 ? "disabled" : ""} title="Use later"><svg class="icon"><use href="#i-dnarr"/></svg></button>
+      </div></div>`;
+  }).join("") : `<div class="empty-acc">No accounts yet — add one in Accounts.</div>`;
+
+  $("#ucards").querySelectorAll("input[data-k]").forEach(inp => inp.onchange = async () => {
+    const id = inp.closest(".ucard").dataset.id, k = inp.dataset.k;
+    const v = inp.value.trim() === "" ? (k === "budget_tokens_5h" ? null : undefined) : Number(inp.value);
+    if (v === undefined) return;
+    try {
+      await api(`/api/accounts/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [k]: v }) });
+      toast("Saved"); await loadUsage(); await loadAccounts();
+    } catch (err) { toast(err.message, true); loadUsage(); }
+  });
+  $("#ucards").querySelectorAll("button[data-move]").forEach(b => b.onclick = async () => {
+    const ids = u.cards.map(c => c.id), i = ids.indexOf(b.closest(".ucard").dataset.id), j = i + Number(b.dataset.move);
+    [ids[i], ids[j]] = [ids[j], ids[i]];
+    await api("/api/accounts/order", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids }) });
+    await loadUsage(); await loadAccounts();
+  });
+
+  const projName = id => (state.projects.find(p => p.id === id) || {}).name || id || "—";
+  const accLabel = id => { const a = state.accounts.find(x => x.id === id); return a ? accName(a) : (id || "—"); };
+  const table = (el, head, rows, empty) => {
+    $(el).innerHTML = rows.length ? `<tr>${head.map(h => `<th class="${h[1] || ""}">${h[0]}</th>`).join("")}</tr>` +
+      rows.map(r => `<tr>${r.map((c, i) => `<td class="${head[i][1] || ""}">${c}</td>`).join("")}</tr>`).join("")
+      : `<tr><td class="empty">${empty}</td></tr>`;
+  };
+  table("#byproject", [["Project"], ["Replies", "num"], ["Tokens", "num"], ["Cost", "num"]],
+        u.by_project.map(r => [esc(projName(r.project)), num(r.requests), num(r.tokens), money(r.cost_usd)]), "Nothing yet");
+  table("#bymodel", [["Model"], ["Replies", "num"], ["Tokens", "num"], ["Cost", "num"]],
+        u.by_model.map(r => [esc(r.model || "—"), num(r.requests), num(r.tokens), money(r.cost_usd)]), "Nothing yet");
+  table("#switchlog", [["When"], ["Project"], ["From"], ["To"], ["Why"], ["Usage", "num"], ["Handoff"]],
+        sw.slice(0, 12).map(s => [when(s.ts), esc(projName(s.project)), esc(accLabel(s.from_acc)), esc(accLabel(s.to_acc)),
+          esc(s.trigger), s.usage_at_switch == null ? "—" : Math.round(s.usage_at_switch) + "%", esc(s.handoff || "")]),
+        "No switches yet");
+  table("#hitlog", [["When"], ["Account"], ["Estimate at the time", "num"], ["Message"]],
+        hits.slice(0, 12).map(h => [when(h.ts), esc(accLabel(h.account)), h.est_pct == null ? "—" : Math.round(h.est_pct) + "%",
+          esc((h.message || "").slice(0, 90))]), "No limit hits yet");
+}
+
+document.querySelectorAll("#rangetabs button").forEach(b => b.onclick = () => { state.range = b.dataset.r; loadUsage(); });
+$("#usagebtn").onclick = openUsage;
+$("#usageclose").onclick = closeUsage;
+$("#usagemodal").addEventListener("click", e => { if (e.target.id === "usagemodal") closeUsage(); });
+$("#hoclose").onclick = () => $("#homodal").classList.remove("open");
+$("#homodal").addEventListener("click", e => { if (e.target.id === "homodal") $("#homodal").classList.remove("open"); });
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") { closeUsage(); $("#homodal").classList.remove("open"); }
+});
+$("#csvbtn").onclick = async e => {
+  e.preventDefault();
+  const r = await api("/api/usage/export.csv?range=" + state.range);
+  const url = URL.createObjectURL(await r.blob());
+  const a = Object.assign(document.createElement("a"), { href: url, download: `usage-${state.range}.csv` });
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
 };
 
 // ---------- start

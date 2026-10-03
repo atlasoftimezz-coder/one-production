@@ -9,6 +9,7 @@ Behaviour comes from environment variables set by the tests:
     FAKE_STATE  file counting calls (so tests can prove a prompt was or wasn't re-sent)
     FAKE_LOG    file the received stdin prompt is appended to
     FAKE_EMAIL  email to report after a fake login
+    FAKE_UTIL   Claude five_hour utilisation to report (default 0.42)
 Login state is a file "logged_in" inside the account's own folder (CLAUDE_CONFIG_DIR /
 CODEX_HOME), which is exactly what proves the folders keep accounts apart.
 """
@@ -64,7 +65,8 @@ def claude(args, home: Path):
     out({"type": "system", "subtype": "init", "model": "claude-sonnet-5-5"})
     rl = {"type": "rate_limit_event", "rate_limit_info": {
         "status": "rejected" if mode == "limit" else "allowed", "rateLimitType": "five_hour",
-        "unifiedWindows": {"five_hour": {"utilization": 1.0 if mode == "limit" else 0.42, "resetsAt": 1791033600},
+        "unifiedWindows": {"five_hour": {"utilization": 1.0 if mode == "limit" else float(os.environ.get("FAKE_UTIL", "0.42")),
+                                         "resetsAt": 1791033600},
                            "seven_day": {"utilization": 0.10, "resetsAt": 1791208800}}}}
     usage = {"input_tokens": 12, "output_tokens": 30, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0}
 

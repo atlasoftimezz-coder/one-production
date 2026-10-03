@@ -207,9 +207,71 @@ try:
         js("document.querySelector('#accbtn').click()")
         wait_for("document.querySelector('#accmodal').classList.contains('open')")
         meters = js("document.querySelector('#acclist').innerText") or ""
-        check("exact Claude usage shown (42% / 10%)", "42%" in meters and "10%" in meters)
+        util = round(float(os.environ.get("FAKE_UTIL", "0.42")) * 100)
+        check(f"exact Claude usage shown ({util}% / 10%)", f"{util}%" in meters and "10%" in meters)
         shot("11-accounts-usage")
         js("document.querySelector('#accclose').click()")
+
+    # switching + usage page (P3) - server runs with fake Claude at FAKE_UTIL >= 0.85
+    if os.environ.get("UI_DRIVE_SWITCH") == "1":
+        # The Claude reply above crossed the threshold, so a switch card should be in the chat.
+        js("document.querySelector('#projects li[data-id]').click()")
+        wait_for("!document.querySelector('#input').disabled")
+        js("[...document.querySelectorAll('#picker option')].find(o=>o.textContent.includes('Main Claude')).selected=true;"
+           "document.querySelector('#picker').dispatchEvent(new Event('change'))")
+        js("document.querySelector('#input').value='Draft the Pripyat cold open'; document.querySelector('#composer').requestSubmit()")
+        check("switch card appears when Claude crosses 85%", wait_for("!!document.querySelector('.offer:not(.used)')", 20))
+        card = js("document.querySelector('.offer:not(.used)').innerText") or ""
+        check("card names the account and its usage", "Main Claude" in card and "87%" in card, card[:120])
+        check("card offers Codex", "Continue on Codex" in card)
+        shot("12-switch-offer")
+
+        js("document.querySelector('.offer:not(.used) [data-view]').click()")
+        check("handoff opens and has the conversation", wait_for(
+            "document.querySelector('#homodal').classList.contains('open') && "
+            "document.querySelector('#hobody').innerText.includes('Draft the Pripyat cold open')", 8))
+        shot("13-handoff")
+        js("document.querySelector('#hoclose').click()")
+
+        n = js("document.querySelectorAll('.row.assistant').length")
+        js("[...document.querySelectorAll('.offer:not(.used) [data-to]')].find(b=>b.innerText.includes('Codex')).click()")
+        got = wait_for(f"document.querySelectorAll('.row.assistant').length>{n} && !document.querySelector('#send').disabled", 20)
+        last = js("[...document.querySelectorAll('.row.assistant .bubble')].pop().innerText") or ""
+        check("Codex carries on after the switch", got and "Fake Codex says" in last, last[:80])
+        check("'Continued on' divider shown", "Continued on My Codex" in (js("document.querySelector('.thread').innerText") or ""))
+        check("picker now on Codex", "My Codex" in (js("document.querySelector('#picker option:checked').textContent") or ""))
+        shot("14-after-switch")
+
+        # usage page
+        js("document.querySelector('#usagebtn').click()")
+        check("usage page opens", wait_for("document.querySelector('#usagemodal').classList.contains('open') && document.querySelectorAll('.ucard').length>=2", 8))
+        utext = js("document.querySelector('#usagemodal').innerText") or ""
+        check("Claude card EXACT 87%", "EXACT" in utext and "87% used" in utext)
+        check("Codex card says no limit data", "NO LIMIT DATA" in utext)
+        check("switch log has the hand-over", "Main Claude" in (js("document.querySelector('#switchlog').innerText") or "")
+              and "threshold" in (js("document.querySelector('#switchlog').innerText") or ""))
+        shot("15-usage")
+        # give Codex a budget -> estimated bar appears
+        js("""(()=>{const i=[...document.querySelectorAll('.ucard')].find(c=>c.innerText.includes('My Codex')).querySelector('input[data-k=budget_tokens_5h]');
+              i.value='1000'; i.dispatchEvent(new Event('change'));})()""")
+        check("Codex shows an ESTIMATED bar after setting a budget", wait_for(
+            "[...document.querySelectorAll('.ucard')].some(c=>c.innerText.includes('My Codex') && c.innerText.includes('ESTIMATED') && c.querySelector('.ubar'))", 8))
+        # reorder: move Codex to the top
+        first_before = js("document.querySelector('.ucard .aname').innerText")
+        js("[...document.querySelectorAll('.ucard')].find(c=>c.innerText.includes('My Codex')).querySelector('[data-move=\"-1\"]').click()")
+        check("reorder moves Codex up", wait_for("document.querySelector('.ucard .aname').innerText.includes('My Codex')", 8), first_before)
+        # range tabs
+        js("document.querySelector('#rangetabs [data-r=\"7d\"]').click()")
+        check("range tab switches", wait_for("document.querySelector('#rangetabs [data-r=\"7d\"]').classList.contains('on')", 5))
+        shot("16-usage-after-edits")
+        js("document.querySelector('#usageclose').click()")
+
+        # manual switch button
+        js("document.querySelector('#switchbtn').click()")
+        check("manual switch shows a card with 'not now'", wait_for(
+            "[...document.querySelectorAll('.offer:not(.used)')].some(o=>o.querySelector('[data-dismiss]'))", 8))
+        js("document.querySelector('.offer:not(.used) [data-dismiss]').click()")
+        check("'not now' dismisses it", not js("!!document.querySelector('.offer:not(.used) [data-dismiss]')"))
 
     # dark mode (Windows dark theme)
     send("Emulation.setEmulatedMedia", features=[{"name": "prefers-color-scheme", "value": "dark"}])

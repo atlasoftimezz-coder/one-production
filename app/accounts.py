@@ -21,6 +21,12 @@ PROVIDERS = {
     "anthropic_api": {"label": "Anthropic API key", "needs_login": False, "models": ["sonnet", "opus", "haiku"]},
 }
 KEYRING_SERVICE = "OneProduction"
+DEFAULT_WARN, DEFAULT_SWITCH = 70, 85
+SUBSCRIPTIONS = {"claude", "codex"}
+# Plan D7/R8: hopping between two accounts of the SAME subscription service to get past its
+# limit stays off until the terms check is done. Switching to a different service, or to a
+# pay-per-use API key, is ordinary use and is allowed.
+SAME_SERVICE_SWITCHING = False
 
 
 class AccountError(ValueError):
@@ -80,7 +86,8 @@ class Accounts:
         acc = {"id": acc_id, "provider": provider, "label": (label or "").strip()[:60],
                "email": None, "plan": None, "model": model or (PROVIDERS[provider]["models"] or [None])[0],
                "enabled": True, "created": time.time(), "status": "unchecked", "reason": None,
-               "rate_limit": None, "profile_dir": None, "key_hint": None}
+               "rate_limit": None, "profile_dir": None, "key_hint": None,
+               "warn_pct": DEFAULT_WARN, "switch_pct": DEFAULT_SWITCH, "budget_tokens_5h": None}
         if PROVIDERS[provider]["needs_login"]:
             folder = self.profiles / acc_id
             folder.mkdir(parents=True)
@@ -122,6 +129,31 @@ class Accounts:
         if allowed and model not in allowed:
             raise AccountError("unknown model")
         return self._update(acc_id, model=model)
+
+    def set_limits(self, acc_id: str, warn_pct=None, switch_pct=None, budget_tokens_5h=-1) -> dict:
+        acc = self.get(acc_id)
+        warn = acc.get("warn_pct", DEFAULT_WARN) if warn_pct is None else int(warn_pct)
+        switch = acc.get("switch_pct", DEFAULT_SWITCH) if switch_pct is None else int(switch_pct)
+        if not (1 <= warn < switch <= 100):
+            raise AccountError("the warning level must be below the switch level (1-100)")
+        changes = {"warn_pct": warn, "switch_pct": switch}
+        if budget_tokens_5h != -1:
+            if budget_tokens_5h is not None and int(budget_tokens_5h) <= 0:
+                raise AccountError("the token budget must be a positive number")
+            changes["budget_tokens_5h"] = None if budget_tokens_5h is None else int(budget_tokens_5h)
+        return self._update(acc_id, **changes)
+
+    def reorder(self, ids: list[str]) -> list[dict]:
+        with self._lock:
+            items = self._load()
+            known = {a["id"] for a in items}
+            if set(ids) != known:
+                raise AccountError("the new order must list every account exactly once")
+            pos = {i: n for n, i in enumerate(ids)}
+            for a in items:
+                a["order"] = pos[a["id"]]
+            self._save(items)
+        return self.list()
 
     def record_status(self, acc_id: str, result: dict) -> dict:
         changes = {"status": "ok" if result.get("ok") else "error",
