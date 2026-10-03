@@ -11,9 +11,14 @@ ROOT = Path(__file__).resolve().parents[2]
 MOJIBAKE = ("Ã", "Â·", "Â ", "â€", "Ã©", "ï»¿")
 
 
-def test_web_files_are_valid_utf8_without_bom_or_mojibake():
-    for f in (ROOT / "web").rglob("*"):
-        if f.suffix in {".html", ".js", ".css"}:
+def test_text_files_are_valid_utf8_without_bom_or_mojibake():
+    # web\ is what the user sees; docs\ and the config files get hand-edited and have
+    # been mangled the same way before.
+    candidates = [*(ROOT / "web").rglob("*"), *(ROOT / "docs").rglob("*"),
+                  ROOT / "pyproject.toml", ROOT / "README.md"]
+    for f in candidates:
+        if f.is_file() and f.suffix in {".html", ".js", ".css", ".md", ".toml", ".txt"} \
+                and not f.name.endswith("-auto.md"):
             raw = f.read_bytes()
             assert not raw.startswith(b"\xef\xbb\xbf"), f"{f.name} starts with a BOM"
             text = raw.decode("utf-8")          # raises if not valid UTF-8
