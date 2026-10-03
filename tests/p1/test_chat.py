@@ -25,8 +25,12 @@ def test_reply_streams_in_pieces_on_a_real_server(tmp_path):
         t_first = time.perf_counter() - start
         rest = resp.read()
         t_all = time.perf_counter() - start
-        text = (first + rest).decode()
+        raw = (first + rest).decode()
+        # Since P2 the reply is NDJSON: one {"t": "text", "v": ...} line per piece.
+        events = [json.loads(line) for line in raw.splitlines() if line.strip()]
+        text = "".join(e["v"] for e in events if e["t"] == "text")
         assert "hello there" in text
+        assert events[-1] == {"t": "done"}
         assert t_all - t_first > 0.2, f"no streaming: first byte {t_first:.2f}s, last {t_all:.2f}s"
     finally:
         proc.kill(); proc.wait(10)

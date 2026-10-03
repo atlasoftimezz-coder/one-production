@@ -8,6 +8,8 @@ dependencies = [
     "uvicorn[standard]",
     "pydantic",
     "python-multipart",
+    "httpx",
+    "keyring",
 ]
 
 [project.optional-dependencies]

@@ -42,6 +42,12 @@ class Settings(BaseModel):
     port: int = 0            # 0 = pick the first free port from DEFAULT_PORT upwards
     open_browser: bool = True
     log_level: str = "info"
+    # Where the official CLIs are, if not on PATH (e.g. a friend's custom install).
+    claude_cmd: str | None = None
+    codex_cmd: str | None = None
+    anthropic_base_url: str | None = None   # only for tests / proxies
+    reply_timeout: float = 300
+    login_console: bool = True              # show the provider's sign-in in its own window
 
     @field_validator("host")
     @classmethod
@@ -71,6 +77,14 @@ def _env_overrides() -> dict:
         out["open_browser"] = v.strip().lower() not in ("0", "false", "no", "off")
     if v := os.environ.get("ONEPROD_LOG_LEVEL"):
         out["log_level"] = v
+    if v := os.environ.get("ONEPROD_CLAUDE_CMD"):
+        out["claude_cmd"] = v
+    if v := os.environ.get("ONEPROD_CODEX_CMD"):
+        out["codex_cmd"] = v
+    if v := os.environ.get("ONEPROD_ANTHROPIC_BASE_URL"):
+        out["anthropic_base_url"] = v
+    if v := os.environ.get("ONEPROD_LOGIN_CONSOLE"):
+        out["login_console"] = v.strip().lower() not in ("0", "false", "no", "off")
     return out
 
 

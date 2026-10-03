@@ -95,8 +95,8 @@ class Store:
         return p
 
     # ---- chat
-    def append_message(self, pid: str, role: str, text: str) -> dict:
-        msg = {"role": role, "text": text, "time": time.time()}
+    def append_message(self, pid: str, role: str, text: str, **meta) -> dict:
+        msg = {"role": role, "text": text, "time": time.time(), **meta}
         with (self._dir(pid) / "chat.jsonl").open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(msg) + "\n")
         return msg

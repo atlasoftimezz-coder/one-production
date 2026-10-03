@@ -149,6 +149,56 @@ try:
     time.sleep(0.3); shot("06-narrow-1100")
     send("Emulation.setDeviceMetricsOverride", width=W, height=H, deviceScaleFactor=1, mobile=False)
 
+    # accounts (P2) - only when the server runs against the fake CLIs
+    if os.environ.get("UI_DRIVE_ACCOUNTS") == "1":
+        check("only Demo in picker at start", js("[...document.querySelectorAll('#picker option')].map(o=>o.value).join()") == "demo")
+        js("document.querySelector('#accbtn').click()")
+        check("accounts panel opens", wait_for("document.querySelector('#accmodal').classList.contains('open')"))
+        check("empty-state shown", "No accounts yet" in (js("document.querySelector('#acclist').innerText") or ""))
+        shot("08-accounts-empty")
+
+        def add_cli(prov, label):
+            js(f"document.querySelector('.tile[data-prov=\"{prov}\"]').click()")
+            js(f"document.querySelector('#addlabel').value='{label}'; document.querySelector('#addform').requestSubmit()")
+            return wait_for(f"[...document.querySelectorAll('.acc')].some(a=>a.innerText.includes('{label}') && a.querySelector('.stat.ok'))", 20)
+
+        check("Claude login signs in", add_cli("claude", "Main Claude"))
+        check("email read from Claude", "friend@example.com" in (js("document.querySelector('#acclist').innerText") or ""))
+        check("Codex login signs in", add_cli("codex", "My Codex"))
+        check("API key tile asks for key", js("document.querySelector('.tile[data-prov=\"anthropic_api\"]').click(); getComputedStyle(document.querySelector('#keyrow')).display") != "none")
+        js("document.querySelector('#addcancel').click()")
+        shot("09-accounts-signed-in")
+        js("document.querySelector('#accclose').click()")
+
+        opts = js("[...document.querySelectorAll('#picker option')].map(o=>o.textContent).join(' | ')") or ""
+        check("picker lists new accounts", "Main Claude" in opts and "My Codex" in opts, opts)
+        js("[...document.querySelectorAll('#picker option')].find(o=>o.textContent.includes('Main Claude')).selected=true; document.querySelector('#picker').dispatchEvent(new Event('change'))")
+        js("document.querySelector('#projects li[data-id]').click()")
+        check("message box locked while project loads", js("document.querySelector('#input').disabled"))
+        wait_for("!document.querySelector('#input').disabled")
+        n0 = js("document.querySelectorAll('.row.assistant').length")
+        js("document.querySelector('#input').value='Write a hook about Varosha'; document.querySelector('#composer').requestSubmit()")
+        got = wait_for(f"document.querySelectorAll('.row.assistant').length>{n0} && !document.querySelector('#send').disabled", 20)
+        last = js("[...document.querySelectorAll('.row.assistant .bubble')].pop().innerText") or ""
+        check("Claude account answers in chat", got and "Fake Claude says: Write a hook about Varosha" in last, last[:80])
+        meta = js("[...document.querySelectorAll('.meta-line')].pop()?.innerText") or ""
+        check("reply shows who answered", "Main Claude" in meta, meta)
+        shot("10-chat-with-claude")
+
+        js("[...document.querySelectorAll('#picker option')].find(o=>o.textContent.includes('My Codex')).selected=true")
+        n1 = js("document.querySelectorAll('.row.assistant').length")
+        js("document.querySelector('#input').value='Now outline it'; document.querySelector('#composer').requestSubmit()")
+        wait_for(f"document.querySelectorAll('.row.assistant').length>{n1} && !document.querySelector('#send').disabled", 20)
+        last = js("[...document.querySelectorAll('.row.assistant .bubble')].pop().innerText") or ""
+        check("switching account mid-project works", "Fake Codex says: Now outline it" in last, last[:80])
+
+        js("document.querySelector('#accbtn').click()")
+        wait_for("document.querySelector('#accmodal').classList.contains('open')")
+        meters = js("document.querySelector('#acclist').innerText") or ""
+        check("exact Claude usage shown (42% / 10%)", "42%" in meters and "10%" in meters)
+        shot("11-accounts-usage")
+        js("document.querySelector('#accclose').click()")
+
     # dark mode (Windows dark theme)
     send("Emulation.setEmulatedMedia", features=[{"name": "prefers-color-scheme", "value": "dark"}])
     time.sleep(0.3); shot("06b-dark")

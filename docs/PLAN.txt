@@ -459,8 +459,10 @@ each gate includes your manual check. Friends release = P6-P7. Production = P8-P
 
 9. RISKS
 --------
-  - Subscription logins publish no official % used -> predictive trigger is an estimate;
-    the reactive trigger (limit error) is the reliable one.
+  - Subscription usage: CHECKED in P2 (2026-10-03). Claude Code reports exact five_hour and
+    seven_day utilisation plus reset times in every reply (rate_limit_event), so Claude
+    meters and the 85% trigger are EXACT. Codex (0.157.1) reports only token counts, so
+    Codex stays estimated and relies on the reactive trigger (limit error).
   - Provider terms may restrict automated CLI use or account switching -> R8 gate.
   - CLAUDE_CONFIG_DIR / CODEX_HOME isolation must be verified on installed versions;
     fallback is one login per Windows user.

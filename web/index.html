@@ -179,6 +179,73 @@
   #toast.show { opacity: 1; transform: translateX(-50%); }
   #toast.bad { border-color: var(--bad); }
 
+  /* ---------- accounts ---------- */
+  .topbtn { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 10px;
+            background: var(--panel); border: 1px solid var(--line); font-weight: 600; font-size: 13px; }
+  .topbtn:hover { border-color: var(--accent); }
+  .badge { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--grad);
+           color: #fff; font-size: 11px; display: inline-grid; place-items: center; }
+  .badge.bad { background: var(--bad); }
+  .picker { display: flex; align-items: center; gap: 6px; padding: 4px 6px 4px 10px; border-radius: 10px;
+            background: var(--panel2); color: var(--dim); font-size: 12px; flex: none; max-width: 230px; }
+  .picker select { border: 0; background: none; outline: none; font-size: 12px; font-weight: 600;
+                   color: var(--ink); max-width: 180px; text-overflow: ellipsis; cursor: pointer; }
+  .picker select option { background: var(--panel); color: var(--ink); }
+  .pdot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--faint); }
+  .pdot.ok { background: var(--ok); } .pdot.error { background: var(--bad); }
+
+  .scrim { position: fixed; inset: 0; background: rgba(5,7,12,.55); backdrop-filter: blur(3px);
+           display: none; place-items: center; z-index: 20; padding: 20px; }
+  .scrim.open { display: grid; }
+  .modal { width: min(760px, 100%); max-height: 88vh; overflow: auto; background: var(--panel);
+           border: 1px solid var(--line); border-radius: 20px; box-shadow: var(--shadow); }
+  .mhead { display: flex; align-items: center; gap: 12px; padding: 18px 22px; border-bottom: 1px solid var(--line);
+           position: sticky; top: 0; background: var(--panel); z-index: 1; }
+  .mhead h3 { margin: 0; font-size: 17px; }
+  .mhead p { margin: 0; color: var(--dim); font-size: 13px; }
+  .mbody { padding: 18px 22px 22px; }
+  .acc { display: flex; align-items: center; gap: 14px; padding: 14px; border: 1px solid var(--line);
+         border-radius: 14px; margin-bottom: 10px; background: var(--bg2); }
+  .acc.off { opacity: .55; }
+  .plogo { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; color: #fff;
+           font-weight: 800; font-size: 14px; flex: none; }
+  .acc .ainfo { flex: 1; min-width: 0; }
+  .acc .aname { font-weight: 700; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .acc .asub { color: var(--dim); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .stat { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+  .stat.ok { background: rgba(52,211,153,.15); color: var(--ok); }
+  .stat.error { background: rgba(248,113,113,.15); color: var(--bad); }
+  .stat.unchecked { background: var(--panel2); color: var(--faint); }
+  .meters { display: flex; gap: 12px; margin-top: 7px; flex-wrap: wrap; }
+  .meter { font-size: 11.5px; color: var(--dim); min-width: 130px; }
+  .meter .bar { height: 5px; border-radius: 5px; background: var(--panel2); overflow: hidden; margin-top: 3px; }
+  .meter .bar i { display: block; height: 100%; background: var(--ok); }
+  .meter .bar i.warn { background: var(--warn); } .meter .bar i.hot { background: var(--bad); }
+  .aact { display: flex; gap: 6px; flex: none; }
+  .btn { padding: 7px 12px; border-radius: 10px; font-weight: 600; font-size: 13px; background: var(--panel2);
+         border: 1px solid var(--line); white-space: nowrap; }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { background: var(--grad); color: #fff; border: 0; }
+  .btn.danger:hover { border-color: var(--bad); color: var(--bad); }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; margin-top: 6px; }
+  .tile { text-align: left; padding: 14px; border-radius: 14px; border: 1px solid var(--line); background: var(--bg2); }
+  .tile:hover { border-color: var(--accent); transform: translateY(-1px); }
+  .tile b { display: block; margin: 8px 0 2px; }
+  .tile small { color: var(--dim); }
+  .addform { display: none; margin-top: 14px; padding: 16px; border-radius: 14px; border: 1px solid var(--accent);
+             background: var(--bg2); }
+  .addform.open { display: block; }
+  .addform label { display: block; font-size: 12px; color: var(--dim); margin: 10px 0 4px; }
+  .addform input, .addform select { width: 100%; padding: 9px 11px; border-radius: 10px; border: 1px solid var(--line);
+                                    background: var(--panel); outline: none; }
+  .addform input:focus { border-color: var(--accent); }
+  .addform .note { color: var(--dim); font-size: 12.5px; margin-top: 10px; }
+  .addform .row2 { display: flex; gap: 8px; margin-top: 14px; justify-content: flex-end; }
+  .empty-acc { text-align: center; color: var(--dim); padding: 6px 0 14px; }
+  .bubble.err { border-color: var(--bad); }
+  .errline { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); color: var(--bad); font-size: 12.5px; }
+  .meta-line { color: var(--faint); font-size: 11.5px; margin-top: 4px; }
+
   @media (max-width: 1100px) { #app { grid-template-columns: 230px 1fr 270px; } }
   @media (max-width: 860px) {
     #app { grid-template-columns: 1fr; grid-template-areas: "top" "main"; }
@@ -201,6 +268,9 @@
   <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4z"/></symbol>
   <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/></symbol>
   <symbol id="i-drive" viewBox="0 0 24 24"><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M5 13l3-8h8l3 8M7 17h.01"/></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M16 7l3 3M14 9l2 2"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 11-2.3-5.6M20 4v5h-5"/></symbol>
 </svg>
 
 <div id="locked">
@@ -221,6 +291,8 @@
     <div class="brand">One Production</div>
     <div class="crumb" id="crumb"></div>
     <div class="spacer"></div>
+    <button class="topbtn" id="accbtn" title="Your AI accounts"><svg class="icon"><use href="#i-key"/></svg>Accounts
+      <span class="badge" id="accbadge" style="display:none"></span></button>
     <span class="pill" title="The app only listens on this computer"><i class="dot"></i>Local · private</span>
     <span class="pill" id="ver">v–</span>
   </header>
@@ -242,10 +314,12 @@
     <div class="composer">
       <form class="box" id="composer">
         <button type="button" class="iconbtn" id="attach" title="Attach files"><svg class="icon"><use href="#i-clip"/></svg></button>
+        <label class="picker" title="Which account answers"><i class="pdot" id="pickdot"></i>
+          <select id="picker"></select></label>
         <textarea id="input" rows="1" placeholder="Pick or create a project to start…" disabled></textarea>
         <button class="send" id="send" disabled title="Send"><svg class="icon"><use href="#i-send"/></svg></button>
       </form>
-      <div class="hint">Enter to send · Shift+Enter for a new line · AI replies arrive in the next phase</div>
+      <div class="hint">Enter to send · Shift+Enter for a new line · pick which account answers on the left</div>
     </div>
   </main>
 
@@ -260,6 +334,40 @@
     <div class="progress" id="progress"><i></i></div>
     <ul id="files"></ul>
   </aside>
+</div>
+
+<div class="scrim" id="accmodal">
+  <div class="modal" role="dialog" aria-label="Accounts">
+    <div class="mhead">
+      <div class="mark"><svg viewBox="0 0 24 24"><use href="#i-play"/></svg></div>
+      <div style="flex:1"><h3>Your AI accounts</h3>
+        <p>Each account keeps its own login. Use as many as you own — different emails are fine.</p></div>
+      <button class="iconbtn" id="acccheck" title="Check all accounts"><svg class="icon"><use href="#i-refresh"/></svg></button>
+      <button class="iconbtn" id="accclose" title="Close"><svg class="icon"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="mbody">
+      <div id="acclist"></div>
+      <div class="sect" style="padding:14px 0 6px">Add an account</div>
+      <div class="tiles">
+        <button class="tile" data-prov="claude"><div class="plogo" style="background:#d97757">C</div>
+          <b>Claude login</b><small>Your Claude Pro / Max subscription. Opens Claude's own sign-in.</small></button>
+        <button class="tile" data-prov="codex"><div class="plogo" style="background:#10a37f">Cx</div>
+          <b>Codex login</b><small>Your ChatGPT subscription. Opens Codex's own sign-in.</small></button>
+        <button class="tile" data-prov="anthropic_api"><div class="plogo" style="background:#7c8cff">API</div>
+          <b>Anthropic API key</b><small>Pay per use. Kept in Windows Credential Manager.</small></button>
+      </div>
+      <form class="addform" id="addform">
+        <div id="addtitle" style="font-weight:700"></div>
+        <label for="addlabel">Name for this account (optional)</label>
+        <input id="addlabel" maxlength="60" placeholder="e.g. Main Claude, Work, Aditya's own">
+        <div id="keyrow"><label for="addkey">API key</label>
+          <input id="addkey" type="password" autocomplete="off" placeholder="sk-ant-…"></div>
+        <div class="note" id="addnote"></div>
+        <div class="row2"><button type="button" class="btn" id="addcancel">Cancel</button>
+          <button class="btn primary" id="addgo">Continue</button></div>
+      </form>
+    </div>
+  </div>
 </div>
 
 <div id="toast"></div>
@@ -348,15 +456,21 @@ $("#newform").onsubmit = async e => {
 };
 
 async function openProject(id) {
+  // Keep the message box locked until this project's history has arrived, and drop the
+  // response if the user has already clicked another project - otherwise a late history
+  // load would wipe a message (and its streaming reply) typed in the meantime.
+  const seq = state.loadSeq = (state.loadSeq || 0) + 1;
   state.current = id;
   const p = state.projects.find(x => x.id === id);
   document.querySelectorAll("#projects li").forEach(li => li.classList.toggle("active", li.dataset.id === id));
   $("#crumb").innerHTML = p ? `<span>/</span><b>${esc(p.name)}</b>` : "";
-  $("#input").disabled = false; $("#send").disabled = false;
+  $("#input").disabled = true; $("#send").disabled = true;
   $("#input").placeholder = "Message " + (p ? p.name : "") + "…";
   const hist = await (await api(`/api/projects/${id}/chat`)).json();
+  if (seq !== state.loadSeq) return;
   renderThread(hist, p);
   loadFiles();
+  $("#input").disabled = false; $("#send").disabled = state.busy;
   $("#input").focus();
 }
 
@@ -401,7 +515,10 @@ function renderThread(hist, p) {
     return;
   }
   $("#messages").innerHTML = `<div class="thread"></div>`;
-  hist.forEach(m => addMsg(m.role, m.text));
+  hist.forEach(m => {
+    const b = addMsg(m.role, m.text);
+    if (m.role === "assistant") decorate(b, m);
+  });
 }
 
 function addMsg(role, text) {
@@ -409,11 +526,41 @@ function addMsg(role, text) {
   if (!thread) { $("#messages").innerHTML = `<div class="thread"></div>`; thread = $("#messages .thread"); }
   const row = document.createElement("div");
   row.className = "row " + role;
-  row.innerHTML = `<div class="who ${role === "user" ? "me" : "ai"}">${role === "user" ? "You" : "OP"}</div><div class="bubble"></div>`;
+  row.innerHTML = `<div class="who ${role === "user" ? "me" : "ai"}">${role === "user" ? "You" : "OP"}</div>
+    <div><div class="bubble"></div></div>`;
   row.querySelector(".bubble").textContent = text;
   thread.appendChild(row);
   $("#messages").scrollTop = $("#messages").scrollHeight;
   return row.querySelector(".bubble");
+}
+
+const ERR_TEXT = {
+  limit: "This account has hit its usage limit. Pick another account below and send again.",
+  auth: "This account isn't signed in any more. Open Accounts and click Re-login.",
+  transient: "Couldn't reach the service after several tries. Check your internet and send again.",
+  fatal: "The request failed.",
+};
+function decorate(bubble, m) {
+  const holder = bubble.parentElement;
+  holder.querySelectorAll(".errline,.meta-line").forEach(e => e.remove());
+  if (m.error) {
+    bubble.classList.add("err");
+    const e = document.createElement("div");
+    e.className = "errline";
+    e.textContent = (m.interrupted ? "Reply cut off. " : "") + (ERR_TEXT[m.error.kind] || "") +
+                    (m.error.message ? "  (" + m.error.message.slice(0, 160) + ")" : "");
+    bubble.appendChild(e);
+  }
+  const acc = state.accounts.find(a => a.id === m.account);
+  const who = acc ? accName(acc) : (m.account === "demo" ? "Demo" : "");
+  const u = m.usage;
+  const bits = [who, u && u.model && u.model !== "demo" ? u.model : "",
+                u ? `${u.in || 0} in · ${u.out || 0} out tokens` : ""].filter(Boolean);
+  if (bits.length) {
+    const ml = document.createElement("div");
+    ml.className = "meta-line"; ml.textContent = bits.join(" · ");
+    holder.appendChild(ml);
+  }
 }
 
 function grow() { const t = $("#input"); t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, 180) + "px"; }
@@ -431,19 +578,43 @@ $("#composer").onsubmit = async e => {
   addMsg("user", text);
   const bubble = addMsg("assistant", "");
   bubble.innerHTML = `<span class="typing"><i></i><i></i><i></i></span>`;
+  const accountId = $("#picker").value || "demo";
+  const meta = { account: accountId };
   try {
     const r = await api(`/api/projects/${state.current}/chat`, { method: "POST",
-      headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: text }) });
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: text, account_id: accountId }) });
     const reader = r.body.getReader(), dec = new TextDecoder();
-    let first = true;
+    let buf = "", first = true;
+    const handle = ev => {
+      if (ev.t === "text") {
+        if (first) { bubble.textContent = ""; first = false; }
+        bubble.textContent += ev.v;
+      } else if (ev.t === "usage") {
+        meta.usage = { in: ev.input_tokens, out: ev.output_tokens, model: ev.model };
+      } else if (ev.t === "limit") {
+        const a = state.accounts.find(x => x.id === accountId);
+        if (a) a.rate_limit = { windows: ev.windows, status: ev.status };
+      } else if (ev.t === "error") {
+        meta.error = { kind: ev.kind, message: ev.message }; meta.interrupted = ev.interrupted;
+        if (ev.kind === "auth") loadAccounts();
+      }
+    };
     for (;;) {
       const { value, done } = await reader.read();
       if (done) break;
-      if (first) { bubble.textContent = ""; first = false; }
-      bubble.textContent += dec.decode(value, { stream: true });
+      buf += dec.decode(value, { stream: true });
+      let nl;
+      while ((nl = buf.indexOf("\n")) >= 0) {
+        const line = buf.slice(0, nl).trim(); buf = buf.slice(nl + 1);
+        if (line) handle(JSON.parse(line));
+      }
       $("#messages").scrollTop = $("#messages").scrollHeight;
     }
-  } catch (err) { bubble.textContent = "Couldn't get a reply: " + err.message; }
+    if (first) bubble.textContent = "";
+    decorate(bubble, meta);
+    renderPicker();
+  } catch (err) { bubble.textContent = "Couldn't get a reply: " + err.message; bubble.classList.add("err"); }
   state.busy = false; $("#send").disabled = false; $("#input").focus();
 };
 
@@ -504,6 +675,154 @@ drop.addEventListener("drop", e => upload(e.dataTransfer.files));
 // dropping anywhere on the window should not navigate away from the app
 ["dragover", "drop"].forEach(t => window.addEventListener(t, e => e.preventDefault()));
 
+// ---------- accounts
+const PROV = {
+  demo:          { short: "Demo",   color: "#64748b", logo: "D" },
+  claude:        { short: "Claude", color: "#d97757", logo: "C" },
+  codex:         { short: "Codex",  color: "#10a37f", logo: "Cx" },
+  anthropic_api: { short: "API",    color: "#7c8cff", logo: "API" },
+};
+state.accounts = [];
+const accName = a => a.label || a.email || (PROV[a.provider] || {}).short || a.id;
+
+async function loadAccounts() {
+  state.accounts = await (await api("/api/accounts")).json();
+  renderPicker(); renderAccounts();
+}
+
+function renderPicker() {
+  const sel = $("#picker"), prev = sel.value;
+  const usable = state.accounts.filter(a => a.enabled);
+  sel.innerHTML = usable.map(a => `<option value="${a.id}">${esc(PROV[a.provider].short)} · ${esc(accName(a))}${
+      a.status === "error" ? " (needs attention)" : ""}</option>`).join("");
+  const best = usable.find(a => a.id === prev) || usable.find(a => a.id !== "demo" && a.status === "ok") || usable[0];
+  if (best) sel.value = best.id;
+  const cur = state.accounts.find(a => a.id === sel.value);
+  $("#pickdot").className = "pdot " + (cur ? cur.status : "");
+  const real = state.accounts.filter(a => a.id !== "demo");
+  const bad = real.filter(a => a.enabled && a.status === "error").length;
+  const badge = $("#accbadge");
+  badge.style.display = real.length ? "" : "none";
+  badge.textContent = bad ? "!" : real.length;
+  badge.className = "badge" + (bad ? " bad" : "");
+}
+$("#picker").onchange = () => renderPicker();
+
+function meterHTML(rl) {
+  if (!rl || !rl.windows) return "";
+  const names = { five_hour: "5-hour window", seven_day: "7-day window" };
+  return `<div class="meters">${Object.entries(rl.windows).map(([k, w]) => {
+    const pct = Math.round((w.utilization || 0) * 100);
+    const cls = pct >= 85 ? "hot" : pct >= 70 ? "warn" : "";
+    const reset = w.resets_at ? new Date(w.resets_at * 1000).toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" }) : "";
+    return `<div class="meter">${names[k] || k}: <b>${pct}%</b>${reset ? " · resets " + reset : ""}
+      <div class="bar"><i class="${cls}" style="width:${Math.min(pct, 100)}%"></i></div></div>`;
+  }).join("")}</div>`;
+}
+
+function renderAccounts() {
+  const real = state.accounts.filter(a => a.id !== "demo");
+  $("#acclist").innerHTML = real.length ? real.map(a => {
+    const p = PROV[a.provider];
+    const sub = [a.email, a.plan ? a.plan + " plan" : "", a.method, a.key_hint, a.model ? "model: " + a.model : ""]
+                  .filter(Boolean).join(" · ");
+    const statusText = a.status === "ok" ? "Ready" : a.status === "error" ? (a.reason || "Problem") : "Not checked";
+    const needsLogin = a.provider !== "anthropic_api";
+    return `<div class="acc ${a.enabled ? "" : "off"}" data-id="${a.id}">
+      <div class="plogo" style="background:${p.color}">${p.logo}</div>
+      <div class="ainfo"><div class="aname">${esc(accName(a))}
+          <span class="stat ${a.status}">${esc(statusText.slice(0, 60))}</span></div>
+        <div class="asub">${esc(p.short)}${sub ? " · " + esc(sub) : ""}</div>
+        ${meterHTML(a.rate_limit)}</div>
+      <div class="aact">
+        ${needsLogin && a.status !== "ok" ? `<button class="btn primary" data-act="login">Sign in</button>` : ""}
+        <button class="btn" data-act="check">Check</button>
+        <button class="btn" data-act="toggle">${a.enabled ? "Turn off" : "Turn on"}</button>
+        <button class="btn danger" data-act="remove">Remove</button>
+      </div></div>`;
+  }).join("") : `<div class="empty-acc">No accounts yet. Add your first one below — the Demo
+                 account keeps working until you do.</div>`;
+  $("#acclist").querySelectorAll("button[data-act]").forEach(b =>
+    b.onclick = () => accountAction(b.closest(".acc").dataset.id, b.dataset.act, b));
+}
+
+async function accountAction(id, act, btn) {
+  const a = state.accounts.find(x => x.id === id);
+  if (act === "check") {
+    btn.textContent = "Checking…";
+    await api(`/api/accounts/${id}/check`, { method: "POST" });
+    await loadAccounts(); toast("Checked " + accName(a));
+  } else if (act === "toggle") {
+    await api(`/api/accounts/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled: !a.enabled }) });
+    await loadAccounts();
+  } else if (act === "remove") {
+    if (btn.dataset.sure !== "1") { btn.dataset.sure = "1"; btn.textContent = "Click again to remove"; return; }
+    await api(`/api/accounts/${id}`, { method: "DELETE" });
+    await loadAccounts(); toast("Removed " + accName(a));
+  } else if (act === "login") {
+    await startLogin(id);
+  }
+}
+
+let pollTimer = null;
+async function startLogin(id) {
+  await api(`/api/accounts/${id}/login`, { method: "POST" });
+  toast("A sign-in window opened — finish signing in there");
+  clearInterval(pollTimer);
+  let tries = 0;
+  pollTimer = setInterval(async () => {
+    tries++;
+    const a = await (await api(`/api/accounts/${id}/check`, { method: "POST" })).json();
+    if (a.status === "ok" || tries > 90) {
+      clearInterval(pollTimer);
+      await loadAccounts();
+      if (a.status === "ok") toast("Signed in" + (a.email ? " as " + a.email : ""));
+    }
+  }, 2000);
+}
+
+let addProvider = null;
+document.querySelectorAll(".tile").forEach(t => t.onclick = () => {
+  addProvider = t.dataset.prov;
+  const api_ = addProvider === "anthropic_api";
+  $("#addtitle").textContent = { claude: "Add a Claude login", codex: "Add a Codex login",
+                                 anthropic_api: "Add an Anthropic API key" }[addProvider];
+  $("#keyrow").style.display = api_ ? "" : "none";
+  $("#addnote").textContent = api_
+    ? "The key is checked with a free request, then stored in Windows Credential Manager — never in a file."
+    : "Continue opens " + (addProvider === "claude" ? "Claude" : "Codex") +
+      "'s own sign-in window. Sign in with whichever email this account uses; this page updates by itself.";
+  $("#addgo").textContent = api_ ? "Check and save" : "Continue to sign-in";
+  $("#addform").classList.add("open"); $("#addlabel").focus();
+});
+$("#addcancel").onclick = () => { $("#addform").classList.remove("open"); $("#addkey").value = ""; };
+$("#addform").onsubmit = async e => {
+  e.preventDefault();
+  const go = $("#addgo"); go.disabled = true;
+  try {
+    const acc = await (await api("/api/accounts", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider: addProvider, label: $("#addlabel").value, api_key: $("#addkey").value || null }) })).json();
+    $("#addform").classList.remove("open"); $("#addkey").value = ""; $("#addlabel").value = "";
+    await loadAccounts();
+    if (addProvider !== "anthropic_api") await startLogin(acc.id);
+    else toast("API key saved and working");
+  } catch (err) { toast(err.message, true); }
+  go.disabled = false;
+};
+
+function openAccounts() { $("#accmodal").classList.add("open"); renderAccounts(); }
+function closeAccounts() { $("#accmodal").classList.remove("open"); $("#addform").classList.remove("open"); }
+$("#accbtn").onclick = openAccounts;
+$("#accclose").onclick = closeAccounts;
+$("#accmodal").addEventListener("click", e => { if (e.target.id === "accmodal") closeAccounts(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeAccounts(); });
+$("#acccheck").onclick = async () => {
+  toast("Checking all accounts…");
+  state.accounts = await (await api("/api/accounts/check", { method: "POST" })).json();
+  renderPicker(); renderAccounts();
+};
+
 // ---------- start
 (async () => {
   if (!TOKEN) { lock(); return; }
@@ -513,7 +832,11 @@ drop.addEventListener("drop", e => upload(e.dataTransfer.files));
     $("#ver").textContent = "v" + h.version;
     $("#datadir").textContent = h.data_dir;
     $("#datadir").title = h.data_dir;
+    await loadAccounts();
     await loadProjects();
+    // refresh login status in the background so dead logins show up early
+    api("/api/accounts/check", { method: "POST" }).then(r => r.json())
+      .then(list => { state.accounts = list; renderPicker(); renderAccounts(); }).catch(() => {});
   } catch (e) { /* 401 already showed the lock screen */ }
 })();
 </script>
