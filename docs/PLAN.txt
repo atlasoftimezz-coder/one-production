@@ -461,8 +461,11 @@ each gate includes your manual check. Friends release = P6-P7. Production = P8-P
 --------
   - Subscription usage: CHECKED in P2 (2026-10-03). Claude Code reports exact five_hour and
     seven_day utilisation plus reset times in every reply (rate_limit_event), so Claude
-    meters and the 85% trigger are EXACT. Codex (0.157.1) reports only token counts, so
-    Codex stays estimated and relies on the reactive trigger (limit error).
+    meters and the 85% trigger are EXACT. Codex (0.157.1) reports only token counts in its
+    --json stream, BUT its saved session files record exact rate limits (primary 5-hour,
+    secondary weekly) - so Codex is exact too once sessions are kept (no --ephemeral).
+    Both can be read without sending a message: `claude -p /usage` (0 turns, $0) and the
+    newest Codex session file. Only API keys need a user-set budget estimate.
   - Provider terms may restrict automated CLI use or account switching -> R8 gate.
   - CLAUDE_CONFIG_DIR / CODEX_HOME isolation must be verified on installed versions;
     fallback is one login per Windows user.

@@ -247,15 +247,10 @@ try:
         check("usage page opens", wait_for("document.querySelector('#usagemodal').classList.contains('open') && document.querySelectorAll('.ucard').length>=2", 8))
         utext = js("document.querySelector('#usagemodal').innerText") or ""
         check("Claude card EXACT 87%", "EXACT" in utext and "87% used" in utext)
-        check("Codex card says no limit data", "NO LIMIT DATA" in utext)
+        check("Codex card EXACT from its session file (35%)", "35% used" in utext and utext.count("EXACT") >= 2)
         check("switch log has the hand-over", "Main Claude" in (js("document.querySelector('#switchlog').innerText") or "")
               and "threshold" in (js("document.querySelector('#switchlog').innerText") or ""))
         shot("15-usage")
-        # give Codex a budget -> estimated bar appears
-        js("""(()=>{const i=[...document.querySelectorAll('.ucard')].find(c=>c.innerText.includes('My Codex')).querySelector('input[data-k=budget_tokens_5h]');
-              i.value='1000'; i.dispatchEvent(new Event('change'));})()""")
-        check("Codex shows an ESTIMATED bar after setting a budget", wait_for(
-            "[...document.querySelectorAll('.ucard')].some(c=>c.innerText.includes('My Codex') && c.innerText.includes('ESTIMATED') && c.querySelector('.ubar'))", 8))
         # reorder: move Codex to the top
         first_before = js("document.querySelector('.ucard .aname').innerText")
         js("[...document.querySelectorAll('.ucard')].find(c=>c.innerText.includes('My Codex')).querySelector('[data-move=\"-1\"]').click()")

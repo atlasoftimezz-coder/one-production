@@ -167,8 +167,12 @@ class Accounts:
             changes["method"] = result["method"]
         return self._update(acc_id, **changes)
 
-    def record_rate_limit(self, acc_id: str, windows: dict, status: str) -> None:
-        self._update(acc_id, rate_limit={"windows": windows, "status": status, "at": time.time()})
+    def record_rate_limit(self, acc_id: str, windows: dict, status: str = "allowed",
+                          at: float | None = None) -> None:
+        self._update(acc_id, rate_limit={"windows": windows, "status": status, "at": at or time.time()})
+
+    def stop_live_usage(self, acc_id: str, reason: str) -> None:
+        self._update(acc_id, live_usage_off=reason)
 
     def mark_auth_error(self, acc_id: str, reason: str) -> None:
         self._update(acc_id, status="error", reason=reason)

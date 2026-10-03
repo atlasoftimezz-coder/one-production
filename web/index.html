@@ -273,6 +273,8 @@
   .ucard { display: grid; grid-template-columns: auto 1fr auto; gap: 14px; align-items: center; padding: 14px;
            border: 1px solid var(--line); border-radius: 14px; margin-bottom: 10px; background: var(--bg2); }
   .ucard.off { opacity: .55; }
+  .iconbtn.spin svg { animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
   .ubar { position: relative; height: 10px; border-radius: 6px; background: var(--panel2); margin: 8px 0 6px; overflow: visible; }
   .ubar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 6px; background: var(--ok); }
   .ubar i.warn { background: var(--warn); } .ubar i.hot { background: var(--bad); }
@@ -432,6 +434,7 @@
       <div class="mark"><svg viewBox="0 0 24 24"><use href="#i-play"/></svg></div>
       <div style="flex:1"><h3>Usage</h3>
         <p>What each account has used. <b>Exact</b> = reported by the service itself; <b>estimated</b> = counted here against a budget you set.</p></div>
+      <button class="iconbtn" id="urefresh" title="Refresh usage from each service"><svg class="icon"><use href="#i-refresh"/></svg></button>
       <a class="btn" id="csvbtn" href="#">Export CSV</a>
       <button class="iconbtn" id="usageclose" title="Close"><svg class="icon"><use href="#i-x"/></svg></button>
     </div>
@@ -1011,7 +1014,18 @@ const num = n => (n || 0).toLocaleString();
 const money = v => v == null ? "—" : "$" + Number(v).toFixed(v < 1 ? 4 : 2);
 const when = ts => ts ? new Date(ts * 1000).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—";
 
-async function openUsage() { $("#usagemodal").classList.add("open"); await loadUsage(); }
+async function openUsage() {
+  $("#usagemodal").classList.add("open");
+  await loadUsage();                     // show what we have at once...
+  await refreshUsage();                  // ...then fetch live numbers from each service
+}
+async function refreshUsage() {
+  const b = $("#urefresh"); b.disabled = true; b.classList.add("spin");
+  try { state.accounts = await (await api("/api/usage/refresh", { method: "POST" })).json(); renderPicker(); }
+  catch (e) { toast("Couldn't refresh usage: " + e.message, true); }
+  b.disabled = false; b.classList.remove("spin");
+  if ($("#usagemodal").classList.contains("open")) await loadUsage();
+}
 function closeUsage() { $("#usagemodal").classList.remove("open"); }
 
 async function loadUsage() {
@@ -1044,10 +1058,13 @@ async function loadUsage() {
         ${pct != null ? `<div class="ubar"><i class="${cls}" style="width:${Math.min(pct, 100)}%"></i>
             <span class="mk" style="left:${c.warn_pct}%" title="warning at ${c.warn_pct}%"></span>
             <span class="mk sw" style="left:${c.switch_pct}%" title="switch at ${c.switch_pct}%"></span></div>
-          <div class="ustats"><b style="color:var(--ink)">${pct}% used</b>${resets ? `<span>${esc(resets)}</span>` : ""}</div>`
-          : `<div class="ustats" style="margin-top:6px">${c.provider === "claude"
-              ? "Send one message with this account to see its exact usage."
-              : "This service doesn't report its limit. Set a 5-hour token budget below to get an estimate."}</div>`}
+          <div class="ustats"><b style="color:var(--ink)">${pct}% used</b>${resets ? `<span>${esc(resets)}</span>` : ""}${
+            c.rate_limit && c.rate_limit.at ? `<span>as of ${esc(when(c.rate_limit.at))}</span>` : ""}</div>`
+          : `<div class="ustats" style="margin-top:6px">${c.live_usage_off
+              ? "Live usage is switched off for this account: " + esc(c.live_usage_off)
+              : c.provider === "codex" ? "No Codex session from this account yet — its usage appears after its first reply."
+              : c.provider === "anthropic_api" ? "API keys have no usage cap to show. Set a 5-hour token budget below to track spending."
+              : "Couldn't read usage yet — click refresh (↻) above."}</div>`}
         <div class="ustats" style="margin-top:4px"><span>${num(c.requests)} replies</span>
           <span>${num(c.in_tok)} in · ${num(c.out_tok)} out tokens</span><span>cost ${money(c.cost_usd)}</span>
           <span>last used ${when(c.last_used)}</span>${c.errors ? `<span style="color:var(--bad)">${c.errors} errors</span>` : ""}</div>
@@ -1105,6 +1122,7 @@ async function loadUsage() {
 
 document.querySelectorAll("#rangetabs button").forEach(b => b.onclick = () => { state.range = b.dataset.r; loadUsage(); });
 $("#usagebtn").onclick = openUsage;
+$("#urefresh").onclick = refreshUsage;
 $("#usageclose").onclick = closeUsage;
 $("#usagemodal").addEventListener("click", e => { if (e.target.id === "usagemodal") closeUsage(); });
 $("#hoclose").onclick = () => $("#homodal").classList.remove("open");
@@ -1134,6 +1152,8 @@ $("#csvbtn").onclick = async e => {
     await loadProjects();
     // refresh login status in the background so dead logins show up early
     api("/api/accounts/check", { method: "POST" }).then(r => r.json())
+      .then(list => { state.accounts = list; renderPicker(); renderAccounts(); })
+      .then(() => api("/api/usage/refresh", { method: "POST" })).then(r => r.json())
       .then(list => { state.accounts = list; renderPicker(); renderAccounts(); }).catch(() => {});
   } catch (e) { /* 401 already showed the lock screen */ }
 })();

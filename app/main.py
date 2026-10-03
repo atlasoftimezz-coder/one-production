@@ -151,9 +151,14 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
         if acc["id"] == "demo":
             return None, "none"
         rl = acc.get("rate_limit") or {}
-        windows = [w.get("utilization") for w in (rl.get("windows") or {}).values()
-                   if w.get("utilization") is not None]
-        if windows and time.time() - rl.get("at", 0) < 5 * 3600:
+        now = time.time()
+        windows = []
+        for w in (rl.get("windows") or {}).values():
+            if w.get("utilization") is None:
+                continue
+            # a window whose reset time has passed has started again from zero
+            windows.append(0.0 if w.get("resets_at") and w["resets_at"] <= now else w["utilization"])
+        if windows and now - rl.get("at", 0) < 7 * 86400:
             return round(max(windows) * 100, 1), "exact"
         budget = acc.get("budget_tokens_5h")
         if budget:
@@ -430,6 +435,30 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
         return {"range": range, "since": s["since"], "cards": cards, "totals": s["totals"],
                 "by_project": s["by_project"], "by_model": s["by_model"],
                 "same_service_switching": SAME_SERVICE_SWITCHING}
+
+    async def _refresh_one(a: dict) -> None:
+        prov = providers.get(a["provider"])
+        if not hasattr(prov, "live_usage") or a.get("live_usage_off"):
+            return
+        try:
+            res = await prov.live_usage(a)
+        except Exception:
+            log.exception("live usage failed for %s", a["id"])
+            return
+        if not res:
+            return
+        if res.get("error"):
+            accounts.stop_live_usage(a["id"], res["error"])
+            return
+        accounts.record_rate_limit(a["id"], res["windows"], "allowed", at=res.get("as_of"))
+
+    @app.post("/api/usage/refresh")
+    async def refresh_usage() -> list[dict]:
+        """Read every account's current limits without sending a message: Claude answers
+        `/usage` locally, Codex keeps them in its own session files."""
+        accs = [a for a in accounts.list() if a["enabled"] and a["status"] == "ok"]
+        await asyncio.gather(*(_refresh_one(a) for a in accs))
+        return list_accounts()
 
     @app.get("/api/usage/switches")
     def switch_log() -> list[dict]:

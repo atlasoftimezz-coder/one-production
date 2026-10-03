@@ -9,7 +9,8 @@ Behaviour comes from environment variables set by the tests:
     FAKE_STATE  file counting calls (so tests can prove a prompt was or wasn't re-sent)
     FAKE_LOG    file the received stdin prompt is appended to
     FAKE_EMAIL  email to report after a fake login
-    FAKE_UTIL   Claude five_hour utilisation to report (default 0.42)
+    FAKE_UTIL   Claude five_hour utilisation to report (default 0.42 in replies, 0.34 in /usage)
+    FAKE_CODEX_PCT  Codex 5-hour used_percent written to its session file (default 35)
 Login state is a file "logged_in" inside the account's own folder (CLAUDE_CONFIG_DIR /
 CODEX_HOME), which is exactly what proves the folders keep accounts apart.
 """
@@ -18,6 +19,10 @@ import os
 import sys
 import time
 from pathlib import Path
+
+# Always in the future, so the app never treats these windows as already reset.
+RESET_5H = int(time.time() // 3600 * 3600 + 3 * 3600)
+RESET_7D = int(time.time() // 3600 * 3600 + 4 * 86400)
 
 
 def out(obj):
@@ -53,6 +58,18 @@ def claude(args, home: Path):
         return 0
     if "-p" not in args:
         return 2
+    if "/usage" in args:                      # answered locally by the real CLI: no turn, no cost
+        if not flag.exists():
+            sys.stderr.write("Not logged in · Please run /login\n")
+            return 1
+        spends = os.environ.get("FAKE_MODE") == "usage_spends"
+        pct = round(float(os.environ.get("FAKE_UTIL", "0.34")) * 100)
+        out({"type": "result", "subtype": "success", "is_error": False,
+             "num_turns": 1 if spends else 0, "total_cost_usd": 0.01 if spends else 0,
+             "result": "You are currently using your subscription to power your Claude Code usage\n\n"
+                       f"Current session: {pct}% used · resets Oct 3, 11:50pm (Asia/Kolkata)\n"
+                       "Current week (all models): 18% used · resets Oct 5, 7:30pm (Asia/Kolkata)\n"})
+        return 0
     prompt = sys.stdin.read()
     if log := os.environ.get("FAKE_LOG"):
         with open(log, "a", encoding="utf-8") as fh:
@@ -66,8 +83,8 @@ def claude(args, home: Path):
     rl = {"type": "rate_limit_event", "rate_limit_info": {
         "status": "rejected" if mode == "limit" else "allowed", "rateLimitType": "five_hour",
         "unifiedWindows": {"five_hour": {"utilization": 1.0 if mode == "limit" else float(os.environ.get("FAKE_UTIL", "0.42")),
-                                         "resetsAt": 1791033600},
-                           "seven_day": {"utilization": 0.10, "resetsAt": 1791208800}}}}
+                                         "resetsAt": RESET_5H},
+                           "seven_day": {"utilization": 0.10, "resetsAt": RESET_7D}}}}
     usage = {"input_tokens": 12, "output_tokens": 30, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0}
 
     def result(err=False, status=None, text=""):
@@ -136,6 +153,16 @@ def codex(args, home: Path):
     if mode == "transient" and n <= int(os.environ.get("FAKE_FAILS", "99")):
         out({"type": "error", "message": "stream disconnected: connection reset (503)"})
         return 1
+    # Like the real CLI (when not --ephemeral): the session file records exact limits.
+    if "--ephemeral" not in args:
+        sess = home / "sessions" / "2026" / "10" / "03"
+        sess.mkdir(parents=True, exist_ok=True)
+        pct = float(os.environ.get("FAKE_CODEX_PCT", "35"))
+        (sess / f"rollout-2026-10-03T10-00-{n:02d}-fake.jsonl").write_text(
+            json.dumps({"type": "event_msg", "payload": {"type": "token_count", "rate_limits": {
+                "limit_id": "codex", "primary": {"used_percent": pct, "window_minutes": 300, "resets_at": 4102444800},
+                "secondary": {"used_percent": 10.0, "window_minutes": 10080, "resets_at": 4102444800}}}}) + "\n",
+            encoding="utf-8")
     out({"type": "item.completed", "item": {"id": "item_0", "type": "agent_message",
                                             "text": f"Fake Codex says: {last_user_line(prompt)}"}})
     out({"type": "turn.completed", "usage": {"input_tokens": 50, "cached_input_tokens": 10, "output_tokens": 8}})

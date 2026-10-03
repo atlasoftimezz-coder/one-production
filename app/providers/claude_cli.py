@@ -4,11 +4,17 @@ Formats verified against Claude Code 2.1.284 (2026-10-03):
   stream_event / content_block_delta / text_delta   -> reply text (thinking deltas skipped)
   rate_limit_event.rate_limit_info.unifiedWindows   -> exact five_hour / seven_day utilisation
   result (is_error, api_error_status, usage, total_cost_usd)
+  `claude -p /usage` answers locally (num_turns 0, cost 0) with lines like
+      Current session: 34% used · resets Oct 3, 11:50pm (Asia/Kolkata)
+      Current week (all models): 18% used · resets Oct 5, 7:30pm (Asia/Kolkata)
 """
 from __future__ import annotations
 
 import json
+import re
+import time
 from contextlib import aclosing
+from datetime import datetime
 from pathlib import Path
 from typing import AsyncIterator
 
@@ -16,6 +22,37 @@ from .base import Event, Fail, RateLimit, Text, Usage, classify_status, classify
 from .cli import resolve, run_capture, run_lines
 
 MODELS = {"opus": "opus", "sonnet": "sonnet", "haiku": "haiku"}
+USAGE_ARGS = ["-p", "/usage", "--output-format", "json", "--tools", "", "--no-session-persistence",
+              "--strict-mcp-config"]
+_SESSION = re.compile(r"Current session:\s*([\d.]+)%\s*used(?:\s*·\s*resets\s+([^\n(]+))?", re.I)
+_WEEK = re.compile(r"Current week \(all models\):\s*([\d.]+)%\s*used(?:\s*·\s*resets\s+([^\n(]+))?", re.I)
+
+
+def parse_reset(text: str | None, now: float | None = None) -> float | None:
+    """'Oct 3, 11:50pm' (local time, no year) -> epoch seconds."""
+    if not text:
+        return None
+    now = now or time.time()
+    year = datetime.fromtimestamp(now).year
+    for fmt in ("%b %d, %I:%M%p", "%b %d, %I%p", "%b %d %I:%M%p"):
+        try:
+            dt = datetime.strptime(f"{year} {text.strip()}", f"%Y {fmt}")
+        except ValueError:
+            continue
+        ts = dt.timestamp()
+        if ts < now - 86400:            # 'Jan 2' read on Dec 31 belongs to next year
+            ts = dt.replace(year=year + 1).timestamp()
+        return ts
+    return None
+
+
+def parse_usage_text(text: str, now: float | None = None) -> dict:
+    windows = {}
+    for name, rx in (("five_hour", _SESSION), ("seven_day", _WEEK)):
+        m = rx.search(text or "")
+        if m:
+            windows[name] = {"utilization": float(m.group(1)) / 100, "resets_at": parse_reset(m.group(2), now)}
+    return windows
 ARGS = ["-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
         "--tools", "", "--no-session-persistence", "--strict-mcp-config"]
 
@@ -49,6 +86,23 @@ class ClaudeCLI:
             return {"ok": False, "reason": "not logged in"}
         return {"ok": True, "email": d.get("email"), "plan": d.get("subscriptionType"),
                 "org": d.get("orgName"), "method": d.get("authMethod")}
+
+    async def live_usage(self, account: dict) -> dict | None:
+        """Current utilisation without sending a message. Safety stop: if this ever runs a
+        model turn (num_turns > 0 or a cost), report that instead of trusting it, so the
+        app can stop calling it rather than quietly spending the user's quota."""
+        exe = self._exe()
+        if not exe:
+            return None
+        code, out, err = await run_capture([exe, *USAGE_ARGS], self.env(account), self.work_dir, timeout=60)
+        try:
+            d = json.loads(out)
+        except ValueError:
+            return None
+        if (d.get("num_turns") or 0) > 0 or (d.get("total_cost_usd") or 0) > 0:
+            return {"error": "the /usage command used a model turn - stopped calling it"}
+        windows = parse_usage_text(str(d.get("result") or ""))
+        return {"windows": windows, "as_of": time.time()} if windows else None
 
     def login_argv(self) -> list[str] | None:
         exe = self._exe()

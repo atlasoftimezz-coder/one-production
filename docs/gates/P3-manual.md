@@ -3,14 +3,17 @@
 Uses your real accounts (a few short messages). Close any old black One Production
 window, then run `start.bat`. You need your Claude and Codex accounts from P2.
 
-- [ ] **1. Usage page.** Click **Usage** (top right). You see totals (replies, tokens, cost) and
-  one card per account. After you've sent a Claude message, its card says **EXACT** with a bar
-  and the 5-hour / 7-day percentages and reset times. Codex says **NO LIMIT DATA**.
+- [ ] **1. Usage page shows your real numbers straight away.** Click **Usage** (top right).
+  Within a few seconds (↻ spins while it fetches) your Claude card says **EXACT** with the same
+  **session %** and **week %** as Claude's own Settings → Usage screen, plus reset times and
+  "as of" the time it was read — no message needed. Codex shows **EXACT** once it has replied
+  at least once through this app.
 
 - [ ] **2. Ranges.** Click **5 hours / Today / 7 days / This month** — the numbers change to match.
 
-- [ ] **3. Codex estimate.** On the Codex card, type a **5-hour budget** (try `200000`) and press
-  Tab. The card switches to **ESTIMATED** with a bar.
+- [ ] **3. Matches the official screens.** Compare the Claude card with Claude's own
+  **Settings → Usage** ("Current session" and "This week"). The numbers should agree within a
+  point or two (they move as you use Claude elsewhere). Click ↻ to re-read.
 
 - [ ] **4. Trigger a switch for real.** Your Claude account is probably below 85%, so lower its
   switch level: on the Claude card set **warn at 20**, **switch at 30**. Close Usage, pick your
@@ -37,7 +40,7 @@ window, then run `start.bat`. You need your Claude and Codex accounts from P2.
   per reply.
 
 - [ ] **11. Automatic check is green.** `docs\gates\P3-auto.md` ends with **RESULT: PASS** —
-  121 tests including all earlier phases and three real-browser runs.
+  131 tests including all earlier phases and three real-browser runs.
 
 ## Good to know
 

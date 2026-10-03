@@ -24,18 +24,24 @@ def test_every_reply_is_recorded(client, project, monkeypatch):
     assert "claude-sonnet-5-5" in models
 
 
-def test_claude_usage_is_exact_codex_has_none_until_budget(client, project, monkeypatch):
+def test_claude_and_codex_usage_are_exact_after_a_reply(client, project, monkeypatch):
     claude = signed_in(client, "claude", monkeypatch=monkeypatch)
     codex = signed_in(client, "codex", monkeypatch=monkeypatch)
     chat(client, project, "hi", claude["id"])
     chat(client, project, "hi", codex["id"])
     cards = {c["id"]: c for c in client.get("/api/usage").json()["cards"]}
     assert cards[claude["id"]]["usage_pct"] == 42.0 and cards[claude["id"]]["usage_kind"] == "exact"
-    assert cards[codex["id"]]["usage_pct"] is None and cards[codex["id"]]["usage_kind"] == "none"
-    client.patch(f"/api/accounts/{codex['id']}", json={"budget_tokens_5h": 580})
-    cards = {c["id"]: c for c in client.get("/api/usage").json()["cards"]}
-    assert cards[codex["id"]]["usage_kind"] == "estimated"
-    assert cards[codex["id"]]["usage_pct"] == round(100 * 58 / 580, 1)   # 50 in + 8 out
+    assert cards[codex["id"]]["usage_pct"] == 35.0 and cards[codex["id"]]["usage_kind"] == "exact"
+
+
+def test_api_key_usage_is_estimated_against_a_budget(client, project):
+    api = client.post("/api/accounts", json={"provider": "anthropic_api", "api_key": GOOD_KEY}).json()
+    chat(client, project, "hi", api["id"])
+    card = next(c for c in client.get("/api/usage").json()["cards"] if c["id"] == api["id"])
+    assert card["usage_pct"] is None and card["usage_kind"] == "none"
+    client.patch(f"/api/accounts/{api['id']}", json={"budget_tokens_5h": 300})
+    card = next(c for c in client.get("/api/usage").json()["cards"] if c["id"] == api["id"])
+    assert card["usage_kind"] == "estimated" and card["usage_pct"] == 10.0   # 21 in + 9 out of 300
 
 
 def test_ranges(client):
@@ -78,17 +84,17 @@ def test_csv_export_is_redacted(client, project, monkeypatch):
     assert GOOD_KEY not in r.text and "[REDACTED" in r.text
 
 
-def test_estimate_accuracy_flags_unreliable_estimates(client, project, monkeypatch):
-    codex = signed_in(client, "codex", monkeypatch=monkeypatch)
-    client.patch(f"/api/accounts/{codex['id']}", json={"budget_tokens_5h": 1000})
-    chat(client, project, "hi", codex["id"])            # 58 tokens -> est 5.8%
-    monkeypatch.setenv("FAKE_MODE", "limit")
-    chat(client, project, "hi", codex["id"])             # real limit hit while estimate says ~6%
-    card = next(c for c in client.get("/api/usage").json()["cards"] if c["id"] == codex["id"])
+def test_estimate_accuracy_flags_unreliable_estimates(client, project, memory_keyring):
+    api = client.post("/api/accounts", json={"provider": "anthropic_api", "api_key": GOOD_KEY}).json()
+    client.patch(f"/api/accounts/{api['id']}", json={"budget_tokens_5h": 1000})
+    chat(client, project, "hi", api["id"])               # 30 tokens -> est 3%
+    memory_keyring.store[("OneProduction", f"anthropic-api:{api['id']}")] = GOOD_KEY + "LIMIT"
+    chat(client, project, "hi", api["id"])               # real limit hit while estimate says ~3%
+    card = next(c for c in client.get("/api/usage").json()["cards"] if c["id"] == api["id"])
     acc = card["accuracy"]
     assert acc["hits"] == 1 and acc["reliable"] is False and acc["min_est_at_hit"] < 70
     hits = client.get("/api/usage/limit-hits").json()
-    assert hits[0]["account"] == codex["id"] and "usage limit" in hits[0]["message"]
+    assert hits[0]["account"] == api["id"]
 
 
 def test_demo_calls_recorded_but_no_card(client, project):

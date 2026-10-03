@@ -82,7 +82,7 @@ def make_client(tmp_path, fake_cmds, monkeypatch, request):
     monkeypatch.setenv("ONEPROD_RETRY_BACKOFF", "0.01,0.01,0.01")
     monkeypatch.setenv("FAKE_STATE", str(tmp_path / "calls.txt"))
     monkeypatch.setenv("FAKE_LOG", str(tmp_path / "prompts.jsonl"))
-    for k in ("FAKE_MODE", "FAKE_FAILS", "FAKE_EMAIL", "FAKE_UTIL"):
+    for k in ("FAKE_MODE", "FAKE_FAILS", "FAKE_EMAIL", "FAKE_UTIL", "FAKE_CODEX_PCT"):
         monkeypatch.delenv(k, raising=False)
 
     def make(reply_timeout=20):
