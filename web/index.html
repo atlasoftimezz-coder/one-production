@@ -3,47 +3,244 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
 <title>One Production</title>
 <style>
-  :root { --bg:#0f1115; --panel:#161a21; --line:#272e3a; --ink:#e6e9ef; --dim:#98a2b3; --ok:#3fb950; --bad:#f85149; }
-  @media (prefers-color-scheme: light) {
-    :root { --bg:#f6f7f9; --panel:#fff; --line:#dfe3ea; --ink:#12151a; --dim:#5b6675; }
+  :root {
+    --bg:#0f1115; --panel:#161a21; --panel2:#1c212a; --line:#272e3a;
+    --ink:#e6e9ef; --dim:#98a2b3; --accent:#6ea8fe; --ok:#3fb950; --bad:#f85149;
+    --me:#1f3350;
   }
-  body { margin:0; background:var(--bg); color:var(--ink);
-         font:15px/1.5 ui-sans-serif,system-ui,"Segoe UI",Roboto,sans-serif;
-         display:grid; place-items:center; min-height:100vh; }
-  .card { background:var(--panel); border:1px solid var(--line); border-radius:12px;
-          padding:28px 32px; min-width:min(420px, 90vw); }
-  h1 { margin:0 0 4px; font-size:22px; }
-  .sub { color:var(--dim); margin:0 0 20px; }
-  dl { display:grid; grid-template-columns:auto 1fr; gap:6px 16px; margin:0; }
-  dt { color:var(--dim); }
-  dd { margin:0; font-family:ui-monospace,Consolas,monospace; word-break:break-all; }
-  .ok { color:var(--ok); } .bad { color:var(--bad); }
+  @media (prefers-color-scheme: light) {
+    :root { --bg:#f6f7f9; --panel:#fff; --panel2:#f0f2f5; --line:#dfe3ea;
+            --ink:#12151a; --dim:#5b6675; --accent:#1e60d6; --me:#dbe7fb; }
+  }
+  * { box-sizing:border-box }
+  body { margin:0; background:var(--bg); color:var(--ink); height:100vh;
+         font:14px/1.5 ui-sans-serif,system-ui,"Segoe UI",Roboto,sans-serif; }
+  button, input, textarea { font:inherit; color:var(--ink); }
+  button { background:var(--accent); color:#fff; border:0; border-radius:8px; padding:8px 14px;
+           cursor:pointer; font-weight:600; }
+  button.ghost { background:var(--panel2); color:var(--ink); border:1px solid var(--line); font-weight:500; }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  input, textarea { background:var(--panel2); border:1px solid var(--line); border-radius:8px; padding:8px 10px; }
+
+  /* locked screen */
+  #locked { display:none; place-items:center; height:100vh; }
+  #locked .card { background:var(--panel); border:1px solid var(--line); border-radius:12px;
+                  padding:28px 32px; max-width:440px; }
+  #locked h1 { margin:0 0 8px; font-size:20px; }
+  #locked p { color:var(--dim); margin:6px 0; }
+
+  /* app */
+  #app { display:none; grid-template-columns:240px 1fr 300px; height:100vh; }
+  aside, section { min-height:0; }
+  .col { display:flex; flex-direction:column; border-right:1px solid var(--line); background:var(--panel); }
+  .head { padding:14px 16px; border-bottom:1px solid var(--line); }
+  .head h1 { font-size:16px; margin:0; }
+  .head .sub { color:var(--dim); font-size:12px; }
+  #projects { list-style:none; margin:0; padding:8px; overflow:auto; flex:1; }
+  #projects li { padding:8px 10px; border-radius:8px; cursor:pointer; overflow:hidden;
+                 text-overflow:ellipsis; white-space:nowrap; }
+  #projects li:hover { background:var(--panel2); }
+  #projects li.active { background:var(--panel2); box-shadow:inset 3px 0 0 var(--accent); }
+  .newproj { display:flex; gap:6px; padding:10px; border-top:1px solid var(--line); }
+  .newproj input { flex:1; min-width:0; }
+
+  #chatcol { display:flex; flex-direction:column; background:var(--bg); }
+  #messages { flex:1; overflow:auto; padding:18px 22px; display:flex; flex-direction:column; gap:10px; }
+  .msg { max-width:760px; padding:10px 14px; border-radius:10px; white-space:pre-wrap; word-wrap:break-word;
+         background:var(--panel); border:1px solid var(--line); }
+  .msg.user { align-self:flex-end; background:var(--me); }
+  .empty { color:var(--dim); margin:auto; text-align:center; }
+  .composer { display:flex; gap:8px; padding:12px 16px; border-top:1px solid var(--line); background:var(--panel); }
+  .composer textarea { flex:1; resize:none; height:46px; }
+
+  #filecol { border-right:0; border-left:1px solid var(--line); }
+  #files { list-style:none; margin:0; padding:8px; overflow:auto; flex:1; }
+  #files li { display:flex; justify-content:space-between; align-items:center; gap:8px;
+              padding:7px 8px; border-radius:8px; }
+  #files li:hover { background:var(--panel2); }
+  #files .fname { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #files .fsize { color:var(--dim); font-size:12px; white-space:nowrap; }
+  #files button { padding:4px 8px; font-size:12px; }
+  .upload { padding:10px; border-top:1px solid var(--line); }
+  .upload label { display:block; text-align:center; padding:14px; border:1px dashed var(--line);
+                  border-radius:8px; color:var(--dim); cursor:pointer; }
+  .upload label.drag { border-color:var(--accent); color:var(--ink); }
+  .upload input { display:none; }
+  #status { color:var(--dim); font-size:12px; padding:6px 10px; min-height:26px; }
+  @media (max-width:900px) { #app { grid-template-columns:1fr; } #filecol, .col:first-child { display:none; } }
 </style>
 </head>
 <body>
-  <main class="card">
+
+<div id="locked">
+  <div class="card">
     <h1>One Production</h1>
-    <p class="sub">Foundation (P0)</p>
-    <dl>
-      <dt>Status</dt>  <dd id="status">checking…</dd>
-      <dt>Version</dt> <dd id="version">–</dd>
-      <dt>Data</dt>    <dd id="data">–</dd>
-      <dt>Python</dt>  <dd id="python">–</dd>
-    </dl>
-  </main>
+    <p>This page needs to be opened from <b>start.bat</b>.</p>
+    <p>For your safety the app only accepts the browser tab it opened itself.
+       If you closed or reloaded that tab, close the black window and run start.bat again.</p>
+  </div>
+</div>
+
+<div id="app">
+  <aside class="col">
+    <div class="head"><h1>One Production</h1><div class="sub" id="ver">P1</div></div>
+    <ul id="projects"></ul>
+    <form class="newproj" id="newproj">
+      <input id="projname" placeholder="New project" maxlength="80">
+      <button>Add</button>
+    </form>
+  </aside>
+
+  <section id="chatcol">
+    <div id="messages"><div class="empty">Create or pick a project on the left.</div></div>
+    <form class="composer" id="composer">
+      <textarea id="input" placeholder="Message (Enter to send, Shift+Enter for a new line)" disabled></textarea>
+      <button id="send" disabled>Send</button>
+    </form>
+  </section>
+
+  <aside class="col" id="filecol">
+    <div class="head"><h1>Files</h1><div class="sub">any file type</div></div>
+    <ul id="files"></ul>
+    <div class="upload">
+      <label id="drop">Drop files here or click to upload<input id="fileinput" type="file" multiple></label>
+    </div>
+    <div id="status"></div>
+  </aside>
+</div>
+
 <script>
-  fetch("/health").then(r => r.json()).then(h => {
-    const s = document.getElementById("status");
-    s.textContent = h.status; s.className = h.status === "ok" ? "ok" : "bad";
-    document.getElementById("version").textContent = h.version;
-    document.getElementById("data").textContent = h.data_dir;
-    document.getElementById("python").textContent = h.python;
-  }).catch(() => {
-    const s = document.getElementById("status");
-    s.textContent = "not responding"; s.className = "bad";
-  });
+// ---- session token: read from the URL fragment, keep in memory only, scrub the address bar
+const TOKEN = (() => {
+  const m = location.hash.match(/(?:^#|&)t=([^&]+)/);
+  if (m) history.replaceState(null, "", location.pathname);
+  return m ? decodeURIComponent(m[1]) : null;
+})();
+
+const $ = s => document.querySelector(s);
+let current = null;
+
+async function api(path, opts = {}) {
+  const r = await fetch(path, { ...opts, headers: { ...(opts.headers || {}), "X-OneProd-Token": TOKEN } });
+  if (r.status === 401) { lock(); throw new Error("not authorised"); }
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.statusText);
+  return r;
+}
+function lock() { $("#app").style.display = "none"; $("#locked").style.display = "grid"; }
+const esc = s => s.replace(/[&<>"]/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]));
+const size = n => n < 1024 ? n + " B" : n < 1048576 ? (n/1024).toFixed(1) + " KB"
+                : n < 1073741824 ? (n/1048576).toFixed(1) + " MB" : (n/1073741824).toFixed(2) + " GB";
+function status(t) { $("#status").textContent = t || ""; }
+
+async function loadProjects(select) {
+  const list = await (await api("/api/projects")).json();
+  $("#projects").innerHTML = list.map(p =>
+    `<li data-id="${p.id}" class="${p.id === current ? "active" : ""}">${esc(p.name)}</li>`).join("")
+    || `<li style="color:var(--dim);cursor:default">No projects yet</li>`;
+  document.querySelectorAll("#projects li[data-id]").forEach(li => li.onclick = () => openProject(li.dataset.id));
+  if (select) openProject(select);
+}
+
+async function openProject(id) {
+  current = id;
+  document.querySelectorAll("#projects li").forEach(li => li.classList.toggle("active", li.dataset.id === id));
+  $("#input").disabled = $("#send").disabled = false;
+  const hist = await (await api(`/api/projects/${id}/chat`)).json();
+  $("#messages").innerHTML = hist.length ? "" : `<div class="empty">No messages yet. Say something.</div>`;
+  hist.forEach(m => addMsg(m.role, m.text));
+  loadFiles();
+}
+
+function addMsg(role, text) {
+  $("#messages").querySelector(".empty")?.remove();
+  const d = document.createElement("div");
+  d.className = "msg " + role; d.textContent = text;
+  $("#messages").appendChild(d); d.scrollIntoView({ block: "end" });
+  return d;
+}
+
+async function loadFiles() {
+  if (!current) return;
+  const list = await (await api(`/api/projects/${current}/files`)).json();
+  $("#files").innerHTML = list.map(f => `<li><span class="fname" title="${esc(f.name)}">${esc(f.name)}</span>
+      <span class="fsize">${size(f.size)}</span>
+      <button class="ghost" data-name="${esc(f.name)}">Download</button></li>`).join("")
+    || `<li style="color:var(--dim)">No files yet</li>`;
+  document.querySelectorAll("#files button").forEach(b => b.onclick = () => download(b.dataset.name));
+}
+
+async function download(name) {
+  status("Downloading " + name + "â€¦");
+  const r = await api(`/api/projects/${current}/files/${encodeURIComponent(name)}`);
+  const url = URL.createObjectURL(await r.blob());
+  const a = Object.assign(document.createElement("a"), { href: url, download: name });
+  a.click(); setTimeout(() => URL.revokeObjectURL(url), 5000);
+  status("");
+}
+
+async function upload(fileList) {
+  if (!current) { status("Pick a project first."); return; }
+  if (!fileList.length) return;
+  const fd = new FormData();
+  [...fileList].forEach(f => fd.append("files", f));
+  status(`Uploading ${fileList.length} file(s)â€¦`);
+  try {
+    const saved = await (await api(`/api/projects/${current}/files`, { method: "POST", body: fd })).json();
+    status("Uploaded: " + saved.map(s => s.name).join(", "));
+  } catch (e) { status("Upload failed: " + e.message); }
+  loadFiles();
+}
+
+$("#newproj").onsubmit = async e => {
+  e.preventDefault();
+  const p = await (await api("/api/projects", { method: "POST",
+    headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: $("#projname").value }) })).json();
+  $("#projname").value = "";
+  loadProjects(p.id);
+};
+
+$("#composer").onsubmit = async e => {
+  e.preventDefault();
+  const text = $("#input").value;
+  if (!text.trim() || !current) return;
+  $("#input").value = ""; $("#send").disabled = true;
+  addMsg("user", text);
+  const bubble = addMsg("assistant", "");
+  try {
+    const r = await api(`/api/projects/${current}/chat`, { method: "POST",
+      headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: text }) });
+    const reader = r.body.getReader(), dec = new TextDecoder();
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      bubble.textContent += dec.decode(value, { stream: true });
+      bubble.scrollIntoView({ block: "end" });
+    }
+  } catch (e) { bubble.textContent = "Error: " + e.message; }
+  $("#send").disabled = false; $("#input").focus();
+};
+$("#input").addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("#composer").requestSubmit(); }
+});
+
+$("#fileinput").onchange = e => { upload(e.target.files); e.target.value = ""; };
+const drop = $("#drop");
+["dragenter", "dragover"].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add("drag"); }));
+["dragleave", "drop"].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.remove("drag"); }));
+drop.addEventListener("drop", e => upload(e.dataTransfer.files));
+
+(async () => {
+  if (!TOKEN) { lock(); return; }
+  $("#app").style.display = "grid";
+  try {
+    const h = await (await fetch("/health")).json();
+    $("#ver").textContent = "v" + h.version + " Â· " + h.data_dir;
+    await loadProjects();
+  } catch (e) { /* lock() already shown on 401 */ }
+})();
 </script>
 </body>
 </html>

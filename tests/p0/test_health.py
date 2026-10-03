@@ -6,7 +6,8 @@ from app.version import __version__
 
 
 def _client(tmp_path):
-    return TestClient(create_app(Settings(data_dir=tmp_path / "data")))
+    # P1 added a Host check: requests must come as 127.0.0.1, as a real browser's do.
+    return TestClient(create_app(Settings(data_dir=tmp_path / "data")), base_url="http://127.0.0.1")
 
 
 def test_health_reports_version_and_data_dir(tmp_path):

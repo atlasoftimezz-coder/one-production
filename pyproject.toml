@@ -7,6 +7,7 @@ dependencies = [
     "fastapi",
     "uvicorn[standard]",
     "pydantic",
+    "python-multipart",
 ]
 
 [project.optional-dependencies]
