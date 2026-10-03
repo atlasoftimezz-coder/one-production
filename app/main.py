@@ -56,7 +56,8 @@ def create_app(settings: Settings, token: str | None = None) -> FastAPI:
 
     @app.get("/", include_in_schema=False)
     def index() -> FileResponse:
-        return FileResponse(WEB_DIR / "index.html", headers={"Cache-Control": "no-store"})
+        return FileResponse(WEB_DIR / "index.html", media_type="text/html; charset=utf-8",
+                            headers={"Cache-Control": "no-store"})
 
     # ---- projects
     @app.get("/api/projects")
