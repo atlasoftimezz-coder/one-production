@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>One Production</title>
+<style>
+  :root { --bg:#0f1115; --panel:#161a21; --line:#272e3a; --ink:#e6e9ef; --dim:#98a2b3; --ok:#3fb950; --bad:#f85149; }
+  @media (prefers-color-scheme: light) {
+    :root { --bg:#f6f7f9; --panel:#fff; --line:#dfe3ea; --ink:#12151a; --dim:#5b6675; }
+  }
+  body { margin:0; background:var(--bg); color:var(--ink);
+         font:15px/1.5 ui-sans-serif,system-ui,"Segoe UI",Roboto,sans-serif;
+         display:grid; place-items:center; min-height:100vh; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:12px;
+          padding:28px 32px; min-width:min(420px, 90vw); }
+  h1 { margin:0 0 4px; font-size:22px; }
+  .sub { color:var(--dim); margin:0 0 20px; }
+  dl { display:grid; grid-template-columns:auto 1fr; gap:6px 16px; margin:0; }
+  dt { color:var(--dim); }
+  dd { margin:0; font-family:ui-monospace,Consolas,monospace; word-break:break-all; }
+  .ok { color:var(--ok); } .bad { color:var(--bad); }
+</style>
+</head>
+<body>
+  <main class="card">
+    <h1>One Production</h1>
+    <p class="sub">Foundation (P0)</p>
+    <dl>
+      <dt>Status</dt>  <dd id="status">checking…</dd>
+      <dt>Version</dt> <dd id="version">–</dd>
+      <dt>Data</dt>    <dd id="data">–</dd>
+      <dt>Python</dt>  <dd id="python">–</dd>
+    </dl>
+  </main>
+<script>
+  fetch("/health").then(r => r.json()).then(h => {
+    const s = document.getElementById("status");
+    s.textContent = h.status; s.className = h.status === "ok" ? "ok" : "bad";
+    document.getElementById("version").textContent = h.version;
+    document.getElementById("data").textContent = h.data_dir;
+    document.getElementById("python").textContent = h.python;
+  }).catch(() => {
+    const s = document.getElementById("status");
+    s.textContent = "not responding"; s.className = "bad";
+  });
+</script>
+</body>
+</html>

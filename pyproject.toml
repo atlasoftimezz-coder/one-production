@@ -1,0 +1,13 @@
+[project]
+name = "one-production"
+version = "0.0.1"
+description = "Local production studio: chat, accounts, usage, handoff, voiceover."
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "pydantic",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "httpx"]

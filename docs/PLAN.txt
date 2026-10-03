@@ -1,0 +1,608 @@
+ONE PRODUCTION - MASTER PLAN
+============================
+Version 9 - 2026-10-03  (v8 + section 11: P0 implementation plan - CURRENT WORK)
+Location: D:\Projects\YT project\one-production\
+Platform: Windows 11 (native), single local machine, single user (MVP)
+
+
+1. CONTEXT
+----------
+Today every YouTube episode is hand-driven through one long chat: script, voice clone,
+read-check, mastering, subtitles, art or stock footage, edit. The pieces work (vo-app,
+make_srt, stickvid, competitor benchmarking) but nothing coordinates them, quality checks
+happen only when remembered, usage limits cut work off mid-task, and settings live in chat
+history.
+
+One Production is a LOCAL APPLICATION that fixes this:
+- one chat box where you talk to a master assistant, which spawns worker chats and can
+  check work with a different model
+- any number of your own AI accounts (Claude logins, Codex logins, API keys), each with its
+  own email
+- a usage page, and an automatic handoff when an account runs low or hits its limit: all
+  context saved to a handoff file, work continues on the next account
+- production tools inside the chat, starting with the voiceover pipeline
+- local and cloud MCP tools, and storage for any kind of file
+
+It runs locally because Chatterbox, the voices and the files are all on this machine.
+
+
+2. SOURCE NOTES (the five handwritten pages)
+--------------------------------------------
+Note 1 (TODO by 4 Oct 2026)
+  1. Auth token - "main thing", user Gmail needed, resets monthly, not only us
+  2. Application, production grade
+  3. Dedicated pro voiceover
+  4. Multiple auth token keys, within that usage, to check usage
+  5. Local application
+  6. Project chat box
+Note 2  Open chat -> local OS MCP + online cloud MCP, "like Claude Code". Storage for any
+        kind of file. At 85% usage -> switch to another account first, automated backup.
+Note 3  An orchestrator codes the app layer by layer. "I talk to the master chat, it spawns
+        other chats, it checks with another model."
+Note 4  When the usage limit is reached, save everything to an .md file automatically.
+        Before that, ask whether another model is available; if yes, hand all data over.
+Note 5  Opus 5.5 master editor / reviewer checks quality. Sonnet 5.5 workers: voiceover,
+        script, video editor (DaVinci Resolve MCP + Storyblocks MCP), animation.
+
+Interpretation of Note 1 item 1: "auth token" = the PROVIDER tokens/logins (each tied to a
+Gmail, each with a monthly-resetting allowance), together with item 4's usage tracking.
+That makes accounts + usage the main thing, so they come first in the MVP. Google sign-in
+to the app itself is a separate, lower-priority item. (Confirm with user; reorder if wrong.)
+
+
+3. KEY DECISIONS
+----------------
+D1 Windows-native, no Firstmate.
+   Firstmate is macOS/Linux only. On this PC: claude, codex and gh are installed natively;
+   WSL has only the docker-desktop distro. Firstmate would need Ubuntu in WSL plus a second
+   login for both CLIs. Its two useful ideas are rebuilt inside the project:
+   - dev\dispatch.json + dev\dispatch.py: rules pick claude or codex per coding task and
+     move to the next one when an account runs low
+   - cross-model review: a change written by Claude is reviewed by Codex, and the reverse;
+     notes saved to dev\reviews\<task>.md
+
+D2 Every account is used only through its official client.
+   API key -> Anthropic API.  Claude login -> `claude -p`.  ChatGPT login -> `codex exec`.
+   Login tokens are never extracted or reused in our own calls. Only accounts the user owns.
+
+D3 App login and provider logins are separate layers.
+   You log into One Production once. Each provider account keeps its own email.
+
+D4 Free-first, paid tools optional.
+   Editing defaults to ffmpeg; DaVinci Resolve MCP needs Resolve Studio. Stock defaults to
+   free sources / code-drawn art; Storyblocks MCP needs a paid key.
+
+D5 Clone the reference voice exactly.
+   A voice the user supplies is reproduced as-is (clone_exact preset, grid_pad pace), never
+   pitch-shifted toward a niche profile unless asked.
+
+D6 React to limits; don't rely on predicting them.
+   Subscription logins publish no reliable % used, so the switch has two triggers:
+   - PRIMARY (reactive): the CLI/API returns a rate-limit / usage-limit error -> handoff
+   - SECONDARY (predictive): estimated usage crosses the threshold -> offer handoff
+   API keys have exact usage, so for them the predictive trigger is reliable.
+
+D7 Terms first, then rotation.
+   Switching between accounts is for continuity of work, not for getting around limits.
+   Default switch order goes subscription -> API key (pay-per-use) rather than chaining
+   several subscriptions. Chaining subscriptions stays OFF until R8 is confirmed.
+
+D8 Many users = many installs, not one shared server.
+   Every friend installs One Production on their own PC: own accounts, own files, own GPU,
+   own usage page. Nothing is shared and nobody runs on someone else's accounts. This keeps
+   "for other users too" without building a hosted multi-tenant service. (A hosted version
+   is a separate future project.)
+
+D9 Assume a brand-new user with nothing installed.
+   No Chatterbox, no voices, no ffmpeg, no CLIs, maybe no NVIDIA GPU. The app must detect
+   what exists, install what's missing only with consent, and switch off modules the PC
+   can't run - never crash or silently fail because something is absent.
+
+
+4. REQUIREMENTS
+---------------
+R1 ACCOUNTS
+  - Add any number of: Claude logins, Codex/ChatGPT logins, Anthropic API keys
+    (later: OpenAI API keys). Each may use a different email.
+  - Each account isolated:
+      Claude  -> own folder, launched with CLAUDE_CONFIG_DIR=profiles\claude-<n>
+      Codex   -> own folder, launched with CODEX_HOME=profiles\codex-<n>
+      API key -> Windows Credential Manager (python keyring), never in a file
+  - Labels:
+      Claude -> automatic from `claude auth status --json`
+                (loggedIn, authMethod, email, orgName, subscriptionType, configDirectory -
+                 verified on Claude Code 2.1.284)
+      Codex  -> typed by the user once (`codex login status` prints no email, v0.157.1)
+      API    -> user label + last 4 characters of the key
+  - "Add account" opens the provider's own login inside a fresh folder.
+  - Remove, re-login, disable per account. Health badge (green/red) at startup.
+  - Monthly reset day per account (the allowance cycle from Note 1).
+
+R2 USAGE PAGE
+  - One card per account: provider, label, plan type, status, % used bar, tokens in/out,
+    estimated cost (API), request count, last used, reset time, and a tag:
+    EXACT (API keys) or ESTIMATED (subscription logins).
+  - Time ranges: today / 5 hours / 7 days / this month.
+  - Totals across accounts; breakdown by project, by model, by worker.
+  - Thresholds per account: warn at 70%, offer switch at 85% (editable).
+  - Switch order: drag-to-reorder list; both triggers (D6) follow it.
+  - Switch log: time, from -> to, trigger (limit error / threshold / manual), usage at
+    switch, link to the handoff.md written.
+  - Limit-hit log: every rate-limit error, with its raw message and the ESTIMATED % at that
+    moment, to calibrate estimates.
+  - Estimate accuracy shown per subscription account: over the last 7 days, the estimated %
+    at each actual limit hit. TARGET: median within +/-10 points of 100% (i.e. estimate
+    reads 90-110% when the real limit hits), and no hit below 70% estimated. Accounts
+    outside target show "estimate unreliable" and the predictive trigger is switched off
+    for them (reactive trigger still works). Estimator recalibrates its per-account budget
+    from the log after each hit.
+  - CSV export.
+
+R3 HANDOFF AND BACKUP
+  - handoff.md written: at every switch, every N turns, and on app shutdown.
+    Contents: goal, decisions made, files touched (paths), open tasks, last 20 messages
+    verbatim, partial last reply (if any), usage at switch.
+  - Limit hit MID-RESPONSE: the partial reply is kept and marked "interrupted"; the handoff
+    tells the next account to resume from that point, not to restart the task. Any tool
+    action that was in flight is listed as "unconfirmed - verify before repeating".
+  - Before switching: prompt "Another account available?" listing eligible accounts.
+    If no account is eligible: save handoff, pause, show reset times.
+  - One click: "continue on account X" - new session starts with handoff.md first.
+
+R4 CHAT AND ORCHESTRATION
+  - Chat with streaming replies, projects, history.
+  - Master assistant (Opus) can spawn worker chats (Sonnet) per task.
+  - Optional cross-model check: answer reviewed by a different provider.
+  - Local OS MCP and cloud MCPs (through claude -p; registry file for the API path).
+  - Storage per project for any file type: upload, list, preview, download.
+  - CONCURRENCY: workers run in parallel, max N at once (default 3). Each worker is pinned
+    to one account; the scheduler spreads workers across accounts by remaining headroom.
+    Two workers never write the same file: file locks per project. GPU-bound tools
+    (voiceover) are a single-slot queue.
+  - PINNED WORKER HITS A LIMIT: the worker writes its own handoff (R3), releases its file
+    locks, and is RE-PINNED to the next eligible account in the switch order, resuming from
+    the handoff. Workers re-pin automatically (no prompt per worker); the master chat shows
+    one notice listing every re-pin. If no account is eligible, the worker PAUSES with its
+    handoff saved and resumes when an account resets or the user adds one. Pinning means
+    "one account at a time, never two in parallel", not "one account forever".
+
+R5 PRODUCTION TOOLS
+  - Voiceover from chat ("voice this script with Human") -> vo-app job -> mp3 + SRT link.
+  - Later workers: research, script, animation, video editor, packaging.
+
+R6 SECURITY
+  - Bind 127.0.0.1 only.
+  - Per-session API token: generated at startup, required on every request (header);
+    rejected requests logged. Delivery: the launcher opens
+    http://127.0.0.1:<port>/#t=<token>; the page reads it from the URL fragment (never sent
+    to the server, never in logs or history after the page clears it with
+    history.replaceState) and keeps it in memory only. No endpoint ever returns the token,
+    so another local page cannot fetch it. Reopening the tab = relaunch from the app/tray.
+  - Host header must be 127.0.0.1 / localhost (blocks DNS rebinding).
+  - Origin check + no permissive CORS (blocks cross-site requests from web pages).
+  - Local OS MCP / shell / file-write outside projects\ = PERMISSION PROMPT per action,
+    showing the exact command or path; "allow once / allow for this session / deny".
+    Default deny for deletes, installs, network uploads.
+    "Allow for this session" decisions are held in server memory only (never written to
+    disk) and are cleared on restart; the UI lists active session allowances with revoke.
+  - No secrets in files, logs or the repo; keys only in Credential Manager.
+  - ONE redaction function (security\redact.py: API-key patterns, bearer/OAuth tokens,
+    passwords, the session token) applied to: logs, handoff.md (incl. the 20 verbatim
+    messages and the partial reply), switch log, CSV export, and every file added to a
+    backup zip. Redacted spans read [REDACTED:<type>].
+
+R7 APP LOGIN
+  - Local profile login for MVP.
+  - Google sign-in (OAuth desktop flow) later - needs the user's Google Cloud client ID.
+
+R8 TERMS CHECK (gate before account rotation ships)
+  - Read and record, per provider, what the current terms say about:
+    scripted/automated use of the CLI with a subscription; holding several accounts;
+    switching accounts when a limit is reached.
+  - Result stored in docs\terms-check.md with links and date. Subscription chaining (D7)
+    stays disabled unless every provider involved allows it.
+
+R9 RELIABILITY
+  - Errors classified: rate/usage limit -> handoff path (R3); network / 5xx / timeout ->
+    retry with backoff (3 tries: 2s, 8s, 30s); auth error -> mark account red, ask user to
+    re-login; bad request / tool error -> show to user, no retry.
+  - Retry only if NO output tokens were received yet. If a transient error hits after the
+    stream started, it is NOT re-sent: the partial reply is kept as "interrupted" and the
+    task continues via the resume path (same account, prompt = "continue from here" +
+    the partial text), so the original prompt is never billed twice. Tokens already
+    streamed are recorded in the ledger before resuming.
+  - Every call has a timeout; a stuck CLI process is killed and logged.
+  - Retries never repeat a tool action that changes files without asking first.
+
+R10 COST CAPS
+  - Opus reviewer loops: max 2 review rounds per stage AND a token budget per review
+    (default 40k input + 8k output per round, 120k total per episode stage), whichever
+    hits first; then escalate to the user with the review so far.
+  - Per-task and per-day spend cap (tokens and money) per account; reaching it pauses and
+    asks. Caps shown on the usage page.
+
+R11 BACKUPS OF PROJECT DATA
+  - projects\ snapshot daily and before any bulk change: zip to a backup folder the user
+    picks (default D:\Backups\one-production\), keep last 14.
+  - Restore from the UI. Large media (audio/video) included by default, toggle to skip.
+
+R12 GPU / HEAVY-JOB GATE (enforces D4 in code)
+  - Every tool declares a cost class: light (CPU, seconds) / heavy (GPU or > 5 min) /
+    download (model or large asset) / paid (external spend).
+  - heavy, download and paid require an explicit confirm prompt showing what it will use
+    (GPU, disk GB, money). Approvals can be remembered per tool.
+  - Voiceover (Chatterbox) is pre-approved as heavy since the user chose it; nothing else is.
+
+
+R13 NEW-USER SETUP (first-run wizard)
+  Step 1  Welcome + choose data folder (default %LOCALAPPDATA%\OneProduction; any drive).
+  Step 2  System scan, shown as a checklist with green / amber / red:
+            Windows version, free disk, RAM
+            GPU: NVIDIA? model, VRAM, CUDA generation (RTX 50xx needs cu128 wheels)
+            ffmpeg present? has rubberband filter?
+            Node.js, Claude Code CLI, Codex CLI present? logged in?
+            Python runtime (bundled - never relies on system Python)
+  Step 3  Pick modules (each shows what it needs and costs, see R14). Defaults chosen
+          from the scan: e.g. no NVIDIA -> Voice module offered as "CPU (slow)" or off.
+  Step 4  Install missing pieces - one confirm per item, showing size and source
+          (R12 gate). Downloads: ffmpeg (~100 MB), torch for the detected GPU (~2-3 GB),
+          Chatterbox + Whisper model weights (several GB, exact size shown before download).
+          Resumable; a failed step can be retried alone.
+  Step 5  Connect at least one account (R1). The app is usable with ONE of: Anthropic API
+          key, Claude login, Codex login. Wizard explains the difference in plain words.
+  Step 6  Voice (only if Voice module on): upload your own 10-30 s reference clip, tick
+          "this is my voice or I have permission". Wizard runs fidelity.py on it and picks
+          settings automatically. No voices are bundled.
+  Step 7  Test run: one chat message + (if enabled) a 15-word voice test -> green tick.
+  Re-runnable any time from Settings -> "Check my setup".
+
+R14 MODULES (each switchable, app works with only Core)
+  Core        chat, accounts, usage, handoff, files, backups      needs: nothing extra
+  Voice       Chatterbox clone + read-check + SRT                  needs: NVIDIA >= 8 GB VRAM
+                                                                   (CPU fallback ~20x slower)
+              Cloud voice adapter (e.g. ElevenLabs, user's own key) - optional, paid, off by default
+  Subtitles   make_srt from any audio the user brings              needs: Whisper (CPU ok)
+  Animation   stickvid-style SVG shots + render                    needs: ffmpeg, CPU
+  Video edit  ffmpeg assembler (default) / DaVinci Resolve MCP     Resolve needs Studio
+  Stock       free sources (default) / Storyblocks MCP             Storyblocks needs paid key
+  Research    NexLev / vidIQ MCPs                                  needs the user's own accounts
+  A module the PC can't run is shown greyed out with the reason and how to enable it.
+
+R15 DISTRIBUTION & UPDATES
+  - Package: one zip / installer containing app + embedded Python + launcher
+    (OneProduction.exe or start.bat). No admin rights needed; installs per user.
+  - Heavy pieces (torch, model weights, ffmpeg) are NOT in the package - fetched by the
+    wizard for that PC's hardware, so the download stays small and GPU-correct.
+  - All paths come from config (data folder chosen in Step 1). Nothing hard-coded to
+    D:\Software\... - vo-app's config.py already supports env overrides; extend that.
+  - Updates: "Check for updates" in Settings pulls a new version; user data folder is
+    never touched; settings migrated by version number.
+  - Versioned releases with a changelog; rollback to previous version kept on disk.
+
+R16 SUPPORT FOR FRIENDS
+  - "Export diagnostics" button: setup scan + versions + last errors, run through
+    redact.py (R6), zipped - safe to send to you when something breaks.
+  - Plain-language error messages with a "how to fix" line (e.g. "Claude login expired -
+    click Re-login").
+  - Getting-started guide inside the app + one sample project (a short script ready to
+    voice and subtitle).
+  - Each user's own accounts and own terms check (R8) - nobody borrows another's login.
+
+5. ARCHITECTURE
+---------------
+Browser UI (chat, accounts, usage, files, approvals)
+   |  session token + Host/Origin checks
+   v
+FastAPI backend (127.0.0.1)
+  auth\          local profile (Google sign-in later)
+  security\      session token, Host/Origin guard, permission prompts, log redaction
+  accounts\      registry, profile folders, keyring entries, health checks
+  providers\
+    anthropic_api.py   API key, exact usage per call
+    claude_cli.py      claude -p --output-format stream-json  (per CLAUDE_CONFIG_DIR)
+    codex_cli.py       codex exec --json                       (per CODEX_HOME)
+    errors.py          classify: limit / transient / auth / fatal  (R9)
+  usage\         ledger.sqlite: per account, per call: tokens, cost, %; caps (R10)
+  guard\         limit error or threshold -> handoff.md -> switch prompt -> resume (R3)
+  scheduler\     worker slots, account pinning, file locks, GPU queue (R4)
+  orchestrator\  master (Opus) + workers (Sonnet) + cross-model review, review caps
+  gate\          cost classes + confirm prompts (R12)
+  mcp\           local + cloud MCP registry
+  storage\       projects\<p>\files (any type) + backup/restore (R11)
+  tools\voiceover  -> existing vo-app HTTP API on port 8720
+
+Folder layout
+  one-production\
+    app\  web\  dev\ (dispatch.json, dispatch.py, reviews\)  docs\ (terms-check.md)
+    profiles\  projects\   (both gitignored)
+    channels\  (per-channel profile.yaml - Phase 2)
+    README.md  PLAN.txt
+
+
+6. REUSE - DO NOT REWRITE
+-------------------------
+C:\Users\Work\Claude\voiceover\vo-app\
+  engine.py      presets, render + read-check + reseed loop, single GPU job queue
+  pipeline.py    parse_script (drops headings, production notes, **Label:** lines),
+                 read_check, master
+  make_srt.py    subtitles: timing from ASR, text from script
+  fidelity.py    picks clone settings per voice
+  analyze_voice.py, bench.py, sample_pace.py   voice and competitor measurement
+  server.py + static\index.html   FastAPI + single-file UI pattern to copy
+C:\Users\Work\Claude\stickvid\   animation worker later
+D:\Software\Voice\voices\{adam,buster,human}_ref48.wav   voice references
+
+
+7. PHASES - EACH ONE CHECKED TWICE BEFORE THE NEXT STARTS
+---------------------------------------------------------
+12 phases (P0-P11). Each phase is small enough to test in one sitting and ends at a GATE:
+
+  AUTO CHECK   - Claude runs the phase's test suite: `check.bat P<n>`
+                 (pytest under tests\p<n>\ + scripted end-to-end runs). Produces
+                 docs\gates\P<n>-auto.md: every check, pass/fail, numbers, logs. All must pass.
+  MANUAL CHECK - you go through docs\gates\P<n>-manual.md: 5-10 plain tick-boxes
+                 ("open the app, do X, you should see Y"), each with what to do if it fails.
+  SIGN-OFF     - you write "P<n> approved" (or the failures) in docs\phase-log.md.
+                 Next phase starts only after sign-off. A failed manual item becomes a fix
+                 + a new automated test, so it can never silently come back.
+
+Every phase also re-runs ALL earlier phases' auto checks (regression), so P5 green means
+P0-P5 are still green.
+
+---------------------------------------------------------------------------------------
+P0  FOUNDATION                                                       [MVP - 4 Oct]
+  Build : folder layout, config with chosen data folder (no hard-coded paths), bundled
+          Python, start.bat, git repo, test harness + check.bat, PLAN.txt, phase-log.md.
+  AUTO  : check.bat runs; grep finds no "D:\Software" / "C:\Users\Work" in app code;
+          config loads from a temp data folder; app starts and answers /health.
+  MANUAL: [ ] double-click start.bat -> browser opens a blank One Production page
+          [ ] the data folder you chose exists and has the expected sub-folders
+
+P1  SHELL + SECURITY                                                 [MVP - 4 Oct]
+  Build : chat UI (stub replies), projects, file storage any type, streaming, session token
+          via URL fragment, Host/Origin checks, redact.py (R6).
+  AUTO  : no token -> 401; no endpoint returns the token; Host: evil.test rejected; foreign
+          Origin rejected; upload/download round-trip for .docx .mp3 .png .mp4 (byte-equal);
+          redact.py catches planted key formats.
+  MANUAL: [ ] create a project, upload 3 different files, download them back
+          [ ] reopen the browser tab without the launcher -> app refuses (needs relaunch)
+          [ ] UI looks usable on your screen
+
+P2  ACCOUNTS + PROVIDERS ("the main thing")                          [MVP - 4 Oct]
+  Build : add/remove/disable accounts, profile folders, keyring, labels, health badges;
+          anthropic_api / claude_cli / codex_cli; error classes + retries (R1, R9).
+  AUTO  : mocked providers - each error class takes the right path; retry only before
+          first token; two Claude profiles stay isolated (different configDirectory);
+          API key never appears on disk (scan data folder).
+  MANUAL: [ ] add your Claude login, Codex login and API key - each shows the right label
+          [ ] send one real message on each - each replies
+          [ ] log one Claude profile out -> its badge turns red with a re-login button
+
+P3  USAGE PAGE + HANDOFF                                             [MVP - 4 Oct]
+  Build : ledger, usage cards, ranges, totals, thresholds, switch order, switch + limit-hit
+          logs, CSV; handoff.md at switch / every N turns / shutdown; reactive + predictive
+          triggers; mid-response resume; redaction on handoff and exports (R2, R3, D6).
+  AUTO  : simulated limit mid-stream -> partial kept, handoff written, next account resumes,
+          prompt billed once; fake 85% -> prompt; no eligible account -> pause + reset
+          times; planted key -> [REDACTED] in handoff, logs, CSV.
+  MANUAL: [ ] usage page numbers roughly match what you sent
+          [ ] press "switch now" -> read handoff.md: does it capture the task correctly?
+          [ ] continue on the other account -> it picks up without re-explaining
+
+P4  VOICEOVER IN CHAT                                                [MVP - 4 Oct]
+  Build : voiceover tool -> vo-app job, mp3 + SRT link in chat, GPU gate (R5, R12).
+  AUTO  : "voice this script with Human" on the substances v2 script -> 9/9 sections
+          WER <= 0.05, F0 within 1 semitone of reference, -16 LUFS +/-0.5, SRT 100% timed,
+          0 overlaps; a new heavy tool without approval -> confirm prompt.
+  MANUAL: [ ] listen to the first 60 s - does it sound like the Human voice? (EAR GATE)
+          [ ] open the SRT in a player - subtitles line up
+
+P5  BACKUPS + SYSTEM SCAN                                  [MVP complete after this]
+  Build : daily backup zip + restore (R11); read-only system scan screen (R13 step 2);
+          local profile login (R7).
+  AUTO  : backup -> delete project -> restore -> byte-equal; scan output matches this PC
+          (GPU name, VRAM, ffmpeg+rubberband, CLIs found); backup zip passes secret scan.
+  MANUAL: [ ] restore yesterday's backup of one project from the UI
+          [ ] scan screen tells the truth about your PC
+
+P6  SETUP WIZARD + MODULES                                       [Friends release]
+  Build : full first-run wizard (R13), module switches with greyed-out reasons (R14).
+  AUTO  : wizard run in a clean Windows test user: API-key-only path reaches working chat;
+          "no NVIDIA" mocked -> Voice offered as CPU/off; cancelled download resumes; no
+          half-installed module shows green.
+  MANUAL: [ ] run the wizard yourself in a new Windows user account start to finish
+          [ ] every screen understandable without asking me
+
+P7  PACKAGING + UPDATES + SUPPORT                                [Friends release]
+  Build : installer/zip, launcher, updater + rollback (R15), diagnostics export, sample
+          project, in-app guide (R16).
+  AUTO  : install from package into empty folder -> app starts; update to v+1 -> data
+          intact; rollback -> previous version runs; diagnostics zip has no secrets.
+  MANUAL: [ ] ONE FRIEND installs it on their PC from zero and voices the sample project
+          [ ] their diagnostics zip, if needed, is enough for me to find the problem
+
+P8  ORCHESTRATOR                                                       [Phase 2]
+  Build : master (Opus) + workers (Sonnet), concurrency, file locks, GPU queue,
+          re-pinning on limits, review round + token caps (R4, R10).
+  AUTO  : 3 workers, limit forced on one account -> re-pins and finishes; no eligible
+          account -> pauses, resumes after mocked reset; two workers never write one file;
+          third review round escalates instead of looping; spend cap pauses.
+  MANUAL: [ ] give the master a 3-part task -> watch workers, read the final review
+          [ ] the cost shown is acceptable to you
+
+P9  PRODUCTION ENGINE (quality gates + visuals + edit)                 [Phase 2]
+  Build : numeric gates per stage, research/script/animation/video-editor/packaging workers,
+          ffmpeg editor default, Resolve/Storyblocks adapters behind licence flags.
+  AUTO  : seeded bad take rejected; 6-semitone pitch shift fails voice gate; final video
+          duration = VO +/-0.5 s, A/V drift < 40 ms, no black frames.
+  MANUAL: [ ] watch one full episode end to end - would you publish it?
+
+P10 DEV ORCHESTRATION (dispatch.py)                                     [Phase 2]
+  Build : dev\dispatch.json + dispatch.py, cross-model review files (D1).
+  AUTO  : claude floor mocked low -> codex picked; Codex review file appears for a
+          Claude-written change.
+  MANUAL: [ ] read 2 review files - are they useful, not noise?
+
+P11 TERMS, SIGN-IN, LEARNING LOOP                                        [Later]
+  Build : R8 terms check doc, subscription chaining (only if allowed), Google sign-in,
+          permission-prompted OS MCP write/exec, post-publish learning loop.
+  AUTO  : chaining stays disabled while terms-check.md marks any provider "not allowed";
+          OS write action always prompts; "allow for session" gone after restart.
+  MANUAL: [ ] read terms-check.md and decide on chaining
+          [ ] approve or reject the first learning-loop suggestion
+
+Out of scope until after P11: hosted multi-tenant server; Mac support beyond Core.
+
+Timeline reality: P0-P5 = MVP. P0-P2 fit 4 Oct; P3-P5 likely spill a few days because
+each gate includes your manual check. Friends release = P6-P7. Production = P8-P11.
+
+
+9. RISKS
+--------
+  - Subscription logins publish no official % used -> predictive trigger is an estimate;
+    the reactive trigger (limit error) is the reliable one.
+  - Provider terms may restrict automated CLI use or account switching -> R8 gate.
+  - CLAUDE_CONFIG_DIR / CODEX_HOME isolation must be verified on installed versions;
+    fallback is one login per Windows user.
+  - Local OS MCP is effectively shell access -> R6 prompts are mandatory, not optional.
+  - DaVinci Resolve external scripting is Studio-only; Storyblocks needs a paid key.
+  - Scope: production grade is months of work; 4 Oct delivers P0-P2, MVP = P0-P5.
+
+
+10. VERIFICATION
+----------------
+  Per-phase gates are in section 7. Below is the full list of automated scenarios those
+  gates draw from.
+  MVP
+  - Message on each provider; one ledger row each.
+  - Two Claude logins with different emails -> separate labels and meters.
+  - Reactive switch: simulate a limit error mid-stream -> partial reply kept as
+    "interrupted", handoff.md written, next account resumes from that point.
+  - Predictive switch: fake 85% -> prompt appears; no eligible account -> pause + reset times.
+  - Transient error before any output -> 3 retries with backoff, then a clear error.
+  - Transient error mid-stream -> no re-send; resume path used; ledger shows the prompt
+    billed once.
+  - Pinned worker limit: run 3 workers, force a limit on one account -> that worker re-pins
+    and finishes; with no eligible account it pauses with a handoff and resumes after a
+    mocked reset.
+  - Security: request without the session token -> 401; GET on every endpoint never
+    returns the token; token absent from server logs and browser history; Host: evil.test
+    -> rejected; other Origin -> rejected; OS write action -> prompt shown; "allow for
+    session" gone after restart.
+  - Secrets: plant a fake API key in a chat message -> it appears as [REDACTED] in logs,
+    handoff.md, switch log, CSV and inside the backup zip; grep for key prefixes -> nothing.
+  - Estimates (after 1 week of real use): limit-hit log meets the +/-10-point target, or
+    the account is flagged "estimate unreliable" automatically.
+  - Upload .docx, .mp3, .png -> stored, listed, downloadable; backup zip created, restore works.
+  - "Voice this script with Human" -> GPU gate allows (pre-approved), output matches manual run.
+  - A new "heavy" tool without approval -> confirm prompt, not silent run.
+  Friends release
+  - Fresh Windows user account, nothing installed: wizard reaches a working chat with only
+    an API key, no voice module, no crash anywhere.
+  - PC without NVIDIA: Voice shows "CPU (slow)" / off with reason; Core, Subtitles,
+    Animation still work.
+  - RTX 50xx PC: wizard installs cu128 torch and a voice test passes.
+  - Cancel a download mid-way, rerun -> resumes; no half-installed module marked green.
+  - Update to a new version -> projects and accounts intact; rollback works.
+  - Diagnostics zip contains no secrets (planted-key test).
+  Phase 2
+  - dispatch.py picks codex when the claude floor is mocked low; Codex review file appears
+    for a Claude-written change.
+  - A seeded bad voice take is rejected by the reviewer gate; a 6-semitone pitch shift fails
+    the voice gate; a third review round escalates to the user instead of looping.
+
+
+11. P0 IMPLEMENTATION PLAN  (current work)
+------------------------------------------
+Goal: an empty but real app skeleton that starts, answers /health, keeps all paths in
+config, and has the automatic + manual gate machinery every later phase reuses.
+
+Checked on this PC: git 2.51.2, Python 3.12.10 (also 3.11, 3.13), uv installed,
+D:\Projects\YT project\ exists and is empty, 218 GB free on D:.
+
+11.1 Files to create  (root: D:\Projects\YT project\one-production\)
+  pyproject.toml         name one-production, python >=3.12
+                         deps: fastapi, uvicorn[standard], pydantic
+                         dev:  pytest, httpx
+  requirements.lock      pinned with `uv pip compile` (reproducible for friends later)
+  setup_dev.ps1          uv venv .venv --python 3.12 ; uv pip sync requirements.lock
+                         (dev runtime; the bundled embeddable Python replaces it in P7)
+  start.bat              .venv\Scripts\python -m app   (fails with a clear message if
+                         .venv is missing: "run setup_dev.ps1 first")
+  check.bat              .venv\Scripts\python tools\check.py %1
+  .gitignore             .venv\ __pycache__\ *.log  .pytest_cache\  docs\gates\*-auto.md
+                         (user data lives OUTSIDE the repo, so nothing private can be committed)
+  README.md              what it is, setup_dev, start, check, where data lives
+
+  app\__init__.py
+  app\version.py         __version__ = "0.0.1"
+  app\config.py          Settings (pydantic): data_dir, host, port, open_browser, log_level
+                         Resolution order: defaults -> settings file -> env ONEPROD_* (env wins)
+                           settings file: %APPDATA%\OneProduction\settings.json
+                           default data_dir: %LOCALAPPDATA%\OneProduction
+                         ensure_dirs(): creates data_dir\{projects,profiles,backups,logs,cache}
+                         host is forced to 127.0.0.1 (any other value refused - R6 groundwork)
+  app\main.py            create_app(settings) -> FastAPI
+                           GET /health -> {status:"ok", version, data_dir, python}
+                           GET /       -> web\index.html
+  app\__main__.py        load settings, ensure_dirs, pick port (configured or first free
+                         from 8730 up), start uvicorn on 127.0.0.1, open browser, log to
+                         data_dir\logs\app.log
+  web\index.html         plain page "One Production" + calls /health and shows
+                         version + data folder (proves front <-> back works)
+
+  tools\check.py         `check.py P<n>`: runs pytest on tests\p0 .. tests\p<n> (regression
+                         built in), writes docs\gates\P<n>-auto.md:
+                           date, git commit, python, each test name, PASS/FAIL, duration,
+                           failure output; summary line; exit code 1 on any failure.
+
+  tests\conftest.py      fixture: temp data_dir + ONEPROD_* env isolation (never touches
+                         your real data folder)
+  tests\p0\test_config.py        defaults; settings file overrides; env overrides file;
+                                 ensure_dirs creates all 5 sub-folders; non-127.0.0.1 host refused
+  tests\p0\test_health.py        /health 200 with version + data_dir; / serves index.html
+  tests\p0\test_no_hardcoded_paths.py   scan app\ web\ tools\ for "D:\Software",
+                                 "D:/Software", "C:\Users\", "C:/Users/" -> must find none
+  tests\p0\test_startup.py       launch `python -m app` as a subprocess with a temp data_dir
+                                 and open_browser=false, poll /health until 200 (timeout 15 s),
+                                 then stop it; port auto-picks when 8730 is busy
+  tests\p0\test_gate_report.py   check.py on a dummy passing test writes a report with PASS
+
+  docs\PLAN.txt          copy of this master plan
+  docs\phase-log.md      table: phase | date | auto result | manual result | approved by | notes
+  docs\gates\P0-manual.md   the manual checklist below
+
+11.2 Steps (in order)
+  1. Create folder + git init (branch main) + .gitignore.
+  2. pyproject.toml -> uv pip compile -> requirements.lock -> setup_dev.ps1 -> run it.
+     (Downloads only small Python packages, ~30 MB. No models, no GPU.)
+  3. app\version.py, config.py, main.py, __main__.py, web\index.html.
+  4. tests\conftest.py + the 5 P0 test files.
+  5. tools\check.py + check.bat + start.bat.
+  6. Run `check.bat P0` until all green; fix, re-run.
+  7. docs\PLAN.txt, phase-log.md, gates\P0-manual.md, README.md.
+  8. First commit: "P0: foundation".
+  9. Hand you the manual checklist; wait for your sign-off.
+
+11.3 Manual checklist (docs\gates\P0-manual.md)
+  [ ] Double-click start.bat -> a browser tab opens showing "One Production",
+      version 0.0.1 and a data folder path.
+      If not: send me data folder\logs\app.log.
+  [ ] Open that data folder in Explorer -> it contains projects, profiles, backups,
+      logs, cache.
+  [ ] Close the black window -> the page stops responding (app really stopped).
+  [ ] Double-click start.bat twice -> the second one opens on a different port, no crash.
+  [ ] Open docs\gates\P0-auto.md -> every line says PASS.
+  [ ] (Optional) set the data folder somewhere else: edit
+      %APPDATA%\OneProduction\settings.json -> {"data_dir": "D:\OneProductionData"},
+      start again -> page shows the new path and folders appear there.
+  Sign-off: write "P0 approved" in docs\phase-log.md (or list what failed).
+
+11.4 Done when
+  - check.bat P0 exits 0 and P0-auto.md is all PASS
+  - all manual boxes ticked and "P0 approved" recorded
+  - one git commit containing no user data and no absolute personal paths
+
+11.5 Not in P0 (deliberately)
+  Session token, Host/Origin checks, chat, files, accounts - those are P1/P2. P0 only
+  forces the 127.0.0.1 bind so nothing can ever start listening on the network.
