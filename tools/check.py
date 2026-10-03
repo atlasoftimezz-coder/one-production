@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import os
 import platform
 import re
 import subprocess
@@ -30,9 +31,9 @@ def parse_phase(text: str) -> int:
 def git_commit() -> str:
     try:
         out = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT,
-                             capture_output=True, text=True, timeout=10)
+                             capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10)
         dirty = subprocess.run(["git", "status", "--porcelain"], cwd=ROOT,
-                               capture_output=True, text=True, timeout=10).stdout.strip()
+                               capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10).stdout.strip()
         sha = out.stdout.strip() or "no commits yet"
         return sha + (" (uncommitted changes)" if dirty else "")
     except OSError:
@@ -40,11 +41,15 @@ def git_commit() -> str:
 
 
 def run_pytest(dirs: list[Path], rootdir: Path) -> tuple[list[dict], str]:
+    # Every nested Python process (pytest, the app, the browser driver) writes UTF-8, so
+    # output containing characters like '·' can't crash a Windows code-page decoder.
+    os.environ.setdefault("PYTHONUTF8", "1")
+    os.environ.setdefault("PYTHONIOENCODING", "utf-8")
     with tempfile.TemporaryDirectory() as tmp:
         xml_path = Path(tmp) / "results.xml"
         cmd = [sys.executable, "-m", "pytest", *map(str, dirs), "-q", "-p", "no:cacheprovider",
                f"--rootdir={rootdir}", f"--junitxml={xml_path}"]
-        proc = subprocess.run(cmd, cwd=rootdir, capture_output=True, text=True)
+        proc = subprocess.run(cmd, cwd=rootdir, capture_output=True, text=True, encoding="utf-8", errors="replace")
         if not xml_path.exists():
             return [], proc.stdout + proc.stderr
         tree = ET.parse(xml_path)

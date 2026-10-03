@@ -13,7 +13,7 @@ def _run(tmp_path, body):
     return subprocess.run(
         [sys.executable, str(CHECK), "P0",
          "--tests-root", str(tmp_path / "tests"), "--report-dir", str(tmp_path / "gates")],
-        cwd=ROOT, capture_output=True, text=True, timeout=120)
+        cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
 
 
 def test_check_writes_a_passing_report(tmp_path):

@@ -17,7 +17,7 @@ def _start(tmp_path):
                 "ONEPROD_SETTINGS_FILE": str(tmp_path / "s.json"), "ONEPROD_LOG_LEVEL": "info",
                 "PYTHONUNBUFFERED": "1"})
     proc = subprocess.Popen([sys.executable, "-m", "app"], cwd=ROOT, env=env,
-                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace")
     deadline = time.time() + 20
     while time.time() < deadline:
         line = proc.stdout.readline()

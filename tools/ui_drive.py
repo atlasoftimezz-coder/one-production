@@ -172,6 +172,18 @@ try:
 
         opts = js("[...document.querySelectorAll('#picker option')].map(o=>o.textContent).join(' | ')") or ""
         check("picker lists new accounts", "Main Claude" in opts and "My Codex" in opts, opts)
+        check("picker moves off Demo to a ready account", js("document.querySelector('#picker').value") != "demo",
+              js("document.querySelector('#picker').value"))
+        # a fresh page load with accounts already set up must not default to Demo either.
+        # (Go via about:blank: navigating to the same URL with only a new #fragment is not a
+        # page load in Chrome, so the app would never run its startup code.)
+        send("Page.navigate", url="about:blank"); time.sleep(0.3)
+        send("Page.navigate", url=LAUNCH)
+        wait_for("getComputedStyle(document.querySelector('#app')).display==='grid'")
+        wait_for("document.querySelectorAll('#picker option').length>1", 10)
+        time.sleep(1.5)     # let the background account check finish and re-render
+        check("after reload, picker defaults to a ready account", js("document.querySelector('#picker').value") != "demo",
+              js("document.querySelector('#picker option:checked').textContent"))
         js("[...document.querySelectorAll('#picker option')].find(o=>o.textContent.includes('Main Claude')).selected=true; document.querySelector('#picker').dispatchEvent(new Event('change'))")
         js("document.querySelector('#projects li[data-id]').click()")
         check("message box locked while project loads", js("document.querySelector('#input').disabled"))

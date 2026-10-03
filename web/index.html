@@ -695,7 +695,11 @@ function renderPicker() {
   const usable = state.accounts.filter(a => a.enabled);
   sel.innerHTML = usable.map(a => `<option value="${a.id}">${esc(PROV[a.provider].short)} · ${esc(accName(a))}${
       a.status === "error" ? " (needs attention)" : ""}</option>`).join("");
-  const best = usable.find(a => a.id === prev) || usable.find(a => a.id !== "demo" && a.status === "ok") || usable[0];
+  // Keep the user's own choice; otherwise prefer a ready real account over Demo. (The page
+  // first renders before account checks finish, so "keep previous" alone stuck on Demo.)
+  const ready = usable.find(a => a.id !== "demo" && a.status === "ok");
+  const chosen = state.userPicked && usable.find(a => a.id === prev);
+  const best = chosen || ready || usable.find(a => a.id === prev) || usable[0];
   if (best) sel.value = best.id;
   const cur = state.accounts.find(a => a.id === sel.value);
   $("#pickdot").className = "pdot " + (cur ? cur.status : "");
@@ -706,7 +710,7 @@ function renderPicker() {
   badge.textContent = bad ? "!" : real.length;
   badge.className = "badge" + (bad ? " bad" : "");
 }
-$("#picker").onchange = () => renderPicker();
+$("#picker").onchange = () => { state.userPicked = true; renderPicker(); };
 
 function meterHTML(rl) {
   if (!rl || !rl.windows) return "";

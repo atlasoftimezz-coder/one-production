@@ -20,7 +20,7 @@ def test_accounts_flow_in_headless_chrome(tmp_path, fake_cmds):
                 "ONEPROD_CODEX_CMD": str(fake_cmds / "codex.cmd"),
                 "ONEPROD_LOGIN_CONSOLE": "0", "PYTHONUNBUFFERED": "1"})
     proc = subprocess.Popen([sys.executable, "-m", "app"], cwd=ROOT, env=env,
-                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace")
     try:
         launch = None
         deadline = time.time() + 20
@@ -31,7 +31,7 @@ def test_accounts_flow_in_headless_chrome(tmp_path, fake_cmds):
         r = subprocess.run([sys.executable, "-W", "ignore", str(ROOT / "tools" / "ui_drive.py"),
                             launch, str(tmp_path / "shots")],
                            env={**os.environ, "UI_DRIVE_ACCOUNTS": "1"},
-                           capture_output=True, text=True, timeout=240)
+                           capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=240)
     finally:
         proc.kill(); proc.wait(10)
     if r.returncode == 3:

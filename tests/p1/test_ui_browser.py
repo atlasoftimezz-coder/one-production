@@ -19,7 +19,7 @@ def test_ui_in_headless_chrome(tmp_path):
         url = f"http://127.0.0.1:{port}/#t={token}"
         r = subprocess.run([sys.executable, "-W", "ignore", str(ROOT / "tools" / "ui_drive.py"),
                             url, str(tmp_path / "shots")],
-                           capture_output=True, text=True, timeout=180)
+                           capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=180)
     finally:
         proc.kill(); proc.wait(10)
     if r.returncode == 3:

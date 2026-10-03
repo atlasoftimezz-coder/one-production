@@ -25,7 +25,7 @@ def _env(tmp_path):
 
 def _launch(tmp_path):
     return subprocess.Popen([sys.executable, "-m", "app"], cwd=ROOT, env=_env(tmp_path),
-                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace")
 
 
 def _wait_for_port(proc, timeout=20):
