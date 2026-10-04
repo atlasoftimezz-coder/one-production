@@ -19,11 +19,11 @@ def test_cli_accounts_get_their_own_folders(client):
 
 
 def test_two_claude_logins_with_different_emails_stay_apart(client, monkeypatch):
-    first = signed_in(client, "claude", "padma@gmail.com", monkeypatch)
+    first = signed_in(client, "claude", "owner@example.com", monkeypatch)
     second = signed_in(client, "claude", "work@company.com", monkeypatch)
-    codex = signed_in(client, "codex", "padma@gmail.com", monkeypatch)
+    codex = signed_in(client, "codex", "owner@example.com", monkeypatch)
     accs = {a["id"]: a for a in client.post("/api/accounts/check").json()}
-    assert accs[first["id"]]["email"] == "padma@gmail.com"
+    assert accs[first["id"]]["email"] == "owner@example.com"
     assert accs[second["id"]]["email"] == "work@company.com"
     assert accs[codex["id"]]["status"] == "ok" and accs[codex["id"]]["method"] == "ChatGPT"
     assert accs[first["id"]]["plan"] == "pro"
