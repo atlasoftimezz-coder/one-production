@@ -623,6 +623,31 @@ try:
         check("setup remembered as done", js("fetch('/api/setup',{headers:{'X-OneProd-Token':TOKEN}}).then(r=>r.json()).then(j=>window._done=j.done)") is not None
               and wait_for("window._done===true", 5))
 
+    # sample project, guide, updates panel, diagnostics (P8)
+    if os.environ.get("UI_DRIVE_P8") == "1":
+        js("state.current=null; renderWelcome()")
+        check("start page offers the sample", wait_for("!!document.querySelector('.qcard[data-act=sample]')", 5))
+        shot("36-start-sample")
+        js("document.querySelector('.qcard[data-act=sample]').click()")
+        check("sample project opens", wait_for("document.querySelector('#crumb').innerText.includes('Getting started')", 8))
+        check("sample script and guide in Files", wait_for(
+            "document.querySelector('#files').innerText.includes('Sample script') && document.querySelector('#files').innerText.includes('Start here')", 8))
+        js("document.querySelector('#guidebtn').click()")
+        check("guide opens", wait_for("document.querySelector('#guidemodal').classList.contains('open')", 5))
+        check("guide covers approvals, voice, backups, updates, diagnostics", all(
+            w in (js("document.querySelector('#guidemodal').innerText") or "") for w in
+            ("Allow once", "LUFS", "Backups", "Roll back", "Export diagnostics")))
+        shot("37-guide")
+        js("document.querySelector('#guideclose').click()")
+        js("document.querySelector('#sysbtn').click()")
+        check("updates panel says this is a development copy", wait_for(
+            "document.querySelector('#sysupd').innerText.includes('development copy')", 8))
+        js("window._dl=null; const o=URL.createObjectURL; URL.createObjectURL=b=>{window._dl=b.size; return o(b)};"
+           "document.querySelector('#sysdiag').click()")
+        check("diagnostics zip downloads", wait_for("window._dl>1000", 30), str(js("window._dl")))
+        shot("38-system-updates")
+        js("document.querySelector('#sysclose').click()")
+
     # dark mode (Windows dark theme)
     send("Emulation.setEmulatedMedia", features=[{"name": "prefers-color-scheme", "value": "dark"}])
     time.sleep(0.3); shot("06b-dark")

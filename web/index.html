@@ -136,7 +136,7 @@
   .hero h2 { font-size: clamp(24px, 3vw, 32px); margin: 0 0 8px; letter-spacing: -.02em; }
   .hero h2 span { background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
   .hero p { color: var(--dim); margin: 0 auto 28px; max-width: 520px; }
-  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; text-align: left; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; text-align: left; }
   .qcard { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 16px;
            transition: transform .14s, border-color .14s; cursor: pointer; position: relative; }
   .qcard:hover { transform: translateY(-2px); border-color: var(--accent); }
@@ -255,6 +255,22 @@
                    border-radius: 12px; border: 1px solid var(--line); background: var(--panel2); }
   #pinlock .btn { width: 100%; margin-top: 12px; padding: 10px; }
   #pinlock .pmsg { color: var(--bad); }
+
+  /* ---------- P8: updates, diagnostics, guide ---------- */
+  .upd { border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; margin-bottom: 16px; background: var(--bg2); }
+  .upd .uh { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .upd .uh b { font-size: 14px; }
+  .upd .meta { color: var(--dim); font-size: 12.5px; }
+  .upd .row2 { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
+  .upd input { flex: 1; min-width: 240px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); }
+  .upd .notes { white-space: pre-wrap; font-size: 12.5px; margin-top: 8px; padding: 8px 10px; border-radius: 10px; background: var(--panel); }
+  .upd .bar { height: 6px; border-radius: 4px; background: var(--panel2); overflow: hidden; margin-top: 8px; }
+  .upd .bar i { display: block; height: 100%; background: var(--grad); transition: width .3s; }
+  .guide h4 { margin: 18px 0 6px; font-size: 15px; }
+  .guide h4:first-child { margin-top: 0; }
+  .guide p, .guide li { font-size: 13.5px; line-height: 1.6; }
+  .guide ol, .guide ul { padding-left: 20px; margin: 6px 0; }
+  .guide .tip { border-left: 3px solid var(--accent); padding: 6px 10px; background: var(--bg2); border-radius: 0 10px 10px 0; font-size: 13px; }
 
   /* ---------- P7: setup wizard ---------- */
   #setup { position: fixed; inset: 0; z-index: 30; display: none; padding: 24px;
@@ -589,6 +605,7 @@
       <span class="badge" id="accbadge" style="display:none"></span></button>
     <button class="topbtn" id="bkbtn" title="Backups of your projects"><svg class="icon"><use href="#i-archive"/></svg><span class="tlabel">Backups</span></button>
     <button class="topbtn" id="sysbtn" title="What this PC has"><svg class="icon"><use href="#i-cpu"/></svg><span class="tlabel">System</span></button>
+    <button class="topbtn" id="guidebtn" title="How One Production works"><span style="font-weight:800">?</span><span class="tlabel">Guide</span></button>
     <span class="pill local" title="The app only listens on this computer"><i class="dot"></i>Local · private</span>
     <button class="profchip" id="profbtn" title="Your profile and PIN">?</button>
     <span class="pill" id="ver">v–</span>
@@ -736,11 +753,12 @@
       <div class="mark"><svg viewBox="0 0 24 24"><use href="#i-play"/></svg></div>
       <div style="flex:1"><h3>System</h3>
         <p>What this PC has. Read-only — nothing is installed or changed. <span id="sysat"></span></p></div>
+      <button class="btn" id="sysdiag" title="A zip to send when something breaks - no chats, files or keys">Export diagnostics</button>
       <button class="btn" id="syssetup">Set up / modules</button>
       <button class="btn" id="sysagain">Scan again</button>
       <button class="iconbtn" id="sysclose" title="Close"><svg class="icon"><use href="#i-x"/></svg></button>
     </div>
-    <div class="mbody" id="sysbody"></div>
+    <div class="mbody"><div class="upd" id="sysupd"></div><div id="sysbody"></div></div>
   </div>
 </div>
 
@@ -752,6 +770,47 @@
       <button class="iconbtn" id="profclose" title="Close"><svg class="icon"><use href="#i-x"/></svg></button>
     </div>
     <div class="mbody" id="profbody"></div>
+  </div>
+</div>
+
+<div class="scrim" id="guidemodal">
+  <div class="modal wide" role="dialog" aria-label="Guide">
+    <div class="mhead">
+      <div class="mark"><svg viewBox="0 0 24 24"><use href="#i-play"/></svg></div>
+      <div style="flex:1"><h3>Guide</h3><p>How One Production works, in five minutes.</p></div>
+      <button class="iconbtn" id="guideclose" title="Close"><svg class="icon"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="mbody guide">
+      <h4>Start in three steps</h4>
+      <ol><li><b>Connect an account</b> (Accounts): an Anthropic API key, a Claude login or a Codex login. Each keeps its own email.</li>
+        <li><b>Make a project</b> for each video and drop your script and files into it — or press <b>Try the sample</b> on the start page.</li>
+        <li><b>Talk to it</b>: "tighten the intro", "voice this script with my voice at 165 words per minute".</li></ol>
+      <h4>What the assistant can do by itself</h4>
+      <p>With a Claude or Codex login (or an API key plus Claude Code) the chat works like Claude Code: it reads and edits the files
+         <b>inside the project</b> on its own. Anything else — running a command, touching files elsewhere, the internet,
+         using the graphics card — shows a yellow card first: <b>Allow once</b>, <b>Allow this session</b> or <b>Deny</b>. The ✕ button stops it.</p>
+      <h4>Voiceovers</h4>
+      <p>The microphone next to a script (or just asking in the chat) clones your reference voice, reads every section back to check
+         nothing was misread, masters to −14 LUFS and adds an mp3, a wav and subtitles to the project.
+         <b>Find best settings</b> (System → Set up / modules → Your voice) tunes the clone to sound as close as possible to your clip.</p>
+      <div class="tip">Only clone your own voice, or a voice you have permission to use.</div>
+      <h4>Accounts, usage and switching</h4>
+      <p>Usage shows each account's 5-hour and weekly limits. At 85% or at a limit, One Production writes a handoff file with the
+         whole conversation and offers to carry on with another account, which picks up where the first stopped.</p>
+      <h4>Your work is safe</h4>
+      <ul><li><b>Backups</b> run once a day by themselves; restore any project in one click. Restoring never overwrites — the current version goes to the trash folder.</li>
+        <li><b>Deleting</b> a project moves it to the trash folder; nothing is erased.</li>
+        <li>Everything runs on this PC. Keys stay in Windows' Credential Manager and are scrubbed from logs, handoffs, exports and backups.</li></ul>
+      <h4>Updates</h4>
+      <p>System → Updates checks for a new version, downloads it and restarts into it. The previous version stays on disk —
+         <b>Roll back</b> returns to it in one click. Updates never touch your projects or settings.</p>
+      <h4>When something goes wrong</h4>
+      <ul><li><b>An account turns red</b> — Accounts → Re-login.</li>
+        <li><b>"Hit its usage limit"</b> — pick another account, or wait for the time shown.</li>
+        <li><b>Voice module not ready</b> — System → Set up / modules installs or repairs it.</li>
+        <li><b>Anything else</b> — System → <b>Export diagnostics</b> and send the zip to whoever gave you One Production.
+            It holds the PC scan, versions and error messages — never your chats, files or keys.</li></ul>
+    </div>
   </div>
 </div>
 
@@ -943,9 +1002,12 @@ function renderWelcome() {
           <b>Bring a script</b><small>Upload a .docx, .txt or .md</small></div>
         <div class="qcard" data-act="voice"><div class="qicon" style="background:#a855f7"><svg class="icon"><use href="#i-mic"/></svg></div>
           <b>Voice a script</b><small>Clone your voice, get mp3 + subtitles</small></div>
+        <div class="qcard" data-act="sample"><div class="qicon" style="background:#f59e0b"><svg class="icon"><use href="#i-play"/></svg></div>
+          <b>Try the sample</b><small>A short script ready to voice</small></div>
       </div>
     </div>`;
   $("#messages").querySelector('[data-act="new"]').onclick = showNewForm;
+  $("#messages").querySelector('[data-act="sample"]').onclick = openSample;
   $("#messages").querySelector('[data-act="voice"]').onclick = () => {
     if (!state.current) { showNewForm(); toast("Create a project first, then add your script"); }
     else openVoice();
@@ -1971,7 +2033,7 @@ $("#bkkeep").onchange = () => saveBackupSettings({ keep: Number($("#bkkeep").val
 
 // ---------- system scan (R13 step 2)
 const SYS_WORD = { ok: "good", warn: "check", bad: "problem", info: "info" };
-async function openSystem() { $("#sysmodal").classList.add("open"); await runScan(); }
+async function openSystem() { $("#sysmodal").classList.add("open"); renderUpdates(false); await runScan(); }
 async function runScan() {
   $("#sysagain").disabled = true;
   $("#sysbody").innerHTML = `<div class="navempty">Looking at this PC…</div>`;
@@ -2068,6 +2130,87 @@ $("#pinform").onsubmit = async e => {
     if (then) await then();
   } catch (err) { $("#pinmsg").textContent = err.message; $("#pininput").select(); }
 };
+
+// ---------- sample, guide, updates, diagnostics (P8)
+async function openSample() {
+  try {
+    const p = await (await api("/api/sample", { method: "POST" })).json();
+    await loadProjects(p.id);
+    toast("Sample project ready - hover the script in Files and press the microphone");
+  } catch (e) { toast(e.message, true); }
+}
+$("#guidebtn").onclick = () => $("#guidemodal").classList.add("open");
+$("#guideclose").onclick = () => $("#guidemodal").classList.remove("open");
+$("#guidemodal").addEventListener("click", e => { if (e.target.id === "guidemodal") $("#guidemodal").classList.remove("open"); });
+
+$("#sysdiag").onclick = async () => {
+  $("#sysdiag").disabled = true; $("#sysdiag").textContent = "Preparing…";
+  try {
+    const r = await api("/api/diagnostics");
+    const name = (r.headers.get("content-disposition") || "").match(/filename="([^"]+)"/)?.[1] || "one-production-diagnostics.zip";
+    const url = URL.createObjectURL(await r.blob());
+    const a = Object.assign(document.createElement("a"), { href: url, download: name });
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    toast("Diagnostics saved - send the zip to whoever gave you One Production");
+  } catch (e) { toast(e.message, true); }
+  $("#sysdiag").disabled = false; $("#sysdiag").textContent = "Export diagnostics";
+};
+
+let updPoll = null;
+async function renderUpdates(check) {
+  const box = $("#sysupd");
+  let u = await (await api("/api/update")).json();
+  if (!u.packaged) {
+    box.innerHTML = `<div class="uh"><b>Updates</b><span class="meta">version ${esc(u.current)}</span></div>
+      <div class="meta">${esc(u.message)}</div>`;
+    return;
+  }
+  let c = null, err = "";
+  if (check) {
+    try { c = await (await api("/api/update/check", { method: "POST" })).json(); } catch (e) { err = e.message; }
+  }
+  const st = u.state || {};
+  box.innerHTML = `<div class="uh"><b>Updates</b><span class="meta">version ${esc(u.current)}${u.previous ? ` · previous ${esc(u.previous)} kept` : ""}</span></div>
+    <div class="row2"><input id="updsrc" placeholder="Update source: a link or a folder you were given" value="${esc(u.update_source || "")}">
+      <button class="btn" id="updsave">Save</button><button class="btn primary" id="updcheck">Check for updates</button></div>
+    ${err ? `<div class="meta" style="color:var(--bad)">${esc(err)}</div>` : ""}
+    ${c && c.message ? `<div class="meta">${esc(c.message)}</div>` : ""}
+    ${c && c.latest && !c.newer ? `<div class="meta">You have the newest version (${esc(c.latest)} is the latest).</div>` : ""}
+    ${c && c.newer ? `<div class="meta"><b>${esc(c.latest)}</b> is available${c.size ? ` (${(c.size / 1e6).toFixed(0)} MB)` : ""}.</div>
+       ${c.notes ? `<div class="notes">${esc(c.notes)}</div>` : ""}
+       <div class="row2"><button class="btn primary" id="upddl">Download</button></div>` : ""}
+    ${st.running ? `<div class="bar"><i style="width:${Math.round((st.progress || 0) * 100)}%"></i></div><div class="meta">${esc(st.detail || "")}</div>
+       <div class="row2"><button class="btn" id="updcancel">Cancel</button></div>` : ""}
+    ${st.error ? `<div class="meta" style="color:var(--bad)">${esc(st.error)}</div>` : ""}
+    ${st.ready ? `<div class="row2"><button class="btn primary" id="updapply">Restart into ${esc(st.ready)}</button></div>` : ""}
+    ${u.previous ? `<div class="row2"><button class="btn" id="updback">Roll back to ${esc(u.previous)}</button></div>` : ""}`;
+  $("#updsave").onclick = async () => {
+    try { await api("/api/update/source", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ source: $("#updsrc").value }) }); toast("Update source saved"); }
+    catch (e) { toast(e.message, true); }
+    renderUpdates(false);
+  };
+  $("#updcheck").onclick = () => renderUpdates(true);
+  if ($("#upddl")) $("#upddl").onclick = async () => {
+    try { await api("/api/update/download", { method: "POST" }); } catch (e) { toast(e.message, true); }
+    clearInterval(updPoll);
+    updPoll = setInterval(async () => {
+      const x = await (await api("/api/update")).json();
+      renderUpdates(false);
+      if (!x.state.running) clearInterval(updPoll);
+    }, 800);
+  };
+  if ($("#updcancel")) $("#updcancel").onclick = () => api("/api/update/cancel", { method: "POST" });
+  const switchTo = async url => {
+    try {
+      const r = await (await api(url, { method: "POST" })).json();
+      box.innerHTML = r.relaunching ? `<b>Restarting…</b><div class="meta">One Production opens a new tab by itself in a few seconds — you can close this one.</div>`
+        : `<div class="meta">${esc(r.message || "Done")}</div>`;
+    } catch (e) { toast(e.message, true); }
+  };
+  if ($("#updapply")) $("#updapply").onclick = () => switchTo("/api/update/apply");
+  if ($("#updback")) $("#updback").onclick = () => switchTo("/api/update/rollback");
+}
 
 // ---------- setup wizard (P7, plan R13)
 const WSTEPS = [
@@ -2337,12 +2480,20 @@ async function stepTest() {
     <div class="wtest"><b>2. A 15-word voice test</b>
       ${voice.state === "ready" ? `<div class="wrow"><button class="btn primary" id="wtvoice">Make the voice test</button></div><div class="out" id="wtvoiceout"></div>`
         : `<p class="wnote">Skipped - the voice module isn't on.</p>`}</div>`;
-  const project = async () => {
-    const list = await (await api("/api/projects")).json();
-    const got = list.find(p => p.name === "Getting started");
-    return got ? got.id : (await (await api("/api/projects", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: "Getting started" }) })).json()).id;
-  };
+  const project = async () => (await (await api("/api/sample", { method: "POST" })).json()).id;
+  const upd = await (await api("/api/update")).json();
+  if (upd.packaged) {
+    const box = document.createElement("label");
+    box.className = "wnote"; box.style.cssText = "display:flex;gap:8px;align-items:center";
+    box.innerHTML = `<input type="checkbox" id="wtshort" checked> Add One Production to the Start menu and the desktop`;
+    $("#wbody").appendChild(box);
+    wiz.next = async () => {
+      if ($("#wtshort") && $("#wtshort").checked) {
+        try { await api("/api/shortcuts", { method: "POST" }); } catch (e) { toast(e.message, true); }
+      }
+      return true;
+    };
+  }
   $("#wtchat").onclick = async () => {
     $("#wtchatout").textContent = "Waiting for the reply…";
     try {

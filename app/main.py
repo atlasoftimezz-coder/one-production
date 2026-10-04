@@ -11,6 +11,7 @@ import logging
 import os
 import platform
 import secrets
+import shutil
 import subprocess
 import time
 from contextlib import asynccontextmanager
@@ -24,7 +25,10 @@ from . import handoff
 from .accounts import DEFAULT_SWITCH, DEFAULT_WARN, PROVIDERS, SAME_SERVICE_SWITCHING, SUBSCRIPTIONS, \
     AccountError, Accounts
 from . import actions, system
-from .config import save_setting
+from . import diagnostics
+from .config import save_setting, settings_file
+from .migrate import migrate
+from .update import Updater
 from .installer import InstallError, Installer
 from .modules import ENGINE_DIR, Modules
 from .setup import SetupState, drives
@@ -103,6 +107,10 @@ class ScriptIn(BaseModel):
     text: str | None = None          # or pasted text
 
 
+class SourceIn(BaseModel):
+    source: str | None = None
+
+
 class VoiceModeIn(BaseModel):
     mode: str
 
@@ -177,7 +185,8 @@ AGENT_PROVIDERS = ("claude", "anthropic_api", "codex")
 def create_app(settings: Settings, token: str | None = None, *, api_transport=None,
                login_console: bool | None = None, voice_transport=None, agent_client=None,
                codex_transport=None, backup_delay: float = 120, backup_tick: float = 3600,
-               restart=None, gpu_probe=None, tune_script: Path | None = None) -> FastAPI:
+               restart=None, gpu_probe=None, tune_script: Path | None = None, relaunch=None,
+               updater: Updater | None = None) -> FastAPI:
     if login_console is None:
         login_console = settings.login_console
     token = token or secrets.token_urlsafe(32)
@@ -196,6 +205,9 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
     setup_state = SetupState(settings.data_dir, store, accounts)
     tuner = VoiceTuner(voice_svc, settings.data_dir, tune_script or ENGINE_DIR / "tune.py")
     gpu_cache: dict = {}
+    updater = updater or Updater()
+    migration = migrate(settings.data_dir)
+    SAMPLES = Path(__file__).resolve().parent.parent / "samples" / "getting-started"
     claude_agent = ClaudeAgent(settings.claude_cmd, settings.data_dir, client_factory=agent_client,
                                api_key_of=Accounts.api_key)
     codex_agent = CodexAgent(settings.codex_cmd, transport_factory=codex_transport)
@@ -857,6 +869,112 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
     @app.get("/api/voice/tune")
     def tune_state() -> dict:
         return {**tuner.state, "tuned": {k: v.get("best") for k, v in tuner.tuned().items()}}
+
+    # ---------------------------------------------------------------- updates (R15)
+    def _update_error(e: Exception):
+        raise HTTPException(400, str(e))
+
+    @app.get("/api/update")
+    def update_info() -> dict:
+        return {**updater.info(), "migration": migration, "can_relaunch": relaunch is not None}
+
+    @app.post("/api/update/check")
+    async def update_check() -> dict:
+        try:
+            return await asyncio.to_thread(updater.check)
+        except InstallError as e:
+            _update_error(e)
+
+    @app.patch("/api/update/source")
+    def update_source(body: SourceIn) -> dict:
+        try:
+            return updater.set_source(body.source)
+        except InstallError as e:
+            _update_error(e)
+
+    @app.post("/api/update/download")
+    async def update_download() -> dict:
+        try:
+            return await asyncio.to_thread(updater.start_download)
+        except InstallError as e:
+            _update_error(e)
+
+    @app.post("/api/update/cancel")
+    def update_cancel() -> dict:
+        return {"cancelled": updater.cancel()}
+
+    def _switch_and_relaunch(fn) -> dict:
+        try:
+            info = fn()
+        except InstallError as e:
+            _update_error(e)
+        if relaunch is None:
+            return {**info, "relaunching": False,
+                    "message": "Switched - close One Production and start it again to use it."}
+        asyncio.get_running_loop().call_later(0.8, relaunch)
+        return {**info, "relaunching": True}
+
+    @app.post("/api/update/apply")
+    async def update_apply() -> dict:                   # async: the relaunch is scheduled on the loop
+        return _switch_and_relaunch(updater.apply)
+
+    @app.post("/api/update/rollback")
+    async def update_rollback() -> dict:
+        return _switch_and_relaunch(updater.rollback)
+
+    # ---------------------------------------------------------------- support (R16)
+    @app.get("/api/diagnostics")
+    async def export_diagnostics():
+        from fastapi.responses import Response
+        scan = await system.scan(settings, [_public(a) for a in accounts.list()], voice_svc, backups)
+        sections = {"system-scan": scan, "modules": modules.status(await gpu_info()),
+                    "setup": setup_state.public(), "backups": {"settings": backups.settings(),
+                                                               "list": backups.list()[:5]},
+                    "update": updater.info(), "install": installer.state(), "migration": migration,
+                    "accounts": [{k: a.get(k) for k in ("provider", "label", "email", "plan", "status", "reason",
+                                                        "enabled", "usage_pct")} for a in
+                                 [_public(x) for x in accounts.list()]]}
+        data = await asyncio.to_thread(diagnostics.build, settings.data_dir, settings_file(), store, redact, sections)
+        name = f"one-production-diagnostics-{time.strftime('%Y%m%d-%H%M')}.zip"
+        return Response(data, media_type="application/zip",
+                        headers={"Content-Disposition": f'attachment; filename="{name}"'})
+
+    @app.post("/api/sample")
+    def add_sample() -> dict:
+        """The 'Getting started' project: a short script ready to voice (R16)."""
+        found = next((p for p in store.list_projects() if p.get("sample")), None)
+        if found:
+            return found
+        meta = store.create_project("Getting started")
+        meta["sample"] = True
+        (store.project_dir(meta["id"]) / "project.json").write_text(json.dumps(meta), encoding="utf-8")
+        for f in sorted(SAMPLES.glob("*")):
+            if f.is_file():
+                shutil.copy2(f, store.files_dir(meta["id"]) / f.name)
+        return meta
+
+    @app.post("/api/shortcuts")
+    async def make_shortcuts() -> dict:
+        """Start menu + desktop shortcuts to the launcher (packaged copies only, on request)."""
+        if not updater.packaged:
+            raise HTTPException(400, "shortcuts are for the installed package, not a development copy")
+        target = updater.root / "One Production.cmd"
+        made = []
+        for folder in (Path(os.environ.get("APPDATA", "")) / "Microsoft" / "Windows" / "Start Menu" / "Programs",
+                       Path(os.environ.get("USERPROFILE", "")) / "Desktop"):
+            if not folder.is_dir():
+                continue
+            lnk = folder / "One Production.lnk"
+            ps = ("$s=(New-Object -ComObject WScript.Shell).CreateShortcut($env:OP_LNK);"
+                  "$s.TargetPath=$env:OP_TARGET;$s.WorkingDirectory=$env:OP_DIR;"
+                  "$s.Description='One Production';$s.Save()")
+            r = await asyncio.to_thread(subprocess.run, ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps],
+                                        capture_output=True, text=True, timeout=30,
+                                        env={**os.environ, "OP_LNK": str(lnk), "OP_TARGET": str(target),
+                                             "OP_DIR": str(updater.root)})
+            if r.returncode == 0 and lnk.exists():
+                made.append(str(lnk))
+        return {"made": made}
 
     # ---------------------------------------------------------------- system scan (R13 step 2)
     @app.get("/api/system")

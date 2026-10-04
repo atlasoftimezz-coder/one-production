@@ -11,6 +11,7 @@ import uvicorn
 
 from .config import LOOPBACK, load_settings
 from .main import create_app
+from .update import RELAUNCH
 from .security.redact import RedactingFilter
 from .version import __version__
 
@@ -56,14 +57,18 @@ def main() -> None:
 
         port = pick_port(settings.port)
         url = f"http://{LOOPBACK}:{port}/"
-        wanted = {"restart": False}
+        wanted = {"restart": False, "relaunch": False}
         box: dict = {}
 
         def restart() -> None:
             wanted["restart"] = True
             box["server"].should_exit = True
 
-        app = create_app(settings, restart=restart)
+        def relaunch() -> None:              # another version: the launcher must start it (exit 75)
+            wanted["relaunch"] = True
+            box["server"].should_exit = True
+
+        app = create_app(settings, restart=restart, relaunch=relaunch)
         # The token travels only in the URL fragment, which browsers never send to the server,
         # and the page removes it from the address bar and history on load.
         launch_url = f"{url}#t={app.state.token}"
@@ -82,6 +87,9 @@ def main() -> None:
                                                log_config=None))
         box["server"] = server
         server.run()
+        if wanted["relaunch"]:
+            print("  Switching version...\n", flush=True)
+            sys.exit(RELAUNCH)
         if not wanted["restart"]:
             break
         print("  Restarting in the new data folder...\n", flush=True)
