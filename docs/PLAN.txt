@@ -392,7 +392,7 @@ P3  USAGE PAGE + HANDOFF                                             [MVP - 4 Oc
 P4  VOICEOVER IN CHAT                                                [MVP - 4 Oct]
   Build : voiceover tool -> vo-app job, mp3 + SRT link in chat, GPU gate (R5, R12).
   AUTO  : "voice this script with Human" on the substances v2 script -> 9/9 sections
-          WER <= 0.05, F0 within 1 semitone of reference, -16 LUFS +/-0.5, SRT 100% timed,
+          WER <= 0.05, F0 within 1 semitone of reference, -14 LUFS +/-0.5 & true peak <= -1.0 dBTP, SRT 100% timed,
           0 overlaps; a new heavy tool without approval -> confirm prompt.
   MANUAL: [ ] listen to the first 60 s - does it sound like the Human voice? (EAR GATE)
           [ ] open the SRT in a player - subtitles line up

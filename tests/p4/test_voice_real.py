@@ -7,7 +7,8 @@ Opt-in, because it renders minutes of audio:
 Uses the voice app configured in the user's settings file.
 
 Pass criteria (plan P4): every section passes the read-check (WER <= 0.05 after retries),
-the voice stays within 1 semitone of its reference, the master is -16 LUFS +/- 0.5, and the
+the voice stays within 1 semitone of its reference, the master is -14 LUFS +/- 0.5 with true peak at or below -1.0 dBTP (YouTube's level; user,
+2026-10-04), and the
 subtitles cover the script with no overlapping cues and at most two rows each.
 """
 import json
@@ -37,8 +38,9 @@ def f0(path, offset=0, dur=None):
     return float(np.nanmedian(f))
 out = subprocess.run([config.FFMPEG, "-hide_banner", "-i", sys.argv[1], "-af", "loudnorm=print_format=json",
                       "-f", "null", "-"], capture_output=True, text=True).stderr
-lufs = float(json.loads(out[out.rindex("{"):out.rindex("}") + 1])["input_i"])
-print(json.dumps({"lufs": lufs, "f0_out": f0(sys.argv[1], 20, 120), "f0_ref": f0(sys.argv[2])}))
+loud = json.loads(out[out.rindex("{"):out.rindex("}") + 1])
+lufs, tp = float(loud["input_i"]), float(loud["input_tp"])
+print(json.dumps({"lufs": lufs, "true_peak": tp, "f0_out": f0(sys.argv[1], 20, 120), "f0_ref": f0(sys.argv[2])}))
 '''
 
 
@@ -105,5 +107,6 @@ def test_real_voiceover_end_to_end(tmp_path):
         report["measure"] = meas
         (Path(os.environ.get("ONEPROD_REAL_REPORT", tmp_path / "report.json"))).write_text(
             json.dumps(report, indent=1, default=str), encoding="utf-8")
-        assert abs(meas["lufs"] + 16) <= 0.5, meas
+        assert abs(meas["lufs"] + 14) <= 0.5, meas
+        assert meas["true_peak"] <= -1.0 + 0.05, meas
         assert meas["semitones_off"] <= 1.0, meas
