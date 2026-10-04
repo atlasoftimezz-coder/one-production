@@ -27,6 +27,7 @@ class FakeVoiceApp:
         self.polls = {}
         self.fail = False
         self.cloned = []
+        self.hold = False                          # keep every job "running" until released
         self.voices = out_dir / "voices"           # reference clips, like the real voices folder
         self.voices.mkdir(exist_ok=True)
         for v in ("human_ref48.wav", "buster_ref48.wav"):
@@ -59,7 +60,7 @@ class FakeVoiceApp:
             self.polls[jid] += 1
             secs = [{"i": 0, "title": "Water", "status": "ok", "wer": 0.0},
                     {"i": 1, "title": "Oxygen", "status": "rendering", "wer": None}]
-            if self.polls[jid] < 2:
+            if self.polls[jid] < 2 or self.hold:
                 return httpx.Response(200, json={"status": "running", "message": "section 2/2: rendering",
                                                  "sections": secs, "result": None, "error": None})
             if self.fail:

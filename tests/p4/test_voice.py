@@ -3,6 +3,7 @@ Uses a stand-in voice app - no GPU is touched by these tests."""
 import os
 import socket
 import time
+from pathlib import Path
 
 from .conftest import make_docx, wait_job
 
@@ -224,3 +225,26 @@ def test_clone_refuses_without_permission_bad_input_or_a_taken_name(client, proj
     assert clone(client, project=project, project_file="nope.wav").status_code == 404
     assert clone(client, name="human", clip=clip).status_code == 409        # human_ref48.wav exists
     assert client.fake.cloned == []                                         # nothing reached the voice app
+
+
+def test_delete_project_moves_it_to_the_trash(client, project):
+    upload(client, project, "keep me.txt", b"precious")
+    r = client.delete(f"/api/projects/{project}")
+    assert r.status_code == 200
+    assert project not in [p["id"] for p in client.get("/api/projects").json()]
+    trash = Path(r.json()["trash"])
+    assert trash.parent == client.data_dir / "trash" and (trash / "files" / "keep me.txt").read_bytes() == b"precious"
+    assert client.delete(f"/api/projects/{project}").status_code == 404
+    assert client.delete("/api/projects/..%2F..%2Fdata").status_code == 404
+
+
+def test_project_with_a_running_voiceover_cannot_be_deleted(client, project):
+    client.fake.hold = True
+    name = upload(client, project, "s.txt", b"## Water\nWater is life.\n")
+    job = start(client, project, file=name, approve="always").json()
+    time.sleep(0.3)
+    r = client.delete(f"/api/projects/{project}")
+    assert r.status_code == 409 and "still running" in r.json()["detail"]
+    client.fake.hold = False
+    wait_job(client, job["id"])
+    assert client.delete(f"/api/projects/{project}").status_code == 200

@@ -316,6 +316,20 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
     def create_project(body: NewProject) -> dict:
         return store.create_project(body.name)
 
+    @app.get("/api/projects/{pid}")
+    def get_project(pid: str) -> dict:
+        _project(pid)
+        return store.project(pid)
+
+    @app.delete("/api/projects/{pid}")
+    def delete_project(pid: str) -> dict:
+        _project(pid)
+        if any(j.get("project") == pid and j.get("status") not in ("done", "failed")
+               for j in voice_jobs.jobs.values()):
+            raise HTTPException(409, "a voiceover is still running in this project - wait for it to finish")
+        dst = store.delete_project(pid)
+        return {"deleted": pid, "trash": str(dst)}
+
     # ---------------------------------------------------------------- files
     @app.get("/api/projects/{pid}/files")
     def list_files(pid: str) -> list[dict]:

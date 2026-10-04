@@ -66,6 +66,16 @@ class Store:
         (d / "project.json").write_text(json.dumps(meta), encoding="utf-8")
         return meta
 
+    def delete_project(self, pid: str) -> Path:
+        """Not erased: moved to data_dir/trash/<id>-<time>, so a mistake can be undone by
+        moving the folder back into projects/."""
+        src = self._dir(pid)
+        trash = self.root.parent / "trash"
+        trash.mkdir(exist_ok=True)
+        dst = trash / f"{pid}-{time.strftime('%Y%m%d-%H%M%S')}"
+        src.rename(dst)
+        return dst
+
     def project(self, pid: str) -> dict:
         return json.loads((self._dir(pid) / "project.json").read_text(encoding="utf-8"))
 

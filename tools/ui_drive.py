@@ -338,6 +338,12 @@ try:
         check("dialog closes and a voice card appears", wait_for(
             "!document.querySelector('#voicemodal').classList.contains('open') && !!document.querySelector('.vcard')", 10))
         check("card shows progress per section", wait_for("document.querySelectorAll('.vcard .vsec').length===2", 15))
+        # user report: left the project mid-render, came back, the card was gone
+        js("[...document.querySelectorAll('#projects li[data-id]')].find(l=>l.innerText.includes('Empty one')).click()")
+        time.sleep(0.4)
+        js("[...document.querySelectorAll('#projects li[data-id]')].find(l=>l.innerText.includes('Voice test')).click()")
+        check("running voiceover card comes back after switching projects", wait_for(
+            "document.querySelectorAll('.vcard').length===1", 8))
         check("card finishes", wait_for("document.querySelector('.vcard').classList.contains('done')", 30))
         card = js("document.querySelector('.vcard').innerText") or ""
         check("card shows length, words, pace", "1:01" in card and "160 words" in card and "157 wpm" in card, card[:120])
@@ -363,6 +369,22 @@ try:
         js("[...document.querySelectorAll('#projects li[data-id]')].find(l=>l.innerText.includes('Voice test')).click()")
         check("voice cards restored from history", wait_for(
             "document.querySelectorAll('.vcard.done').length===2", 15))
+
+        # delete a project: inline confirm, Keep backs out, Delete removes it
+        names = lambda: js("[...document.querySelectorAll('#projects li[data-id] .pname')].map(e=>e.innerText)") or []
+        js("[...document.querySelectorAll('#projects li[data-id]')].find(l=>l.innerText.includes('Empty one')).querySelector('.pdel').click()")
+        check("delete asks first (inline, no browser dialog)", wait_for(
+            "!!document.querySelector('#projects li.confirm') && document.querySelector('#projects li.confirm').innerText.includes('trash')", 5))
+        shot("20-delete-confirm")
+        js("document.querySelector('#projects li.confirm [data-a=keep]').click()")
+        check("Keep backs out", wait_for("!document.querySelector('#projects li.confirm')", 5) and "Empty one" in names())
+        js("[...document.querySelectorAll('#projects li[data-id]')].find(l=>l.innerText.includes('Empty one')).querySelector('.pdel').click()")
+        wait_for("!!document.querySelector('#projects li.confirm')", 5)
+        js("document.querySelector('#projects li.confirm [data-a=del]').click()")
+        check("Delete removes the project", wait_for(
+            "![...document.querySelectorAll('#projects .pname')].some(e=>e.innerText==='Empty one')", 5), ", ".join(names()))
+        check("the open project is untouched", "Voice test" in names() and
+              js("document.querySelectorAll('.vcard.done').length") == 2)
 
     # dark mode (Windows dark theme)
     send("Emulation.setEmulatedMedia", features=[{"name": "prefers-color-scheme", "value": "dark"}])
