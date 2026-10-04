@@ -54,7 +54,7 @@ def parse_usage_text(text: str, now: float | None = None) -> dict:
             windows[name] = {"utilization": float(m.group(1)) / 100, "resets_at": parse_reset(m.group(2), now)}
     return windows
 ARGS = ["-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
-        "--tools", "", "--no-session-persistence", "--strict-mcp-config"]
+        "--tools", "", "--no-session-persistence", "--strict-mcp-config", "--disable-slash-commands"]
 
 
 class ClaudeCLI:
@@ -70,7 +70,11 @@ class ClaudeCLI:
 
     @staticmethod
     def env(account: dict) -> dict[str, str]:
-        return {"CLAUDE_CONFIG_DIR": account["profile_dir"]}
+        # The data folder usually sits under the user's home, and Claude Code reads CLAUDE.md
+        # (and .claude/CLAUDE.md) from every parent folder - so the user's own global
+        # instructions would steer the studio assistant. Memory files are switched off.
+        return {"CLAUDE_CONFIG_DIR": account["profile_dir"], "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "1",
+                "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1"}
 
     async def status(self, account: dict) -> dict:
         exe = self._exe()

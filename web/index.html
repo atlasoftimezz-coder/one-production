@@ -350,6 +350,18 @@
   .vcard { align-self: center; width: min(640px, 100%); border: 1px solid var(--line); border-radius: 16px;
            background: var(--panel); padding: 14px 16px; box-shadow: var(--shadow); animation: rise .22s ease-out; }
   .vcard.done { border-color: var(--ok); } .vcard.failed { border-color: var(--bad); }
+  /* a studio action the assistant proposed: the user runs it */
+  .acard { margin-top: 8px; border: 1px solid var(--accent); border-radius: 14px; background: var(--panel);
+           padding: 11px 13px; display: grid; gap: 8px; max-width: 560px; }
+  .acard .ah { display: flex; gap: 10px; align-items: center; }
+  .acard .ah .vicon { width: 30px; height: 30px; border-radius: 9px; }
+  .acard .ah .icon { width: 16px; height: 16px; }
+  .acard dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 0; font-size: 13px; }
+  .acard dt { color: var(--dim); } .acard dd { margin: 0; overflow-wrap: anywhere; }
+  .acard .row2 { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+  .acard.err { border-color: var(--bad); color: var(--bad); font-size: 13px; }
+  .acard.used { border-color: var(--line); opacity: .8; }
+  .acard .need { font-size: 13px; color: var(--warn); }
   .vhead { display: flex; align-items: center; gap: 12px; }
   .vicon { width: 38px; height: 38px; border-radius: 12px; background: var(--grad); color: #fff;
            display: grid; place-items: center; flex: none; }
@@ -725,11 +737,13 @@ function renderThread(hist, p) {
   }
   $("#messages").innerHTML = `<div class="thread"></div>`;
   const finished = new Set(hist.filter(m => m.role === "tool" && m.tool === "voiceover").map(m => m.job));
+  const usedActions = new Set(hist.filter(m => m.from_action).map(m => m.from_action));
   hist.forEach(m => {
     if (m.role === "system") return addNote(m.text, m.handoff);
     if (m.role === "tool" && m.tool === "voiceover") return addVoiceCard(m.job);
     const b = addMsg(m.role, m.text);
     if (m.role === "assistant") decorate(b, m);
+    if (m.role === "assistant" && m.action) addActionCard(b, m.action, m.time, usedActions.has(m.time));
     // a voiceover still running when the user left: bring its live card back
     if (m.tool_request === "voiceover" && m.job && !finished.has(m.job)) addVoiceCard(m.job);
   });
@@ -823,11 +837,14 @@ async function streamReply(url, body, accountId) {
     const r = await api(url, { method: "POST", headers: { "Content-Type": "application/json" },
                                body: JSON.stringify(body) });
     const reader = r.body.getReader(), dec = new TextDecoder();
-    let buf = "", first = true;
+    let buf = "", first = true, raw = "", proposal = null;
     const handle = ev => {
       if (ev.t === "text") {
-        if (first) { bubble.textContent = ""; first = false; }
-        bubble.textContent += ev.v;
+        if (first) { bubble.textContent = ""; first = false; raw = ""; }
+        raw += ev.v;
+        bubble.textContent = raw.split("```action")[0].trimEnd();
+      } else if (ev.t === "action") {
+        bubble.textContent = ev.text; proposal = ev;
       } else if (ev.t === "usage") {
         meta.usage = { in: ev.input_tokens, out: ev.output_tokens, model: ev.model };
       } else if (ev.t === "limit") {
@@ -853,6 +870,7 @@ async function streamReply(url, body, accountId) {
     }
     if (first) bubble.textContent = "";
     decorate(bubble, meta);
+    if (proposal) addActionCard(bubble, proposal.action, proposal.time, false);
     if (offer) showOffer(offer);
     loadAccounts().catch(() => {});
   } catch (err) { bubble.textContent = "Couldn't get a reply: " + err.message; bubble.classList.add("err"); }
@@ -1269,9 +1287,63 @@ async function submitVoice(approve) {
   if (!r.ok) { toast((await r.json().catch(() => ({}))).detail || "Couldn't start", true); return; }
   const job = await r.json();
   closeVoice();
-  addMsg("user", `Voice ${job.source} with ${job.voice}`);
+  addMsg("user", `Voice ${job.source} with ${job.voice}` + (body.pace_mode === "wpm" ? ` at ${body.target_wpm} wpm` : ""));
   addVoiceCard(job.id);
 }
+// ---------- studio actions the assistant proposes (user presses Run; GPU gate still applies)
+const PACE_TEXT = { natural: "the voice's own pace", grid: "timestamps, stretch to fit",
+                    grid_pad: "timestamps, no stretching" };
+function addActionCard(bubble, action, at, used) {
+  const holder = bubble.parentElement;
+  const card = document.createElement("div");
+  if (action.error) {
+    card.className = "acard err";
+    card.textContent = "Couldn't set that up: " + action.error;
+    holder.appendChild(card); return card;
+  }
+  card.className = "acard" + (used ? " used" : "");
+  const pace = action.pace_mode === "wpm" ? `${action.target_wpm} words per minute` : PACE_TEXT[action.pace_mode];
+  card.innerHTML = `<div class="ah"><div class="vicon"><svg class="icon"><use href="#i-mic"/></svg></div>
+      <b>Make a voiceover</b></div>
+    <dl><dt>Script</dt><dd>${esc(action.file)}</dd><dt>Voice</dt><dd>${esc(action.voice)}</dd>
+      <dt>Pace</dt><dd>${esc(pace)}</dd><dt>Delivery</dt><dd>${esc(action.preset)}</dd>
+      ${action.name ? `<dt>File name</dt><dd>${esc(action.name)}</dd>` : ""}</dl>
+    <div class="need"></div>
+    <div class="row2">${used ? `<span style="color:var(--ok);font-size:13px">Started ✓</span>` :
+      `<button class="btn" data-a="change">Change…</button><button class="btn primary" data-a="run">Run</button>`}</div>`;
+  holder.appendChild(card);
+  if (used) return card;
+  card.querySelector('[data-a="change"]').onclick = () => {
+    state.voice.last = { ...state.voice.last, voice: action.voice, preset: action.preset,
+                         pace: action.pace_mode, wpm: action.target_wpm || state.voice.last.wpm };
+    openVoice(action.file);
+  };
+  card.querySelector('[data-a="run"]').onclick = () => runAction(card, action, at, null);
+  return card;
+}
+
+async function runAction(card, action, at, approve) {
+  const r = await fetch(`/api/projects/${state.current}/voice`, { method: "POST",
+    headers: { "Content-Type": "application/json", "X-OneProd-Token": TOKEN },
+    body: JSON.stringify({ file: action.file, voice: action.voice, preset: action.preset, pace_mode: action.pace_mode,
+                           target_wpm: action.target_wpm || null, name: action.name || null, approve, from_action: at }) });
+  if (r.status === 401) return lock();
+  if (r.status === 409) {
+    const need = (await r.json()).needs_approval;
+    card.querySelector(".need").textContent = `${need.label} needs your OK first — it uses ${need.uses}.`;
+    card.querySelector(".row2").innerHTML = `<button class="btn" data-a="once">Allow once</button>
+      <button class="btn primary" data-a="always">Always allow</button>`;
+    card.querySelectorAll("[data-a]").forEach(b => b.onclick = () => runAction(card, action, at, b.dataset.a));
+    return;
+  }
+  if (!r.ok) { card.querySelector(".need").textContent = (await r.json().catch(() => ({}))).detail || "Couldn't start"; return; }
+  const job = await r.json();
+  card.classList.add("used"); card.querySelector(".need").textContent = "";
+  card.querySelector(".row2").innerHTML = `<span style="color:var(--ok);font-size:13px">Started ✓</span>`;
+  addMsg("user", `Voice ${job.source} with ${job.voice}` + (action.pace_mode === "wpm" ? ` at ${action.target_wpm} wpm` : ""));
+  addVoiceCard(job.id);
+}
+
 // Hear a reference clip before choosing it. Picking another voice while one plays switches to it.
 const voiceSample = { audio: new Audio(), urls: {}, playing: null };
 voiceSample.audio.onended = () => stopSample();

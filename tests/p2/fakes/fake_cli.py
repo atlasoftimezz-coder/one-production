@@ -11,6 +11,7 @@ Behaviour comes from environment variables set by the tests:
     FAKE_EMAIL  email to report after a fake login
     FAKE_UTIL   Claude five_hour utilisation to report (default 0.42 in replies, 0.34 in /usage)
     FAKE_CODEX_PCT  Codex 5-hour used_percent written to its session file (default 35)
+    FAKE_REPLY  exact reply text for Claude (default: echoes the user's last line)
 Login state is a file "logged_in" inside the account's own folder (CLAUDE_CONFIG_DIR /
 CODEX_HOME), which is exactly what proves the folders keep accounts apart.
 """
@@ -77,7 +78,8 @@ def claude(args, home: Path):
     prompt = sys.stdin.read()
     if log := os.environ.get("FAKE_LOG"):
         with open(log, "a", encoding="utf-8") as fh:
-            fh.write(json.dumps({"args": args, "prompt": prompt}) + "\n")
+            fh.write(json.dumps({"args": args, "prompt": prompt,
+                                 "env": {k: v for k, v in os.environ.items() if k.startswith("CLAUDE_CODE_")}}) + "\n")
     if not flag.exists():
         sys.stderr.write("Not logged in · Please run /login\n")
         return 1
@@ -109,7 +111,7 @@ def claude(args, home: Path):
     if mode == "auth":
         result(True, 401, "Invalid authentication credentials")
         return 1
-    words = f"Fake Claude says: {last_user_line(prompt)}".split(" ")
+    words = (os.environ.get("FAKE_REPLY") or f"Fake Claude says: {last_user_line(prompt)}").split(" ")
     if mode == "midstream":
         for w in words[:3]:
             out({"type": "stream_event", "event": {"type": "content_block_delta", "index": 1,
@@ -143,7 +145,8 @@ def codex(args, home: Path):
     prompt = sys.stdin.read()
     if log := os.environ.get("FAKE_LOG"):
         with open(log, "a", encoding="utf-8") as fh:
-            fh.write(json.dumps({"args": args, "prompt": prompt}) + "\n")
+            fh.write(json.dumps({"args": args, "prompt": prompt,
+                                 "env": {k: v for k, v in os.environ.items() if k.startswith("CLAUDE_CODE_")}}) + "\n")
     if not flag.exists():
         sys.stderr.write("Not logged in. Run `codex login`.\n")
         return 1

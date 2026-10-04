@@ -370,6 +370,23 @@ try:
         check("voice cards restored from history", wait_for(
             "document.querySelectorAll('.vcard.done').length===2", 15))
 
+        # the assistant proposes a voiceover; the user runs it from the card
+        before = js("document.querySelectorAll('.vcard').length")
+        js("{const b=addMsg('assistant','Sure - 165 wpm with Buster.');"
+           "addActionCard(b,{tool:'voiceover',file:'ghost-towns-ep1.txt',voice:'buster_ref48.wav',"
+           "pace_mode:'wpm',target_wpm:165,preset:'clone_exact'},12345,false)}")
+        card = js("document.querySelector('.acard:last-of-type').innerText") or ""
+        check("assistant's proposal shows as a Run card", "buster_ref48.wav" in card and "165 words per minute" in card, card[:120])
+        shot("21-action-card")
+        js("document.querySelector('.acard:last-of-type [data-a=run]').click()")
+        if wait_for("document.querySelector('.acard:last-of-type').innerText.includes('needs your OK')", 3):
+            js("document.querySelector('.acard:last-of-type [data-a=once]').click()")
+        check("Run starts the voiceover", wait_for(
+            f"document.querySelectorAll('.vcard').length==={before + 1} && "
+            "document.querySelector('.acard:last-of-type').innerText.includes('Started')", 10))
+        check("that voiceover finishes", wait_for(
+            f"document.querySelectorAll('.vcard.done').length==={before + 1}", 30))
+
         # delete a project: inline confirm, Keep backs out, Delete removes it
         names = lambda: js("[...document.querySelectorAll('#projects li[data-id] .pname')].map(e=>e.innerText)") or []
         js("[...document.querySelectorAll('#projects li[data-id]')].find(l=>l.innerText.includes('Empty one')).querySelector('.pdel').click()")
@@ -384,7 +401,7 @@ try:
         check("Delete removes the project", wait_for(
             "![...document.querySelectorAll('#projects .pname')].some(e=>e.innerText==='Empty one')", 5), ", ".join(names()))
         check("the open project is untouched", "Voice test" in names() and
-              js("document.querySelectorAll('.vcard.done').length") == 2)
+              js("document.querySelectorAll('.vcard.done').length") == before + 1)
 
     # dark mode (Windows dark theme)
     send("Emulation.setEmulatedMedia", features=[{"name": "prefers-color-scheme", "value": "dark"}])

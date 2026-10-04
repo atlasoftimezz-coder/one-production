@@ -21,9 +21,12 @@ SYSTEM = ("You are the assistant inside One Production, a local studio a YouTube
 HISTORY_TURNS = 20
 
 
-def build_prompt(history: list[dict], message: str) -> str:
-    """CLIs take one prompt, so the recent conversation is written out as a transcript."""
+def build_prompt(history: list[dict], message: str, studio: str = "") -> str:
+    """CLIs take one prompt, so the recent conversation is written out as a transcript.
+    `studio` is what the assistant can see and do in this project (see actions.py)."""
     lines = [SYSTEM, ""]
+    if studio:
+        lines += [studio, ""]
     recent = [m for m in history if m["role"] in ("user", "assistant")][-HISTORY_TURNS:]
     if recent:
         lines.append("Conversation so far:")

@@ -22,6 +22,7 @@ from pydantic import BaseModel
 from . import handoff
 from .accounts import DEFAULT_SWITCH, DEFAULT_WARN, PROVIDERS, SAME_SERVICE_SWITCHING, SUBSCRIPTIONS, \
     AccountError, Accounts
+from . import actions
 from .chat import SYSTEM, build_prompt, ndjson, reply_events
 from .config import Settings
 from .providers.anthropic_api import AnthropicAPI
@@ -102,6 +103,7 @@ class VoiceIn(ScriptIn):
     cfg_weight: float | None = None
     temperature: float | None = None
     approve: str | None = None       # None | "once" | "always"  (heavy-job gate, R12)
+    from_action: float | None = None  # time of the assistant message whose Run card started this
 
 
 def create_app(settings: Settings, token: str | None = None, *, api_transport=None,
@@ -225,7 +227,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
                              store.list_files(pid), reason=reason, account=acc)
 
     # ---------------------------------------------------------------- the reply pipeline
-    def run_reply(pid: str, acc: dict, prompt: str):
+    def run_reply(pid: str, acc: dict, prompt: str, studio: tuple | None = None):
         """Stream one reply, save it, record usage, and decide whether to offer a switch."""
         provider = providers[acc["provider"]]
         state = {"windows": None}
@@ -265,6 +267,12 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
                 meta["error"] = {"kind": error.kind, "message": error.message}
                 meta["interrupted"] = error.interrupted
             text = "".join(parts).strip()
+            if studio and not error:
+                text, action = actions.extract(text)
+                if action:
+                    meta["action"] = actions.check(action, studio[0], studio[1], studio[2])
+                    meta["time"] = time.time()          # the Run card refers back to this message
+                    yield ndjson({"t": "action", "text": text, "action": meta["action"], "time": meta["time"]})
             if text or error:
                 store.append_message(pid, "assistant", text, **meta)
             ledger.record_call(account=acc["id"], provider=acc["provider"], project=pid, usage=usage,
@@ -543,9 +551,28 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
         acc = _account(body.account_id or "demo")
         if not acc["enabled"]:
             raise HTTPException(400, "that account is turned off")
-        prompt = build_prompt(store.history(pid), body.message)
+        studio = await studio_state(pid)
+        prompt = build_prompt(store.history(pid), body.message,
+                              actions.context(*studio) + "\n\n" + actions.HELP)
         store.append_message(pid, "user", body.message)
-        return run_reply(pid, acc, prompt)
+        return run_reply(pid, acc, prompt, studio)
+
+    async def studio_state(pid: str) -> tuple:
+        """(files, voices or None, presets, jobs). Never waits on the voice engine: it uses the
+        voice list from the last time the app talked to it, and refreshes that in the background
+        (a stopped engine costs ~2 s to detect on Windows, which would delay every reply)."""
+        meta = voice_svc.last_meta
+        if meta is None and not voice_svc.missing():
+            async def probe():
+                if await voice_svc.running():
+                    await voice_svc.meta()
+            bg = asyncio.get_running_loop().create_task(probe())
+            background.add(bg)
+            bg.add_done_callback(background.discard)
+        voices = [v for v in meta.get("voices", []) if not v.startswith("_upload_")] if meta else None
+        return store.list_files(pid), voices, (meta or {}).get("presets", {}), voice_jobs.for_project(pid)
+
+    background: set = set()
 
     # ---------------------------------------------------------------- handoff + switching (R3)
     @app.get("/api/projects/{pid}/handoffs")
@@ -713,8 +740,10 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
                 "exaggeration": body.exaggeration, "cfg_weight": body.cfg_weight,
                 "temperature": body.temperature}
         job = voice_jobs.start(pid, text, spec, source)
-        store.append_message(pid, "user", f"Voice {source} with {body.voice}", tool_request="voiceover",
-                             job=job["id"])
+        extra = {"from_action": body.from_action} if body.from_action else {}
+        store.append_message(pid, "user", f"Voice {source} with {body.voice}"
+                             + (f" at {int(body.target_wpm)} wpm" if body.pace_mode == "wpm" else ""),
+                             tool_request="voiceover", job=job["id"], **extra)
         return job
 
     @app.get("/api/voicejobs/{jid}")

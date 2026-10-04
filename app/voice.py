@@ -35,6 +35,7 @@ class VoiceService:
         self.url = (settings.voice_app_url or "http://127.0.0.1:8720").rstrip("/")
         self.transport = transport
         self._proc: subprocess.Popen | None = None
+        self.last_meta: dict | None = None          # voices/presets as last seen, for the chat
 
     # ---------------------------------------------------------------- setup
     def missing(self) -> list[str]:
@@ -80,7 +81,8 @@ class VoiceService:
         async with self._client() as c:
             r = await c.get(self.url + "/api/meta")
             r.raise_for_status()
-            return r.json()
+            self.last_meta = r.json()             # the chat assistant reads this copy
+            return self.last_meta
 
     async def submit(self, spec: dict) -> str:
         async with self._client() as c:
@@ -127,6 +129,19 @@ class VoiceJobs:
         self.jobs: dict[str, dict] = {}
         self.tasks: set[asyncio.Task] = set()
 
+    def for_project(self, pid: str) -> list[dict]:
+        """Newest first, finished ones from disk plus any still running."""
+        jobs = {}
+        for f in self.dir.glob("*.json"):
+            try:
+                j = json.loads(f.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            if j.get("project") == pid:
+                jobs[j["id"]] = j
+        jobs.update({k: v for k, v in self.jobs.items() if v.get("project") == pid})
+        return sorted(jobs.values(), key=lambda j: j.get("created", 0), reverse=True)
+
     def get(self, jid: str) -> dict | None:
         if jid in self.jobs:
             return self.jobs[jid]
@@ -140,6 +155,7 @@ class VoiceJobs:
         jid = secrets.token_hex(6)
         job = {"id": jid, "project": pid, "status": "starting", "step": "starting the voice engine",
                "name": spec["name"], "voice": spec["voice"], "preset": spec.get("preset"),
+               "pace_mode": spec.get("pace_mode"), "target_wpm": spec.get("target_wpm"),
                "source": source, "created": time.time(), "sections": [], "files": [], "error": None,
                "result": None}
         self.jobs[jid] = job
