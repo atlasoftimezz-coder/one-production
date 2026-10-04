@@ -23,7 +23,9 @@ from pydantic import BaseModel
 from . import handoff
 from .accounts import DEFAULT_SWITCH, DEFAULT_WARN, PROVIDERS, SAME_SERVICE_SWITCHING, SUBSCRIPTIONS, \
     AccountError, Accounts
-from . import actions
+from . import actions, system
+from .backups import BackupError, Backups, Busy
+from .profile import Profile, ProfileError, Throttled
 from .agent.claude_agent import ClaudeAgent
 from .agent.codex_agent import CodexAgent
 from .agent.runs import Runs
@@ -97,6 +99,33 @@ class ScriptIn(BaseModel):
     text: str | None = None          # or pasted text
 
 
+class BackupIn(BaseModel):
+    include_media: bool | None = None
+
+
+class BackupSettingsIn(BaseModel):
+    folder: str | None = None
+    include_media: bool | None = None
+    keep: int | None = None
+
+
+class RestoreIn(BaseModel):
+    project: str
+
+
+class ProfileIn(BaseModel):
+    name: str
+
+
+class PinIn(BaseModel):
+    current: str | None = None
+    new: str | None = None
+
+
+class UnlockIn(BaseModel):
+    pin: str
+
+
 class AgentAnswer(BaseModel):
     id: str
     answer: str
@@ -121,7 +150,7 @@ AGENT_PROVIDERS = ("claude", "anthropic_api", "codex")
 
 def create_app(settings: Settings, token: str | None = None, *, api_transport=None,
                login_console: bool | None = None, voice_transport=None, agent_client=None,
-               codex_transport=None) -> FastAPI:
+               codex_transport=None, backup_delay: float = 120, backup_tick: float = 3600) -> FastAPI:
     if login_console is None:
         login_console = settings.login_console
     token = token or secrets.token_urlsafe(32)
@@ -133,6 +162,8 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
     voice_svc = VoiceService(settings, voice_transport)
     voice_jobs = VoiceJobs(voice_svc, store, settings.data_dir)
     runs = Runs()
+    backups = Backups(settings.data_dir, store, redact)
+    profile = Profile(settings.data_dir)
     claude_agent = ClaudeAgent(settings.claude_cmd, settings.data_dir, client_factory=agent_client,
                                api_key_of=Accounts.api_key)
     codex_agent = CodexAgent(settings.codex_cmd, transport_factory=codex_transport)
@@ -158,13 +189,37 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
             except Exception:
                 log.exception("shutdown handoff failed for %s", p.get("id"))
 
+    async def daily_backups():
+        """A daily backup whenever the app is running and the last one is a day old (R11)."""
+        await asyncio.sleep(backup_delay)
+        while True:
+            try:
+                if backups.due() and not backups.busy():
+                    info = await asyncio.to_thread(backups.create, "daily")
+                    log.info("daily backup written: %s", info["name"])
+            except Exception:                          # noqa: BLE001 - never take the app down
+                log.exception("daily backup failed")
+            await asyncio.sleep(backup_tick)
+
     @asynccontextmanager
     async def lifespan(_app):
+        ticker = asyncio.get_running_loop().create_task(daily_backups())
         yield
+        ticker.cancel()
         shutdown_handoffs()
 
     app = FastAPI(title="One Production", version=__version__, lifespan=lifespan,
                   docs_url=None, redoc_url=None, openapi_url=None)
+    OPEN_WHEN_LOCKED = {("GET", "/api/profile"), ("POST", "/api/profile/unlock")}
+
+    @app.middleware("http")
+    async def pin_lock(request, call_next):
+        if (request.url.path.startswith("/api/") and profile.locked
+                and (request.method, request.url.path) not in OPEN_WHEN_LOCKED):
+            from fastapi.responses import JSONResponse
+            return JSONResponse({"detail": "locked - enter your PIN"}, status_code=423)
+        return await call_next(request)
+
     app.add_middleware(GuardMiddleware, token=token)
     app.state.token = token          # read by the launcher only; never sent in a response
 
@@ -558,7 +613,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
             rows.append({**card, "used_now_pct": card["usage_pct"], "measured": card["usage_kind"],
                          "session_5h_pct": s5, "session_resets": r5, "week_pct": s7, "week_resets": r7})
         # the BOM makes Excel read the file as UTF-8 (otherwise dashes and accents come out garbled)
-        return PlainTextResponse("﻿" + ledger.export_csv(range, redact, rows),
+        return PlainTextResponse("\ufeff" + ledger.export_csv(range, redact, rows),
                                  media_type="text/csv; charset=utf-8",
                                  headers={"Content-Disposition": f'attachment; filename="usage-{range}.csv"'})
 
@@ -598,6 +653,77 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
         return store.list_files(pid), voices, (meta or {}).get("presets", {}), voice_jobs.for_project(pid)
 
     background: set = set()
+
+    # ---------------------------------------------------------------- backups (R11)
+    @app.get("/api/backups")
+    def list_backups() -> dict:
+        return {"settings": backups.settings(), "backups": backups.list(), "running": backups.busy()}
+
+    @app.post("/api/backups")
+    async def make_backup(body: BackupIn) -> dict:
+        try:
+            return await asyncio.to_thread(backups.create, "manual", body.include_media)
+        except Busy as e:
+            raise HTTPException(409, str(e))
+        except (BackupError, OSError) as e:
+            raise HTTPException(400, f"backup failed: {e}")
+
+    @app.patch("/api/backups/settings")
+    def backup_settings(body: BackupSettingsIn) -> dict:
+        try:
+            return backups.update(body.folder, body.include_media, body.keep)
+        except BackupError as e:
+            raise HTTPException(400, str(e))
+
+    @app.post("/api/backups/{name}/restore")
+    async def restore_backup(name: str, body: RestoreIn) -> dict:
+        if runs.busy(body.project):
+            raise HTTPException(409, "the agent is working in that project - wait or press Stop first")
+        if any(j.get("project") == body.project and j.get("status") not in ("done", "failed")
+               for j in voice_jobs.jobs.values()):
+            raise HTTPException(409, "a voiceover is still running in that project")
+        try:
+            return await asyncio.to_thread(backups.restore, name, body.project)
+        except Busy as e:
+            raise HTTPException(409, str(e))
+        except BackupError as e:
+            raise HTTPException(400, str(e))
+
+    # ---------------------------------------------------------------- system scan (R13 step 2)
+    @app.get("/api/system")
+    async def system_scan() -> dict:
+        return await system.scan(settings, [_public(a) for a in accounts.list()], voice_svc, backups)
+
+    # ---------------------------------------------------------------- profile + PIN (R7)
+    @app.get("/api/profile")
+    def get_profile() -> dict:
+        return profile.public()
+
+    @app.patch("/api/profile")
+    def set_profile(body: ProfileIn) -> dict:
+        return profile.set_name(body.name)
+
+    @app.post("/api/profile/pin")
+    def set_pin(body: PinIn) -> dict:
+        try:
+            return profile.set_pin(body.current, body.new)
+        except Throttled as e:
+            raise HTTPException(429, str(e))
+        except ProfileError as e:
+            raise HTTPException(400, str(e))
+
+    @app.post("/api/profile/unlock")
+    def unlock(body: UnlockIn) -> dict:
+        try:
+            return profile.unlock(body.pin)
+        except Throttled as e:
+            raise HTTPException(429, str(e))
+        except ProfileError as e:
+            raise HTTPException(403, str(e))
+
+    @app.post("/api/profile/lock")
+    def lock_now() -> dict:
+        return profile.lock()
 
     # ---------------------------------------------------------------- agent mode (plan P5)
     def sessions_file(pid: str) -> Path:

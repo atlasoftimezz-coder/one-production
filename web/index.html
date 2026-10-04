@@ -196,6 +196,66 @@
   #toast.show { opacity: 1; transform: translateX(-50%); }
   #toast.bad { border-color: var(--bad); }
 
+  /* ---------- P6: backups, system scan, profile + PIN ---------- */
+  @media (max-width: 1360px) { .topbtn .tlabel { display: none; } .topbar .pill.local { display: none; } }
+  .profchip { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-weight: 800;
+              font-size: 12px; color: #fff; background: var(--grad); border: 0; cursor: pointer; flex: none; }
+  .profchip .icon { width: 15px; height: 15px; }
+  .bkset { display: grid; grid-template-columns: 1fr auto; gap: 10px 12px; align-items: end; padding: 12px 14px;
+           border: 1px solid var(--line); border-radius: 14px; background: var(--bg2); margin-bottom: 14px; }
+  .bkset label.l { font-size: 12px; color: var(--dim); display: block; margin-bottom: 4px; }
+  .bkset input[type=text], .bkset input[type=number] { width: 100%; padding: 8px 10px; border-radius: 10px;
+           border: 1px solid var(--line); background: var(--panel); }
+  .bkopts { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; font-size: 13px; grid-column: 1 / -1; }
+  .bkopts label { display: inline-flex; gap: 7px; align-items: center; }
+  .bkopts input[type=number] { width: 70px; }
+  .bknote { grid-column: 1 / -1; color: var(--dim); font-size: 12.5px; }
+  .bk { border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; margin-bottom: 10px; background: var(--bg2); }
+  .bk .bh { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .bk .bh b { font-size: 14px; }
+  .bk .meta { color: var(--dim); font-size: 12.5px; }
+  .kind { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--panel2); color: var(--dim); }
+  .kind.daily { color: var(--ok); }
+  .bkp { display: flex; gap: 10px; align-items: center; padding: 8px 0 0; border-top: 1px dashed var(--line);
+         margin-top: 8px; font-size: 13px; flex-wrap: wrap; }
+  .bkp .pn { flex: 1; min-width: 0; }
+  .bkp .gone { color: var(--warn); font-size: 11.5px; font-weight: 700; margin-left: 6px; }
+  .bkp .ask { flex-basis: 100%; display: flex; gap: 8px; align-items: center; justify-content: flex-end; flex-wrap: wrap;
+              color: var(--dim); font-size: 12.5px; }
+  .bkp .done { flex-basis: 100%; color: var(--ok); font-size: 12.5px; }
+  .sysgrp { margin: 2px 0 16px; }
+  .sysgrp h4 { margin: 0 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); }
+  .sysrow { display: grid; grid-template-columns: 12px 230px 1fr; gap: 2px 12px; padding: 9px 4px;
+            border-bottom: 1px solid var(--line); align-items: baseline; }
+  .sysrow .sd { width: 10px; height: 10px; border-radius: 50%; background: var(--faint); }
+  .sysrow.ok .sd { background: var(--ok); } .sysrow.warn .sd { background: var(--warn); }
+  .sysrow.bad .sd { background: var(--bad); } .sysrow.info .sd { background: var(--accent); }
+  .sysrow .sl { font-weight: 600; font-size: 13.5px; }
+  .sysrow .sv { overflow-wrap: anywhere; font-size: 13px; }
+  .sysrow .sf { grid-column: 3; color: var(--dim); font-size: 12.5px; }
+  @media (max-width: 700px) { .sysrow { grid-template-columns: 12px 1fr; } .sysrow .sv, .sysrow .sf { grid-column: 2; } }
+  .psect { border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin-bottom: 12px; background: var(--bg2); }
+  .psect h4 { margin: 0 0 4px; font-size: 14px; }
+  .psect p { margin: 0 0 10px; color: var(--dim); font-size: 12.5px; }
+  .pform { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .pform input { padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); width: 160px; }
+  .pform input.wide { width: 260px; }
+  .pmsg { font-size: 12.5px; margin-top: 8px; min-height: 1em; }
+  .pmsg.bad { color: var(--bad); } .pmsg.ok { color: var(--ok); }
+  #pinlock { position: fixed; inset: 0; z-index: 60; display: none; place-items: center; padding: 24px;
+             background: radial-gradient(1200px 600px at 20% 0%, rgba(168,85,247,.18), transparent 60%),
+                         radial-gradient(900px 500px at 100% 100%, rgba(255,107,74,.14), transparent 60%), var(--bg); }
+  #pinlock.open { display: grid; }
+  #pinlock .card { width: min(380px, 100%); background: var(--panel); border: 1px solid var(--line); border-radius: 20px;
+                   padding: 30px; box-shadow: var(--shadow); text-align: center; }
+  #pinlock .mark { margin: 0 auto 14px; width: 52px; height: 52px; }
+  #pinlock h1 { margin: 0 0 6px; font-size: 20px; }
+  #pinlock p { margin: 0 0 16px; color: var(--dim); font-size: 13px; }
+  #pinlock input { font-size: 22px; letter-spacing: .35em; text-align: center; width: 100%; padding: 10px;
+                   border-radius: 12px; border: 1px solid var(--line); background: var(--panel2); }
+  #pinlock .btn { width: 100%; margin-top: 12px; padding: 10px; }
+  #pinlock .pmsg { color: var(--bad); }
+
   /* ---------- accounts ---------- */
   .topbtn { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 10px;
             background: var(--panel); border: 1px solid var(--line); font-weight: 600; font-size: 13px; }
@@ -437,6 +497,8 @@
   <symbol id="i-swap" viewBox="0 0 24 24"><path d="M7 4L3 8l4 4M3 8h14M17 20l4-4-4-4M21 16H7"/></symbol>
   <symbol id="i-uparr" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></symbol>
   <symbol id="i-dnarr" viewBox="0 0 24 24"><path d="M12 5v14M5 12l7 7 7-7"/></symbol>
+  <symbol id="i-archive" viewBox="0 0 24 24"><path d="M3 5h18v4H3zM5 9v10h14V9M10 13h4"/></symbol>
+  <symbol id="i-cpu" viewBox="0 0 24 24"><path d="M7 7h10v10H7zM10 10h4v4h-4zM9 3v4M15 3v4M9 17v4M15 17v4M3 9h4M3 15h4M17 9h4M17 15h4"/></symbol>
   <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 11-2.3-5.6M20 4v5h-5"/></symbol>
 </svg>
 
@@ -458,10 +520,13 @@
     <div class="brand">One Production</div>
     <div class="crumb" id="crumb"></div>
     <div class="spacer"></div>
-    <button class="topbtn" id="usagebtn" title="How much each account has used"><svg class="icon"><use href="#i-chart"/></svg>Usage</button>
-    <button class="topbtn" id="accbtn" title="Your AI accounts"><svg class="icon"><use href="#i-key"/></svg>Accounts
+    <button class="topbtn" id="usagebtn" title="How much each account has used"><svg class="icon"><use href="#i-chart"/></svg><span class="tlabel">Usage</span></button>
+    <button class="topbtn" id="accbtn" title="Your AI accounts"><svg class="icon"><use href="#i-key"/></svg><span class="tlabel">Accounts</span>
       <span class="badge" id="accbadge" style="display:none"></span></button>
-    <span class="pill" title="The app only listens on this computer"><i class="dot"></i>Local · private</span>
+    <button class="topbtn" id="bkbtn" title="Backups of your projects"><svg class="icon"><use href="#i-archive"/></svg><span class="tlabel">Backups</span></button>
+    <button class="topbtn" id="sysbtn" title="What this PC has"><svg class="icon"><use href="#i-cpu"/></svg><span class="tlabel">System</span></button>
+    <span class="pill local" title="The app only listens on this computer"><i class="dot"></i>Local · private</span>
+    <button class="profchip" id="profbtn" title="Your profile and PIN">?</button>
     <span class="pill" id="ver">v–</span>
   </header>
 
@@ -577,6 +642,65 @@
   </div>
 </div>
 
+<div class="scrim" id="bkmodal">
+  <div class="modal wide" role="dialog" aria-label="Backups">
+    <div class="mhead">
+      <div class="mark"><svg viewBox="0 0 24 24"><use href="#i-play"/></svg></div>
+      <div style="flex:1"><h3>Backups</h3>
+        <p>Every project — chats, scripts, voiceovers, subtitles — zipped. One runs by itself each day; restore any project with one click.</p></div>
+      <button class="btn primary" id="bknow">Back up now</button>
+      <button class="iconbtn" id="bkclose" title="Close"><svg class="icon"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="mbody">
+      <div class="bkset">
+        <div><label class="l" for="bkfolder">Backup folder (another drive is safest)</label><input type="text" id="bkfolder" spellcheck="false"></div>
+        <button class="btn" id="bkfsave">Save folder</button>
+        <div class="bkopts">
+          <label><input type="checkbox" id="bkmedia"> Include audio &amp; video</label>
+          <label>Keep the newest <input type="number" id="bkkeep" min="1" max="365"> backups</label>
+        </div>
+        <div class="bknote" id="bknote"></div>
+      </div>
+      <div id="bklist"></div>
+    </div>
+  </div>
+</div>
+
+<div class="scrim" id="sysmodal">
+  <div class="modal wide" role="dialog" aria-label="System">
+    <div class="mhead">
+      <div class="mark"><svg viewBox="0 0 24 24"><use href="#i-play"/></svg></div>
+      <div style="flex:1"><h3>System</h3>
+        <p>What this PC has. Read-only — nothing is installed or changed. <span id="sysat"></span></p></div>
+      <button class="btn" id="sysagain">Scan again</button>
+      <button class="iconbtn" id="sysclose" title="Close"><svg class="icon"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="mbody" id="sysbody"></div>
+  </div>
+</div>
+
+<div class="scrim" id="profmodal">
+  <div class="modal" role="dialog" aria-label="Profile">
+    <div class="mhead">
+      <div class="mark"><svg viewBox="0 0 24 24"><use href="#i-play"/></svg></div>
+      <div style="flex:1"><h3>Your profile</h3><p>Who uses this copy of One Production, and an optional PIN.</p></div>
+      <button class="iconbtn" id="profclose" title="Close"><svg class="icon"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="mbody" id="profbody"></div>
+  </div>
+</div>
+
+<div id="pinlock" role="dialog" aria-label="Enter PIN">
+  <form class="card" id="pinform">
+    <div class="mark"><svg viewBox="0 0 24 24"><use href="#i-play"/></svg></div>
+    <h1 id="pinhello">Welcome back</h1>
+    <p>Enter your PIN to open One Production.</p>
+    <input id="pininput" type="password" inputmode="numeric" autocomplete="off" maxlength="12" aria-label="PIN">
+    <button class="btn primary">Unlock</button>
+    <div class="pmsg" id="pinmsg"></div>
+  </form>
+</div>
+
 <div class="scrim" id="voicemodal">
   <div class="modal" role="dialog" aria-label="Voiceover">
     <div class="mhead">
@@ -637,6 +761,7 @@ function toast(msg, bad) {
 async function api(path, opts = {}) {
   const r = await fetch(path, { ...opts, headers: { ...(opts.headers || {}), "X-OneProd-Token": TOKEN } });
   if (r.status === 401) { lock(); throw new Error("not authorised"); }
+  if (r.status === 423) { showPinLock(); throw new Error("locked - enter your PIN"); }
   if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.statusText);
   return r;
 }
@@ -1691,6 +1816,178 @@ $("#csvbtn").onclick = async e => {
   setTimeout(() => URL.revokeObjectURL(url), 10000);
 };
 
+// ---------- backups (R11)
+const fmtBytes = n => n >= 1e9 ? (n / 1e9).toFixed(1) + " GB" : n >= 1e6 ? (n / 1e6).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1e3)) + " KB";
+const fmtWhen = ts => ts ? new Date(ts * 1000).toLocaleString([], { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—";
+async function openBackups() { $("#bkmodal").classList.add("open"); await loadBackups(); }
+async function loadBackups() {
+  const d = await (await api("/api/backups")).json();
+  const st = d.settings;
+  if (document.activeElement !== $("#bkfolder")) $("#bkfolder").value = st.folder || st.folder_resolved;
+  $("#bkmedia").checked = !!st.include_media;
+  $("#bkkeep").value = st.keep;
+  $("#bknote").textContent = (st.last_daily ? `Last daily backup: ${fmtWhen(st.last_daily)}. ` : "No daily backup yet — one runs within a few minutes of starting the app. ") +
+    `Saving to ${st.folder_resolved}.`;
+  $("#bknow").disabled = d.running;
+  $("#bklist").innerHTML = d.backups.length ? d.backups.map(b => b.broken ? `<div class="bk"><div class="bh"><b>${esc(b.name)}</b><span class="meta">can't be read</span></div></div>` : `
+    <div class="bk" data-name="${esc(b.name)}">
+      <div class="bh"><b>${esc(fmtWhen(b.created))}</b><span class="kind ${esc(b.kind)}">${b.kind === "daily" ? "Daily" : "Manual"}</span>
+        <span class="meta">${fmtBytes(b.size)} · ${b.projects.length} project${b.projects.length === 1 ? "" : "s"}${b.include_media ? "" : " · audio/video left out"}</span></div>
+      ${b.projects.map(p => `<div class="bkp" data-pid="${esc(p.id)}" data-pname="${esc(p.name || p.id)}">
+          <div class="pn">${esc(p.name || p.id)}${p.exists ? "" : `<span class="gone">DELETED</span>`}
+            <div class="meta">${p.files} file${p.files === 1 ? "" : "s"} · ${fmtBytes(p.bytes)}${p.skipped ? ` · ${p.skipped} audio/video left out` : ""}</div></div>
+          <button class="btn" data-a="restore">Restore</button></div>`).join("")}
+    </div>`).join("") : `<div class="navempty">No backups yet. Press <b>Back up now</b>, or wait for the daily one.</div>`;
+  document.querySelectorAll("#bklist .bkp [data-a=restore]").forEach(b => b.onclick = () => askRestore(b.closest(".bkp")));
+}
+function askRestore(row) {
+  const name = row.closest(".bk").dataset.name, pid = row.dataset.pid, pname = row.dataset.pname;
+  const when = row.closest(".bk").querySelector(".bh b").textContent;
+  row.querySelector(".ask")?.remove();
+  const exists = !row.querySelector(".gone");
+  const ask = document.createElement("div");
+  ask.className = "ask";
+  ask.innerHTML = `<span>Restore <b>${esc(pname)}</b> as it was on ${esc(when)}?${exists ? " The current version moves to the trash folder — nothing is erased." : ""}</span>
+    <button class="btn" data-a="no">Cancel</button><button class="btn primary" data-a="yes">Restore</button>`;
+  row.appendChild(ask);
+  ask.querySelector("[data-a=no]").onclick = () => ask.remove();
+  ask.querySelector("[data-a=yes]").onclick = async () => {
+    ask.querySelectorAll("button").forEach(x => x.disabled = true);
+    try {
+      const r = await (await api(`/api/backups/${encodeURIComponent(name)}/restore`, { method: "POST",
+        headers: { "Content-Type": "application/json" }, body: JSON.stringify({ project: pid }) })).json();
+      const extra = r.missing_media.length ? ` ${r.missing_media.length} audio/video file(s) weren't in this backup.` :
+        r.kept_media.length ? ` Audio/video kept from the current version.` : "";
+      toast(`Restored “${r.name}” — ${r.files} files.${extra}`);
+      await loadProjects(state.current === pid || !state.current ? pid : undefined);
+      if (state.current === pid) openProject(pid);
+      await loadBackups();
+    } catch (e) { ask.querySelector("span").textContent = e.message; ask.querySelectorAll("button").forEach(x => x.disabled = false); }
+  };
+}
+$("#bkbtn").onclick = openBackups;
+$("#bkclose").onclick = () => $("#bkmodal").classList.remove("open");
+$("#bkmodal").addEventListener("click", e => { if (e.target.id === "bkmodal") $("#bkmodal").classList.remove("open"); });
+$("#bknow").onclick = async () => {
+  $("#bknow").disabled = true; $("#bknow").textContent = "Backing up…";
+  try {
+    const b = await (await api("/api/backups", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" })).json();
+    toast(`Backed up ${b.projects.length} project(s) — ${fmtBytes(b.size)}`);
+  } catch (e) { toast(e.message, true); }
+  $("#bknow").textContent = "Back up now"; $("#bknow").disabled = false;
+  loadBackups();
+};
+async function saveBackupSettings(body, ok) {
+  try {
+    await api("/api/backups/settings", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    if (ok) toast(ok);
+  } catch (e) { toast(e.message, true); }
+  loadBackups();
+}
+$("#bkfsave").onclick = () => saveBackupSettings({ folder: $("#bkfolder").value }, "Backup folder saved");
+$("#bkmedia").onchange = () => saveBackupSettings({ include_media: $("#bkmedia").checked });
+$("#bkkeep").onchange = () => saveBackupSettings({ keep: Number($("#bkkeep").value) });
+
+// ---------- system scan (R13 step 2)
+const SYS_WORD = { ok: "good", warn: "check", bad: "problem", info: "info" };
+async function openSystem() { $("#sysmodal").classList.add("open"); await runScan(); }
+async function runScan() {
+  $("#sysagain").disabled = true;
+  $("#sysbody").innerHTML = `<div class="navempty">Looking at this PC…</div>`;
+  try {
+    const d = await (await api("/api/system")).json();
+    const groups = [...new Set(d.items.map(i => i.group))];
+    $("#sysbody").innerHTML = groups.map(g => `<div class="sysgrp"><h4>${esc(g)}</h4>${d.items.filter(i => i.group === g).map(i => `
+      <div class="sysrow ${esc(i.status)}" data-id="${esc(i.id)}" title="${SYS_WORD[i.status] || ""}"><span class="sd"></span>
+        <span class="sl">${esc(i.label)}</span><span class="sv">${esc(i.value)}</span>
+        ${i.fix ? `<span class="sf">${esc(i.fix)}</span>` : ""}</div>`).join("")}</div>`).join("");
+    $("#sysat").textContent = `Scanned ${new Date(d.scanned_at * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.`;
+  } catch (e) { $("#sysbody").innerHTML = `<div class="verr">${esc(e.message)}</div>`; }
+  $("#sysagain").disabled = false;
+}
+$("#sysbtn").onclick = openSystem;
+$("#sysagain").onclick = runScan;
+$("#sysclose").onclick = () => $("#sysmodal").classList.remove("open");
+$("#sysmodal").addEventListener("click", e => { if (e.target.id === "sysmodal") $("#sysmodal").classList.remove("open"); });
+
+// ---------- profile + PIN (R7)
+function renderProfChip(p) {
+  const b = $("#profbtn");
+  b.textContent = p.name ? initials(p.name) : "";
+  if (!p.name) b.innerHTML = `<svg class="icon"><use href="#i-${p.has_pin ? "lock" : "key"}"/></svg>`;
+  b.title = (p.name || "Your profile") + (p.has_pin ? " · PIN on" : "");
+}
+async function openProfile() {
+  $("#profmodal").classList.add("open");
+  renderProfile(await (await api("/api/profile")).json());
+}
+function renderProfile(p) {
+  renderProfChip(p);
+  const pinPart = p.has_pin ? `
+      <h4>PIN is on</h4><p>One Production asks for it every time it starts, and after <b>Lock now</b>.</p>
+      <div class="pform"><input type="password" inputmode="numeric" id="pcur" placeholder="Current PIN" maxlength="12">
+        <input type="password" inputmode="numeric" id="pnew" placeholder="New PIN" maxlength="12">
+        <button class="btn" id="pchange">Change PIN</button><button class="btn" id="premove">Remove PIN</button></div>
+      <div class="pform" style="margin-top:10px"><button class="btn primary" id="plock">Lock now</button></div>` : `
+      <h4>PIN is off</h4><p>Optional. With a PIN, One Production starts locked until it's entered — handy if others use this PC.</p>
+      <div class="pform"><input type="password" inputmode="numeric" id="pnew" placeholder="New PIN (4–12 digits)" maxlength="12">
+        <input type="password" inputmode="numeric" id="pnew2" placeholder="Repeat it" maxlength="12">
+        <button class="btn primary" id="pset">Set PIN</button></div>`;
+  $("#profbody").innerHTML = `
+    <div class="psect"><h4>Name</h4><p>Shown in the corner.</p>
+      <div class="pform"><input class="wide" id="pname" maxlength="40" placeholder="Your name" value="${esc(p.name)}">
+        <button class="btn" id="psave">Save</button></div></div>
+    <div class="psect">${pinPart}<div class="pmsg" id="pmsg"></div></div>`;
+  const msg = (t, ok) => { $("#pmsg").textContent = t; $("#pmsg").className = "pmsg " + (ok ? "ok" : "bad"); };
+  const post = async (url, body) => (await api(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })).json();
+  $("#psave").onclick = async () => {
+    renderProfile(await (await api("/api/profile", { method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: $("#pname").value }) })).json());
+    toast("Name saved");
+  };
+  if ($("#pset")) $("#pset").onclick = async () => {
+    if ($("#pnew").value !== $("#pnew2").value) return msg("The two PINs don't match.");
+    try { renderProfile(await post("/api/profile/pin", { new: $("#pnew").value })); toast("PIN set — it's asked for every time the app starts"); }
+    catch (e) { msg(e.message); }
+  };
+  if ($("#pchange")) $("#pchange").onclick = async () => {
+    try { renderProfile(await post("/api/profile/pin", { current: $("#pcur").value, new: $("#pnew").value })); toast("PIN changed"); }
+    catch (e) { msg(e.message); }
+  };
+  if ($("#premove")) $("#premove").onclick = async () => {
+    try { renderProfile(await post("/api/profile/pin", { current: $("#pcur").value, new: null })); toast("PIN removed"); }
+    catch (e) { msg(e.message); }
+  };
+  if ($("#plock")) $("#plock").onclick = async () => {
+    await post("/api/profile/lock", {});
+    $("#profmodal").classList.remove("open"); showPinLock(p);
+  };
+}
+$("#profbtn").onclick = openProfile;
+$("#profclose").onclick = () => $("#profmodal").classList.remove("open");
+$("#profmodal").addEventListener("click", e => { if (e.target.id === "profmodal") $("#profmodal").classList.remove("open"); });
+
+let afterUnlock = null;
+function showPinLock(p, then) {
+  if (then) afterUnlock = then;
+  if (p && p.name) $("#pinhello").textContent = `Welcome back, ${p.name}`;
+  $("#pinlock").classList.add("open");
+  $("#pinmsg").textContent = "";
+  $("#pininput").value = "";
+  setTimeout(() => $("#pininput").focus(), 30);
+}
+$("#pinform").onsubmit = async e => {
+  e.preventDefault();
+  try {
+    const p = await (await api("/api/profile/unlock", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pin: $("#pininput").value }) })).json();
+    $("#pinlock").classList.remove("open");
+    renderProfChip(p);
+    const then = afterUnlock; afterUnlock = null;
+    if (then) await then();
+  } catch (err) { $("#pinmsg").textContent = err.message; $("#pininput").select(); }
+};
+
 // ---------- start
 (async () => {
   if (!TOKEN) { lock(); return; }
@@ -1700,6 +1997,15 @@ $("#csvbtn").onclick = async e => {
     $("#ver").textContent = "v" + h.version;
     $("#datadir").textContent = h.data_dir;
     $("#datadir").title = h.data_dir;
+    const prof = await (await api("/api/profile")).json();
+    renderProfChip(prof);
+    if (prof.locked) { showPinLock(prof, bootApp); return; }
+    await bootApp();
+  } catch (e) { /* 401 already showed the lock screen */ }
+})();
+
+async function bootApp() {
+  try {
     await loadAccounts();
     await loadProjects();
     // refresh login status in the background so dead logins show up early
@@ -1707,8 +2013,8 @@ $("#csvbtn").onclick = async e => {
       .then(list => { state.accounts = list; renderPicker(); renderAccounts(); })
       .then(() => api("/api/usage/refresh", { method: "POST" })).then(r => r.json())
       .then(list => { state.accounts = list; renderPicker(); renderAccounts(); }).catch(() => {});
-  } catch (e) { /* 401 already showed the lock screen */ }
-})();
+  } catch (e) { /* 401 / 423 already showed their screens */ }
+}
 </script>
 </body>
 </html>

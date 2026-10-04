@@ -72,7 +72,11 @@ class Store:
         src = self._dir(pid)
         trash = self.root.parent / "trash"
         trash.mkdir(exist_ok=True)
-        dst = trash / f"{pid}-{time.strftime('%Y%m%d-%H%M%S')}"
+        base = f"{pid}-{time.strftime('%Y%m%d-%H%M%S')}"
+        dst, n = trash / base, 1
+        while dst.exists():                      # two moves within one second
+            n += 1
+            dst = trash / f"{base}-{n}"
         src.rename(dst)
         return dst
 

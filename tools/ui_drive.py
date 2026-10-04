@@ -479,6 +479,74 @@ try:
             "document.querySelectorAll('.bubble .step.ok').length>=1 && document.querySelectorAll('.bubble .step.bad').length>=1", 8))
         shot("24-agent-history")
 
+    # backups, system scan, profile + PIN (P6)
+    if os.environ.get("UI_DRIVE_P6") == "1":
+        go = lambda name: js("[...document.querySelectorAll('#projects li[data-id]')].find(l=>l.innerText.includes('%s')).click()" % name)
+        names = lambda: js("[...document.querySelectorAll('#projects li[data-id] .pname')].map(e=>e.innerText)") or []
+        go("Ghost Towns"); time.sleep(0.5)
+        files_before = js("document.querySelectorAll('#files li').length")
+        js("document.querySelector('#bkbtn').click()")
+        check("backups screen opens", wait_for("document.querySelector('#bkmodal').classList.contains('open')", 5))
+        check("backup folder shown", wait_for("document.querySelector('#bkfolder').value.length>3", 5),
+              js("document.querySelector('#bkfolder').value"))
+        js("document.querySelector('#bknow').click()")
+        check("Back up now makes a backup", wait_for("document.querySelectorAll('#bklist .bk').length===1", 15))
+        check("backup lists every project", js("document.querySelectorAll('#bklist .bkp').length") == len(names()),
+              f"{js('document.querySelectorAll(\'#bklist .bkp\').length')} rows, {len(names())} projects")
+        shot("25-backups")
+        js("document.querySelector('#bkclose').click()")
+        # delete Ghost Towns, then bring it back from the backup
+        js("[...document.querySelectorAll('#projects li[data-id]')].find(l=>l.innerText.includes('Ghost Towns')).querySelector('.pdel').click()")
+        wait_for("!!document.querySelector('#projects li.confirm')", 5)
+        js("document.querySelector('#projects li.confirm [data-a=del]').click()")
+        check("project deleted", wait_for("![...document.querySelectorAll('#projects .pname')].some(e=>e.innerText.includes('Ghost Towns'))", 5))
+        js("document.querySelector('#bkbtn').click()")
+        check("backup shows it as deleted", wait_for(
+            "[...document.querySelectorAll('#bklist .bkp')].some(r=>r.innerText.includes('Ghost Towns') && r.innerText.includes('DELETED'))", 8))
+        js("[...document.querySelectorAll('#bklist .bkp')].find(r=>r.innerText.includes('Ghost Towns')).querySelector('[data-a=restore]').click()")
+        check("restore asks first (inline)", wait_for("!!document.querySelector('#bklist .bkp .ask')", 5))
+        shot("26-restore-ask")
+        js("document.querySelector('#bklist .bkp .ask [data-a=yes]').click()")
+        check("project restored", wait_for("[...document.querySelectorAll('#projects .pname')].some(e=>e.innerText.includes('Ghost Towns'))", 10))
+        js("document.querySelector('#bkclose').click()")
+        go("Ghost Towns"); time.sleep(0.8)
+        check("restored project has all its files", wait_for(f"document.querySelectorAll('#files li').length==={files_before}", 8),
+              f"{js('document.querySelectorAll(\'#files li\').length')} vs {files_before}")
+        check("restored chat history shown", wait_for("document.querySelectorAll('.row.user').length>=1", 5))
+
+        # system scan
+        js("document.querySelector('#sysbtn').click()")
+        check("system scan shows this PC", wait_for("document.querySelectorAll('#sysbody .sysrow').length>=12", 30),
+              str(js("document.querySelectorAll('#sysbody .sysrow').length")))
+        check("every problem says what to do", js(
+            "[...document.querySelectorAll('#sysbody .sysrow.warn, #sysbody .sysrow.bad')].every(r=>!!r.querySelector('.sf'))") is True)
+        shot("27-system")
+        js("document.querySelector('#sysclose').click()")
+
+        # profile + PIN
+        js("document.querySelector('#profbtn').click()")
+        wait_for("!!document.querySelector('#pname')", 5)
+        js("document.querySelector('#pname').value='Sam'; document.querySelector('#psave').click()")
+        check("name shows in the corner", wait_for("document.querySelector('#profbtn').innerText==='S'", 5))
+        js("document.querySelector('#pnew').value='4829'; document.querySelector('#pnew2').value='4829'; document.querySelector('#pset').click()")
+        check("PIN set", wait_for("!!document.querySelector('#plock')", 5))
+        shot("28-profile")
+        js("document.querySelector('#plock').click()")
+        check("Lock now shows the PIN screen", wait_for("document.querySelector('#pinlock').classList.contains('open')", 5))
+        js("document.querySelector('#pininput').value='0000'; document.querySelector('#pinform').requestSubmit()")
+        check("wrong PIN refused", wait_for("document.querySelector('#pinmsg').innerText.includes('wrong')", 5))
+        shot("29-pin")
+        js("document.querySelector('#pininput').value='4829'; document.querySelector('#pinform').requestSubmit()")
+        check("right PIN unlocks", wait_for("!document.querySelector('#pinlock').classList.contains('open')", 5))
+        go("Empty one"); time.sleep(0.5)
+        check("app works again after unlock", wait_for("!document.querySelector('#input').disabled", 5))
+        # remove the PIN so later checks (reload = locked page) are about the token, not the PIN
+        js("document.querySelector('#profbtn').click()")
+        wait_for("!!document.querySelector('#pcur')", 5)
+        js("document.querySelector('#pcur').value='4829'; document.querySelector('#premove').click()")
+        check("PIN removed", wait_for("!!document.querySelector('#pset')", 5))
+        js("document.querySelector('#profclose').click()")
+
     # dark mode (Windows dark theme)
     send("Emulation.setEmulatedMedia", features=[{"name": "prefers-color-scheme", "value": "dark"}])
     time.sleep(0.3); shot("06b-dark")
