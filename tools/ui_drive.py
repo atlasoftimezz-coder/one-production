@@ -294,6 +294,15 @@ try:
               wait_for("document.querySelector('#vstats').innerText.includes('14 spoken words')", 8),
               js("document.querySelector('#vstats').innerText"))
         check("voices come from the voice app", "human_ref48.wav" in (js("document.querySelector('#vvoice').innerText") or ""))
+        for scheme in ("dark", "light"):                  # user report: dropdown text unreadable in dark mode
+            send("Emulation.setEmulatedMedia", features=[{"name": "prefers-color-scheme", "value": scheme}])
+            time.sleep(0.2)
+            bad = js("""(()=>{const ink=getComputedStyle(document.body).color;
+  return [...document.querySelectorAll('#voicemodal select, #voicemodal input:not([type=checkbox]):not([type=file]), #picker')]
+    .filter(e=>getComputedStyle(e).color!==ink).map(e=>e.id||e.tagName)})()""")
+            check(f"dialog text readable in {scheme} mode", bad == [], ", ".join(bad or []))
+            if scheme == "dark":
+                shot("17a-voice-dialog-dark")
         js("{const s=document.querySelector('#vvoice'); s.value='human_ref48.wav'; s.dispatchEvent(new Event('change'))}")
         js("document.querySelector('#vplay').click()")
         check("play button plays the chosen voice", wait_for(

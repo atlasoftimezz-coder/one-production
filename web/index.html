@@ -24,7 +24,12 @@
   html, body { height: 100%; }
   body { margin: 0; background: var(--bg); color: var(--ink);
          font: 14px/1.55 "Segoe UI Variable", "Segoe UI", ui-sans-serif, system-ui, sans-serif; }
-  button, input, textarea { font: inherit; color: inherit; }
+  /* native controls (dropdown lists, file picker, spinners) follow the theme */
+  :root { color-scheme: dark; }
+  @media (prefers-color-scheme: light) { :root { color-scheme: light; } }
+  button, input, textarea, select { font: inherit; color: inherit; }
+  option { background: var(--panel); color: var(--ink); }
+  ::placeholder { color: var(--faint); opacity: 1; }
   button { cursor: pointer; border: 0; background: none; }
   svg { display: block; }
   .icon { width: 18px; height: 18px; flex: none; stroke: currentColor; fill: none; stroke-width: 2;

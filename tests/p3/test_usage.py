@@ -79,9 +79,23 @@ def test_csv_export_is_redacted(client, project, monkeypatch):
     db.execute("UPDATE calls SET project=?", (f"oops {GOOD_KEY}",)); db.commit(); db.close()
     r = client.get("/api/usage/export.csv?range=month")
     assert r.status_code == 200 and "attachment" in r.headers["content-disposition"]
-    rows = list(csv.reader(io.StringIO(r.text)))
-    assert rows[0][0] == "time" and len(rows) == 2
+    assert r.text.startswith("﻿")                       # Excel opens it as UTF-8
+    rows = list(csv.reader(io.StringIO(r.text.lstrip("﻿"))))
+    msgs = rows[rows.index(["MESSAGES"]) + 1:]
+    assert msgs[0][0] == "time" and len(msgs) == 2
     assert GOOD_KEY not in r.text and "[REDACTED" in r.text
+
+
+def test_csv_export_has_account_usage_even_before_any_message(client, monkeypatch):
+    # user report: the export was empty while the usage page showed 13% / 25%
+    claude = signed_in(client, "claude", monkeypatch=monkeypatch)
+    client.post("/api/usage/refresh")                         # free live read, no message sent
+    rows = list(csv.reader(io.StringIO(client.get("/api/usage/export.csv?range=today").text.lstrip("﻿"))))
+    head = rows[rows.index(["ACCOUNTS"]) + 1]
+    acc = dict(zip(head, next(r for r in rows if r and r[0] == claude["label"])))
+    assert acc["used_now_pct"] == "34.0" and acc["session_5h_pct"] == "34.0" and acc["week_pct"] == "18.0"
+    assert acc["measured"] == "exact" and acc["session_resets"] and acc["requests"] == "0"
+    assert any("No messages were sent" in r[0] for r in rows if r)
 
 
 def test_estimate_accuracy_flags_unreliable_estimates(client, project, memory_keyring):

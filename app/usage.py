@@ -134,15 +134,35 @@ class Ledger:
         return {"hits": len(hits), "median_est_at_hit": round(med, 1), "min_est_at_hit": round(min(hits), 1),
                 "reliable": ok}
 
-    def export_csv(self, range_name: str, redact) -> str:
+    def export_csv(self, range_name: str, redact, accounts: list[dict] | None = None) -> str:
+        """Two tables, Excel-friendly: every account's usage as shown on the usage page (so the
+        export is useful even before any message was sent), then one row per message."""
         since = range_start(range_name)
+        stamp = lambda ts: time.strftime("%Y-%m-%d %H:%M", time.localtime(ts)) if ts else ""
+        clean = lambda row: [redact(str(v)) if isinstance(v, str) else ("" if v is None else v) for v in row]
         buf = io.StringIO()
         w = csv.writer(buf)
+        w.writerow(["One Production usage", f"range: {range_name}", f"from {stamp(since)}",
+                    f"exported {stamp(time.time())}"])
+        w.writerow([])
+        w.writerow(["ACCOUNTS"])
+        acols = ["label", "provider", "email", "plan", "status", "used_now_pct", "measured", "session_5h_pct",
+                 "session_resets", "week_pct", "week_resets", "requests", "in_tok", "out_tok", "cost_usd", "last_used"]
+        w.writerow(acols)
+        for a in accounts or []:
+            w.writerow(clean([a.get(k) if k not in ("session_resets", "week_resets", "last_used")
+                              else stamp(a.get(k)) for k in acols]))
+        w.writerow([])
+        w.writerow(["MESSAGES"])
         cols = ["ts", "account", "provider", "project", "model", "in_tok", "out_tok", "cache_read",
                 "cache_write", "cost_usd", "outcome", "err_kind", "util_5h", "util_7d"]
         w.writerow(["time"] + cols[1:])
+        n = 0
         with self._conn() as c:
             for r in c.execute(f"SELECT {', '.join(cols)} FROM calls WHERE ts>=? ORDER BY ts", (since,)):
-                row = [time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(r["ts"]))] + [r[k] for k in cols[1:]]
-                w.writerow([redact(str(v)) if isinstance(v, str) else ("" if v is None else v) for v in row])
+                w.writerow(clean([time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(r["ts"]))]
+                                 + [r[k] for k in cols[1:]]))
+                n += 1
+        if not n:
+            w.writerow([f"No messages were sent through One Production in this range ({range_name})."])
         return buf.getvalue()

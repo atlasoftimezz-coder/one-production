@@ -497,7 +497,24 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
     def export_csv(range: str = "month") -> PlainTextResponse:
         if range not in RANGES:
             raise HTTPException(400, "unknown range")
-        return PlainTextResponse(ledger.export_csv(range, redact), media_type="text/csv; charset=utf-8",
+        now = time.time()
+
+        def window(a: dict, name: str) -> tuple:
+            w = ((a.get("rate_limit") or {}).get("windows") or {}).get(name) or {}
+            if w.get("utilization") is None:
+                return None, None
+            expired = w.get("resets_at") and w["resets_at"] <= now      # started again from zero
+            return (0.0 if expired else round(w["utilization"] * 100, 1)), (None if expired else w.get("resets_at"))
+
+        rows, full = [], {a["id"]: a for a in accounts.list()}
+        for card in usage(range)["cards"]:
+            a = full.get(card["id"], {})
+            (s5, r5), (s7, r7) = window(a, "five_hour"), window(a, "seven_day")
+            rows.append({**card, "used_now_pct": card["usage_pct"], "measured": card["usage_kind"],
+                         "session_5h_pct": s5, "session_resets": r5, "week_pct": s7, "week_resets": r7})
+        # the BOM makes Excel read the file as UTF-8 (otherwise dashes and accents come out garbled)
+        return PlainTextResponse("﻿" + ledger.export_csv(range, redact, rows),
+                                 media_type="text/csv; charset=utf-8",
                                  headers={"Content-Disposition": f'attachment; filename="usage-{range}.csv"'})
 
     # ---------------------------------------------------------------- chat
