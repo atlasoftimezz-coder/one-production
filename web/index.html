@@ -256,6 +256,70 @@
   #pinlock .btn { width: 100%; margin-top: 12px; padding: 10px; }
   #pinlock .pmsg { color: var(--bad); }
 
+  /* ---------- P7: setup wizard ---------- */
+  #setup { position: fixed; inset: 0; z-index: 30; display: none; padding: 24px;
+           background: radial-gradient(1200px 600px at 10% 0%, rgba(168,85,247,.16), transparent 60%),
+                       radial-gradient(900px 500px at 100% 100%, rgba(255,107,74,.12), transparent 60%), var(--bg); }
+  #setup.open { display: grid; place-items: center; }
+  body.insetup .scrim { z-index: 40; }
+  body.insetup #toast { z-index: 50; }
+  .wiz { width: min(1080px, 100%); height: min(760px, 100%); display: grid; grid-template-columns: 250px 1fr;
+         background: var(--panel); border: 1px solid var(--line); border-radius: 22px; box-shadow: var(--shadow); overflow: hidden; }
+  .wiz .rail { background: var(--bg2); border-right: 1px solid var(--line); padding: 22px 16px; display: flex; flex-direction: column; gap: 4px; }
+  .wiz .rail .brand2 { display: flex; gap: 10px; align-items: center; font-weight: 800; margin-bottom: 14px; }
+  .wiz .rail .mark { width: 30px; height: 30px; }
+  .wstep { display: flex; gap: 10px; align-items: center; padding: 8px 10px; border-radius: 10px; color: var(--dim);
+           font-size: 13.5px; border: 0; background: none; text-align: left; cursor: pointer; }
+  .wstep .n { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 11.5px;
+              font-weight: 800; background: var(--panel2); color: var(--dim); flex: none; }
+  .wstep.on { background: var(--panel); color: var(--ink); font-weight: 700; box-shadow: inset 0 0 0 1px var(--line); }
+  .wstep.on .n { background: var(--grad); color: #fff; }
+  .wstep.done .n { background: var(--ok); color: #fff; }
+  .wiz .rail .later { margin-top: auto; }
+  .wmain { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+  .whead { padding: 24px 28px 8px; }
+  .whead h2 { margin: 0 0 6px; font-size: 22px; }
+  .whead p { margin: 0; color: var(--dim); }
+  .wbody { flex: 1; overflow: auto; padding: 14px 28px; }
+  .wfoot { display: flex; gap: 10px; align-items: center; padding: 14px 28px; border-top: 1px solid var(--line); }
+  .wfoot .grow { flex: 1; color: var(--dim); font-size: 12.5px; }
+  @media (max-width: 760px) { .wiz { grid-template-columns: 1fr; } .wiz .rail { display: none; } }
+  .wcards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+  .wcard { border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; background: var(--bg2); cursor: pointer;
+           display: grid; gap: 4px; text-align: left; }
+  .wcard:hover { border-color: var(--accent); }
+  .wcard.pick { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+  .wcard b { font-size: 14px; } .wcard small { color: var(--dim); }
+  .wrow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 12px 0; }
+  .wrow input[type=text] { flex: 1; min-width: 240px; padding: 9px 11px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); }
+  .wnote { color: var(--dim); font-size: 12.5px; margin: 8px 0; }
+  .wnote.warn { color: var(--warn); } .wnote.ok { color: var(--ok); } .wnote.bad { color: var(--bad); }
+  .mod { border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin-bottom: 10px; background: var(--bg2); }
+  .mod.later { opacity: .6; }
+  .mod .mh { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .mod .mh b { font-size: 15px; }
+  .mod .st { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--panel2); color: var(--dim); }
+  .mod .st.ready { color: var(--ok); } .mod .st.needs_install, .mod .st.broken { color: var(--warn); }
+  .mod p { margin: 6px 0 0; font-size: 13px; color: var(--dim); }
+  .mod .opts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .mod .opt { padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); font-size: 13px; cursor: pointer; }
+  .mod .opt.on { border-color: var(--accent); background: rgba(124,140,255,.12); font-weight: 700; }
+  .mod .opt:disabled { opacity: .45; cursor: not-allowed; }
+  .inst { border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; margin-bottom: 8px; background: var(--bg2); display: grid; gap: 6px; }
+  .inst .ih { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .inst .ih b { flex: 1; min-width: 160px; }
+  .inst .meta { color: var(--dim); font-size: 12.5px; }
+  .inst label { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; }
+  .inst .bar { height: 6px; border-radius: 4px; background: var(--panel2); overflow: hidden; }
+  .inst .bar i { display: block; height: 100%; width: 0; background: var(--grad); transition: width .3s; }
+  .inst .ist { font-size: 12px; font-weight: 700; }
+  .inst .ist.done, .inst .ist.present { color: var(--ok); } .inst .ist.failed { color: var(--bad); }
+  .inst .ist.running { color: var(--accent); } .inst .ist.cancelled { color: var(--warn); }
+  .inst .err { color: var(--bad); font-size: 12.5px; white-space: pre-wrap; }
+  .tick { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--ok); color: #fff; font-weight: 800; font-size: 13px; }
+  .wtest { border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin-bottom: 10px; background: var(--bg2); }
+  .wtest .out { margin-top: 8px; font-size: 13px; }
+
   /* ---------- accounts ---------- */
   .topbtn { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 10px;
             background: var(--panel); border: 1px solid var(--line); font-weight: 600; font-size: 13px; }
@@ -672,6 +736,7 @@
       <div class="mark"><svg viewBox="0 0 24 24"><use href="#i-play"/></svg></div>
       <div style="flex:1"><h3>System</h3>
         <p>What this PC has. Read-only — nothing is installed or changed. <span id="sysat"></span></p></div>
+      <button class="btn" id="syssetup">Set up / modules</button>
       <button class="btn" id="sysagain">Scan again</button>
       <button class="iconbtn" id="sysclose" title="Close"><svg class="icon"><use href="#i-x"/></svg></button>
     </div>
@@ -687,6 +752,22 @@
       <button class="iconbtn" id="profclose" title="Close"><svg class="icon"><use href="#i-x"/></svg></button>
     </div>
     <div class="mbody" id="profbody"></div>
+  </div>
+</div>
+
+<div id="setup" role="dialog" aria-label="Set up One Production">
+  <div class="wiz">
+    <div class="rail">
+      <div class="brand2"><div class="mark"><svg viewBox="0 0 24 24"><use href="#i-play"/></svg></div>Set up</div>
+      <div id="wsteps"></div>
+      <button class="btn later" id="wlater">Finish later</button>
+    </div>
+    <div class="wmain">
+      <div class="whead"><h2 id="wtitle"></h2><p id="wsub"></p></div>
+      <div class="wbody" id="wbody"></div>
+      <div class="wfoot"><span class="grow" id="wfootnote"></span>
+        <button class="btn" id="wback">Back</button><button class="btn primary" id="wnext">Next</button></div>
+    </div>
   </div>
 </div>
 
@@ -1399,11 +1480,11 @@ async function openVoice(fileName) {
   try { st = await (await api("/api/voice/status")).json(); }
   catch (e) { $("#voicebody").innerHTML = `<div class="verr">${esc(e.message)}</div>`; return; }
   if (!st.configured) {
-    $("#voicebody").innerHTML = `<div class="vsetup"><b>The voice module isn't set up on this PC.</b>
-      <p>It needs the separate voiceover app and its Python (with the voice model). Add these to
-      <code>%APPDATA%\\OneProduction\\settings.json</code>:</p>
-      <ul>${st.missing.map(m => `<li><code>${esc(m)}</code></li>`).join("")}</ul>
-      <p>Everything else in One Production works without it.</p></div>`;
+    $("#voicebody").innerHTML = `<div class="vsetup"><b>The voice module isn't ready on this PC.</b>
+      <p>${st.missing.map(m => esc(m)).join("<br>")}</p>
+      <p>Everything else in One Production works without it.</p>
+      <button class="btn primary" id="vgosetup">Open setup</button></div>`;
+    $("#vgosetup").onclick = () => { closeVoice(); openSetup(2); };
     return;
   }
   if (!st.running) {
@@ -1988,6 +2069,317 @@ $("#pinform").onsubmit = async e => {
   } catch (err) { $("#pinmsg").textContent = err.message; $("#pininput").select(); }
 };
 
+// ---------- setup wizard (P7, plan R13)
+const WSTEPS = [
+  ["Welcome", "Where One Production keeps your work"],
+  ["Your PC", "What this PC has - nothing is installed or changed here"],
+  ["Modules", "Choose what you want to use"],
+  ["Install", "Download only what's missing - you OK each item"],
+  ["Accounts", "Connect at least one AI account"],
+  ["Your voice", "Add your own reference voice"],
+  ["Test run", "Check everything works end to end"],
+];
+const wiz = { step: 0, setup: null, poll: null, installOk: {} };
+async function openSetup(step = 0) {
+  document.body.classList.add("insetup");
+  $("#setup").classList.add("open");
+  wiz.setup = await (await api("/api/setup")).json();
+  await showStep(step);
+}
+function closeSetup() {
+  clearInterval(wiz.poll); wiz.poll = null;
+  $("#setup").classList.remove("open"); document.body.classList.remove("insetup");
+}
+async function showStep(n) {
+  clearInterval(wiz.poll); wiz.poll = null;
+  wiz.step = n;
+  $("#wsteps").innerHTML = WSTEPS.map(([t], i) => `<button class="wstep ${i === n ? "on" : i < n ? "done" : ""}" data-i="${i}">
+    <span class="n">${i < n ? "✓" : i + 1}</span>${esc(t)}</button>`).join("");
+  document.querySelectorAll("#wsteps .wstep").forEach(b => b.onclick = () => showStep(Number(b.dataset.i)));
+  $("#wtitle").textContent = WSTEPS[n][0]; $("#wsub").textContent = WSTEPS[n][1];
+  $("#wback").style.visibility = n ? "visible" : "hidden";
+  $("#wnext").textContent = n === WSTEPS.length - 1 ? "Finish" : "Next";
+  $("#wnext").disabled = false; $("#wfootnote").textContent = "";
+  $("#wbody").innerHTML = `<div class="navempty">One moment…</div>`;
+  api("/api/setup", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ step: n }) }).catch(() => {});
+  await [stepWelcome, stepScan, stepModules, stepInstall, stepAccounts, stepVoice, stepTest][n]();
+}
+$("#wback").onclick = () => showStep(Math.max(0, wiz.step - 1));
+$("#wlater").onclick = () => { closeSetup(); toast("Setup can be finished any time from System, Set up / modules"); };
+$("#wnext").onclick = async () => {
+  if (wiz.next) { const go = await wiz.next(); if (go === false) return; }
+  if (wiz.step === WSTEPS.length - 1) {
+    await api("/api/setup", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ done: true }) });
+    closeSetup(); toast("You're set up"); loadProjects(); loadAccounts();
+    return;
+  }
+  showStep(wiz.step + 1);
+};
+
+async function stepWelcome() {
+  const s = wiz.setup = await (await api("/api/setup")).json();
+  const canMove = s.first_run || s.chose_folder;
+  wiz.folder = s.data_dir;
+  $("#wbody").innerHTML = `
+    <p>One Production keeps your projects, chats, voiceovers and backups in one folder on this PC.
+       Pick a drive with plenty of free space — voiceovers and backups grow.</p>
+    ${canMove ? `<div class="wcards" id="wdrives">${s.drives.map(d => `<button class="wcard${d.suggest.toLowerCase() === s.data_dir.toLowerCase() ? " pick" : ""}" data-p="${esc(d.suggest)}">
+        <b>Drive ${esc(d.drive)}</b><small>${d.free_gb} GB free of ${d.total_gb} GB</small><small>${esc(d.suggest)}</small></button>`).join("")}</div>
+      <div class="wrow"><input type="text" id="wfolder" spellcheck="false" value="${esc(s.data_dir)}"></div>
+      <div class="wnote ${s.data_free_gb < 20 ? "warn" : ""}">Now: ${esc(s.data_dir)} — ${s.data_free_gb} GB free.${s.data_free_gb < 20 ? " That's tight - a drive with more space is better." : ""}</div>`
+    : `<div class="wrow"><input type="text" id="wfolder" value="${esc(s.data_dir)}" disabled></div>
+       <div class="wnote">Your work is already here. Moving it to another drive isn't automatic yet: close One Production, copy this folder, then change <code>data_dir</code> in settings.json.</div>`}`;
+  document.querySelectorAll("#wdrives .wcard").forEach(b => b.onclick = () => {
+    document.querySelectorAll("#wdrives .wcard").forEach(x => x.classList.remove("pick"));
+    b.classList.add("pick"); $("#wfolder").value = b.dataset.p;
+  });
+  wiz.next = async () => {
+    if (!canMove) return true;
+    try {
+      const r = await (await api("/api/setup/data-folder", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: $("#wfolder").value }) })).json();
+      if (r.restarting) {
+        $("#wbody").innerHTML = `<p><b>Moving to ${esc(r.data_dir)}…</b></p><p>One Production is restarting there and opens a new tab by itself. You can close this tab.</p>`;
+        $("#wnext").disabled = true; return false;
+      }
+      if (r.saved) { $("#wfootnote").textContent = r.message; return false; }
+      return true;
+    } catch (e) { $("#wfootnote").textContent = e.message; return false; }
+  };
+}
+
+function scanHtml(d) {
+  const groups = [...new Set(d.items.map(i => i.group))];
+  return groups.map(g => `<div class="sysgrp"><h4>${esc(g)}</h4>${d.items.filter(i => i.group === g).map(i => `
+    <div class="sysrow ${esc(i.status)}" data-id="${esc(i.id)}"><span class="sd"></span>
+      <span class="sl">${esc(i.label)}</span><span class="sv">${esc(i.value)}</span>
+      ${i.fix ? `<span class="sf">${esc(i.fix)}</span>` : ""}</div>`).join("")}</div>`).join("");
+}
+async function stepScan() {
+  wiz.next = null;
+  const d = await (await api("/api/system")).json();
+  $("#wbody").innerHTML = `<p class="wnote">Green is good, amber means "works, but worth a look", red needs fixing. Nothing here is changed by the scan.</p>` + scanHtml(d);
+}
+
+const MODE_TEXT = { gpu: "Graphics card", cpu: "Processor only (slow)", off: "Off" };
+const STATE_TEXT = { ready: "READY", needs_install: "NEEDS INSTALL", installing: "INSTALLING", broken: "NEEDS REPAIR", off: "OFF", later: "PHASE 2" };
+async function stepModules() {
+  wiz.next = null;
+  const d = await (await api("/api/modules")).json();
+  $("#wbody").innerHTML = d.modules.map(m => `<div class="mod ${m.state === "later" ? "later" : ""}" data-id="${esc(m.id)}">
+      <div class="mh"><b>${esc(m.label)}</b><span class="st ${esc(m.state)}">${STATE_TEXT[m.state] || esc(m.state)}</span>
+        ${m.always ? `<span class="st">ALWAYS ON</span>` : ""}</div>
+      <p>${esc(m.what)}</p><p><b>Needs:</b> ${esc(m.needs)}</p>
+      ${m.detail ? `<p>${esc(m.detail)}</p>` : ""}${m.warning ? `<p class="wnote warn">${esc(m.warning)}</p>` : ""}
+      ${m.id === "voice" && !m.external ? `<div class="opts">${["gpu", "cpu", "off"].map(k => `<button class="opt ${m.mode === k ? "on" : ""}" data-mode="${k}"
+          ${k === "gpu" && !m.gpu_ok ? "disabled title='No NVIDIA card with 8 GB found'" : ""}>${MODE_TEXT[k]}${k === m.suggested ? " · suggested" : ""}</button>`).join("")}</div>` : ""}
+    </div>`).join("");
+  document.querySelectorAll(".mod .opt[data-mode]").forEach(b => b.onclick = async () => {
+    try { await api("/api/modules/voice", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: b.dataset.mode }) }); }
+    catch (e) { toast(e.message, true); }
+    stepModules();
+  });
+}
+
+const IST = { present: "already here", pending: "not yet", waiting: "waiting", running: "working…", done: "done", failed: "failed", cancelled: "stopped" };
+async function stepInstall() {
+  wiz.next = null;
+  const mods = (await (await api("/api/modules")).json()).modules;
+  const voice = mods.find(m => m.id === "voice");
+  if (voice.external || voice.state === "ready" || voice.mode === "off") {
+    $("#wbody").innerHTML = voice.mode === "off" && !voice.external
+      ? `<p>The voice module is off, so there's nothing to download. Core works without it; you can switch Voice on any time.</p>`
+      : `<p><span class="tick">✓</span> Everything needed is already on this PC — nothing to download.</p>`;
+    return;
+  }
+  let st = await (await api("/api/install")).json();
+  if (!st.running) st = { items: (await (await api("/api/install/plan?module=voice")).json()).items, running: false };
+  renderInstall(st);
+  if (st.running) watchInstall();
+}
+function renderInstall(st) {
+  const todo = st.items.filter(i => !["present", "done"].includes(i.status) && i.id !== "verify");
+  const mb = todo.reduce((a, i) => a + i.size_mb, 0);
+  $("#wbody").innerHTML = `
+    <p>${todo.length ? `These are missing for the voice module — about <b>${mb >= 1000 ? (mb / 1000).toFixed(1) + " GB" : Math.round(mb) + " MB"}</b> to download.
+       Everything goes into One Production's data folder; nothing is installed on the PC itself. Tick each one you're OK with.` :
+       `<span class="tick">✓</span> Everything is installed.`}</p>
+    ${todo.length && !st.running ? `<div class="wrow"><button class="btn" id="wallok">Tick all</button></div>` : ""}
+    ${st.items.map(i => `<div class="inst" data-id="${esc(i.id)}">
+      <div class="ih"><b>${esc(i.label)}</b>
+        ${["present", "done"].includes(i.status) || st.running || i.id === "verify" ? `<span class="ist ${esc(i.status)}">${IST[i.status] || esc(i.status)}</span>` :
+          `<label><input type="checkbox" class="iok" data-id="${esc(i.id)}" ${wiz.installOk[i.id] ? "checked" : ""}> OK to download</label>`}</div>
+      ${i.why ? `<div class="meta">${esc(i.why)}</div>` : ""}
+      ${i.size_mb ? `<div class="meta">${i.size_mb >= 1000 ? (i.size_mb / 1000).toFixed(1) + " GB" : Math.round(i.size_mb) + " MB"} from ${esc(i.source)}</div>` : ""}
+      ${["running", "waiting"].includes(i.status) || (i.progress > 0 && i.status !== "done") ? `<div class="bar"><i style="width:${Math.round(i.progress * 100)}%"></i></div><div class="meta">${esc(i.detail || "")}</div>` : ""}
+      ${i.error ? `<div class="err">${esc(i.error)}</div>` : ""}
+    </div>`).join("")}
+    <div class="wrow">${st.running ? `<button class="btn" id="wcancel">Cancel</button>` :
+      todo.length ? `<button class="btn primary" id="winstall">${st.items.some(i => ["failed", "cancelled"].includes(i.status)) ? "Retry" : "Install"}</button>` : ""}</div>
+    ${st.finished && st.finished.ok ? `<p class="wnote ok"><span class="tick">✓</span> Voice module installed and checked.</p>` : ""}`;
+  document.querySelectorAll(".iok").forEach(c => c.onchange = () => { wiz.installOk[c.dataset.id] = c.checked; });
+  if ($("#wallok")) $("#wallok").onclick = () => { todo.forEach(i => wiz.installOk[i.id] = true); renderInstall(st); };
+  if ($("#wcancel")) $("#wcancel").onclick = () => api("/api/install/cancel", { method: "POST" });
+  if ($("#winstall")) $("#winstall").onclick = async () => {
+    const approve = Object.keys(wiz.installOk).filter(k => wiz.installOk[k]);
+    try {
+      const r = await (await api("/api/install", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ approve }) })).json();
+      renderInstall(r); watchInstall();
+    } catch (e) { $("#wfootnote").textContent = e.message; }
+  };
+}
+function watchInstall() {
+  clearInterval(wiz.poll);
+  wiz.poll = setInterval(async () => {
+    if (wiz.step !== 3) { clearInterval(wiz.poll); return; }
+    const st = await (await api("/api/install")).json();
+    renderInstall(st);
+    if (!st.running) clearInterval(wiz.poll);
+  }, 1000);
+}
+
+async function stepAccounts() {
+  await loadAccounts();
+  const ready = (state.accounts || []).filter(a => a.status === "ok" && a.provider !== "demo");
+  const scan = (await (await api("/api/system")).json()).items;
+  const tool = id => scan.find(i => i.id === id) || {};
+  $("#wbody").innerHTML = `
+    <p>One account is enough to start. Each kind uses its own email and its own allowance:</p>
+    <div class="wcards">
+      <div class="wcard"><b>Anthropic API key</b><small>Pay per use. Works on its own as a chat; with Claude Code installed it can also edit files and make voiceovers for you.</small></div>
+      <div class="wcard"><b>Claude login</b><small>Your Claude Pro/Max plan. Needs Claude Code: ${tool("claude").status === "ok" ? "installed ✓" : "not installed yet"}.</small></div>
+      <div class="wcard"><b>Codex login</b><small>Your ChatGPT plan. Needs Codex: ${tool("codex").status === "ok" ? "installed ✓" : "not installed yet"}.</small></div>
+    </div>
+    ${tool("claude").status !== "ok" || tool("codex").status !== "ok" ? `<p class="wnote">Claude Code: claude.com/claude-code · Codex: developers.openai.com/codex — install, then come back and press Next.</p>` : ""}
+    <div class="wrow"><button class="btn primary" id="waddacc">Add an account</button></div>
+    <div>${ready.length ? ready.map(a => `<p><span class="tick">✓</span> ${esc(accName(a))}</p>`).join("") : `<p class="wnote warn">No account connected yet.</p>`}</div>`;
+  $("#waddacc").onclick = async () => { await openAccounts(); };
+  wiz.next = async () => {
+    await loadAccounts();
+    if ((state.accounts || []).some(a => a.status === "ok" && a.provider !== "demo")) return true;
+    $("#wfootnote").textContent = "Connect an account first - or press Finish later and use the Demo for now.";
+    return false;
+  };
+}
+
+async function stepVoice() {
+  wiz.next = null;
+  const voice = (await (await api("/api/modules")).json()).modules.find(m => m.id === "voice");
+  if (voice.state !== "ready") {
+    $("#wbody").innerHTML = `<p>The voice module isn't ready (${esc(STATE_TEXT[voice.state] || voice.state)}), so this step is skipped. You can add a voice later from the microphone button.</p>`;
+    return;
+  }
+  $("#wbody").innerHTML = `<div class="navempty">Starting the voice engine…</div>`;
+  let st;
+  try { st = await (await api("/api/voice/start", { method: "POST" })).json(); }
+  catch (e) { $("#wbody").innerHTML = `<p class="wnote bad">${esc(e.message)}</p>`; return; }
+  const voices = (st.voices || []).filter(v => !/^_upload_/.test(v));
+  $("#wbody").innerHTML = `
+    <p>Add <b>your own</b> reference voice: 10–30 seconds of one person speaking clearly, no music. No voices come with the app.</p>
+    <div class="wrow"><input type="text" id="wvname" placeholder="Voice name, e.g. My narrator" style="max-width:280px">
+      <input type="file" id="wvfile" accept=".wav,.mp3,.flac"></div>
+    <label class="wnote" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="wvok"> This is my own voice, or I have permission to clone it</label>
+    <div class="wrow"><button class="btn primary" id="wvadd">Add voice</button><span class="wnote" id="wvmsg"></span></div>
+    <hr style="border:0;border-top:1px solid var(--line)">
+    <p><b>Find the best settings for a voice</b> — renders one sentence 7 ways and keeps the closest to the reference (about 3 minutes on the graphics card).</p>
+    <div class="wrow"><select id="wvpick">${voices.map(v => `<option${st.tuned && st.tuned[v] ? "" : ""}>${esc(v)}</option>`).join("")}</select>
+      <button class="btn" id="wvtune">Find best settings</button></div>
+    <div id="wvtunebox"></div>`;
+  $("#wvadd").onclick = async () => {
+    const f = $("#wvfile").files[0];
+    if (!f || !$("#wvname").value.trim()) return ($("#wvmsg").textContent = "Give it a name and choose a clip.");
+    if (!$("#wvok").checked) return ($("#wvmsg").textContent = "Tick the permission box first.");
+    const fd = new FormData(); fd.append("name", $("#wvname").value); fd.append("consent", "true"); fd.append("file", f);
+    try {
+      const r = await (await api("/api/voice/clone", { method: "POST", body: fd })).json();
+      $("#wvmsg").textContent = `Added ${r.name}${r.warning ? " — " + r.warning : ""}`;
+      const o = document.createElement("option"); o.textContent = r.name; o.selected = true; $("#wvpick").appendChild(o);
+    } catch (e) { $("#wvmsg").textContent = e.message; }
+  };
+  $("#wvtune").onclick = () => startTune(null);
+}
+async function startTune(approve) {
+  const voice = $("#wvpick").value;
+  const r = await fetch("/api/voice/tune", { method: "POST", headers: { "Content-Type": "application/json", "X-OneProd-Token": TOKEN },
+    body: JSON.stringify({ voice, approve }) });
+  if (r.status === 409) {
+    const j = await r.json();
+    if (j.needs_approval) {
+      $("#wvtunebox").innerHTML = `<div class="approve"><b>${esc(j.needs_approval.label)} needs your OK</b>
+        <div style="color:var(--dim);font-size:13px">It uses ${esc(j.needs_approval.uses)}.</div>
+        <div class="row2"><button class="btn" data-a="once">Allow once</button><button class="btn primary" data-a="always">Always allow</button></div></div>`;
+      $("#wvtunebox").querySelectorAll("[data-a]").forEach(b => b.onclick = () => startTune(b.dataset.a));
+      return;
+    }
+    $("#wvtunebox").innerHTML = `<p class="wnote bad">${esc(j.detail)}</p>`; return;
+  }
+  if (!r.ok) { $("#wvtunebox").innerHTML = `<p class="wnote bad">${esc((await r.json()).detail || "failed")}</p>`; return; }
+  clearInterval(wiz.poll);
+  wiz.poll = setInterval(async () => {
+    const t = await (await api("/api/voice/tune")).json();
+    $("#wvtunebox").innerHTML = t.running ? `<div class="inst"><div class="meta">${esc(t.detail || "")}</div>
+        <div class="bar"><i style="width:${t.total ? Math.round(100 * t.step / t.total) : 3}%"></i></div></div>`
+      : t.error ? `<p class="wnote bad">${esc(t.error)}</p>`
+      : `<p class="wnote ok"><span class="tick">✓</span> Best for ${esc(t.voice)}: expressiveness ${t.best.exaggeration}, guidance ${t.best.cfg_weight}, temperature ${t.best.temperature}. Used automatically for this voice from now on.</p>`;
+    if (!t.running) clearInterval(wiz.poll);
+  }, 1000);
+}
+
+async function stepTest() {
+  wiz.next = null;
+  await loadAccounts();
+  const accs = (state.accounts || []).filter(a => a.status === "ok");
+  const voice = (await (await api("/api/modules")).json()).modules.find(m => m.id === "voice");
+  $("#wbody").innerHTML = `
+    <div class="wtest"><b>1. A chat message</b>
+      <div class="wrow"><select id="wtacc">${accs.map(a => `<option value="${esc(a.id)}">${esc(accName(a))}</option>`).join("")}</select>
+        <button class="btn primary" id="wtchat">Send a test message</button></div><div class="out" id="wtchatout"></div></div>
+    <div class="wtest"><b>2. A 15-word voice test</b>
+      ${voice.state === "ready" ? `<div class="wrow"><button class="btn primary" id="wtvoice">Make the voice test</button></div><div class="out" id="wtvoiceout"></div>`
+        : `<p class="wnote">Skipped - the voice module isn't on.</p>`}</div>`;
+  const project = async () => {
+    const list = await (await api("/api/projects")).json();
+    const got = list.find(p => p.name === "Getting started");
+    return got ? got.id : (await (await api("/api/projects", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Getting started" }) })).json()).id;
+  };
+  $("#wtchat").onclick = async () => {
+    $("#wtchatout").textContent = "Waiting for the reply…";
+    try {
+      const pid = await project();
+      const r = await api(`/api/projects/${pid}/chat`, { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: "Say hello to me in one short sentence.", account_id: $("#wtacc").value }) });
+      const lines = (await r.text()).split("\n").filter(Boolean).map(l => JSON.parse(l));
+      const err = lines.find(e => e.t === "error"), text = lines.filter(e => e.t === "text").map(e => e.v).join("");
+      $("#wtchatout").innerHTML = err ? `<span class="wnote bad">${esc(err.message)}</span>` : `<span class="tick">✓</span> ${esc(text.trim().slice(0, 300))}`;
+    } catch (e) { $("#wtchatout").textContent = e.message; }
+  };
+  if ($("#wtvoice")) $("#wtvoice").onclick = async () => {
+    const st = await (await api("/api/voice/start", { method: "POST" })).json();
+    const v = (st.voices || []).find(x => !/^_upload_/.test(x));
+    if (!v) { $("#wtvoiceout").textContent = "Add a voice in the previous step first."; return; }
+    $("#wtvoiceout").textContent = "Rendering 15 words with " + v + "…";
+    const pid = await project();
+    const body = { text: "## Test\nThis is my voice inside One Production, ready to narrate the next video.\n", voice: v,
+                   name: "voice test", approve: "once" };
+    try {
+      const job = await (await api(`/api/projects/${pid}/voice`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })).json();
+      clearInterval(wiz.poll);
+      wiz.poll = setInterval(async () => {
+        const j = await (await api("/api/voicejobs/" + job.id)).json();
+        if (j.status === "done") {
+          clearInterval(wiz.poll);
+          const mp3 = j.files.find(f => /\.mp3$/i.test(f));
+          const blob = await (await api(`/api/projects/${pid}/files/${encodeURIComponent(mp3)}`)).blob();
+          $("#wtvoiceout").innerHTML = `<span class="tick">✓</span> Done — <audio controls src="${URL.createObjectURL(blob)}"></audio>`;
+        } else if (j.status === "failed") { clearInterval(wiz.poll); $("#wtvoiceout").innerHTML = `<span class="wnote bad">${esc(j.error || "failed")}</span>`; }
+        else $("#wtvoiceout").textContent = "Rendering… " + (j.step || "");
+      }, 1500);
+    } catch (e) { $("#wtvoiceout").textContent = e.message; }
+  };
+}
+$("#syssetup").onclick = () => { $("#sysmodal").classList.remove("open"); openSetup(2); };
+
 // ---------- start
 (async () => {
   if (!TOKEN) { lock(); return; }
@@ -2006,6 +2398,8 @@ $("#pinform").onsubmit = async e => {
 
 async function bootApp() {
   try {
+    const su = await (await api("/api/setup")).json();
+    if (!su.done && (su.first_run || su.chose_folder)) openSetup(su.chose_folder ? Math.max(1, su.step) : 0);
     await loadAccounts();
     await loadProjects();
     // refresh login status in the background so dead logins show up early

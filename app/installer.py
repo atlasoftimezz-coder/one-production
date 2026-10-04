@@ -290,7 +290,7 @@ class VoiceRecipe:
         idx = self.torch_kind
         return [
             Item("ffmpeg", "ffmpeg (audio tool)", "Joins, masters and converts the audio. The 'essentials' "
-                 "build includes the rubberband pitch filter.", 100, "gyan.dev", self._ffmpeg,
+                 "build includes the rubberband pitch filter.", 115, "gyan.dev", self._ffmpeg,
                  lambda: self.ffmpeg() is not None),
             Item("python", "Python for the voice engine", "A private Python 3.11 just for the voice engine, "
                  "inside the data folder - nothing is installed on the PC itself.", 30, "python.org / pypa.io",

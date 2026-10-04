@@ -82,6 +82,16 @@ try:
     send("Emulation.setDeviceMetricsOverride", width=W, height=H, deviceScaleFactor=1, mobile=False)
     send("Page.navigate", url=LAUNCH)
     check("app shell visible", wait_for("getComputedStyle(document.querySelector('#app')).display==='grid'"))
+    # P7: a fresh data folder opens the setup wizard by itself; the other checks run without it
+    setup_opened = wait_for("document.querySelector('#setup').classList.contains('open')", 4)
+    if os.environ.get("UI_DRIVE_SETUP") == "1":
+        check("setup wizard opens by itself on a new install", setup_opened)
+        check("welcome step offers drives with their free space", wait_for(
+            "document.querySelectorAll('#wdrives .wcard').length>=1 && document.querySelector('#wdrives').innerText.includes('GB free')", 8))
+        shot("30-setup-welcome")
+    if setup_opened:
+        js("document.querySelector('#wlater').click()")
+        wait_for("!document.querySelector('#setup').classList.contains('open')", 3)
     check("token scrubbed from address bar", js("location.hash")=="", js("location.href"))
     check("no garbled characters", not js("/Ã|Â/.test(document.body.innerText)"))
     wait_for("document.querySelector('.hero')")
@@ -546,6 +556,72 @@ try:
         js("document.querySelector('#pcur').value='4829'; document.querySelector('#premove').click()")
         check("PIN removed", wait_for("!!document.querySelector('#pset')", 5))
         js("document.querySelector('#profclose').click()")
+
+    # setup wizard (P7) - server runs with a stand-in installer (tests/p7/test_ui_setup.py)
+    if os.environ.get("UI_DRIVE_SETUP") == "1":
+        nxt = lambda: js("document.querySelector('#wnext').click()")
+        on_step = lambda n: wait_for(f"document.querySelector('#wsteps .wstep.on') && document.querySelector('#wsteps .wstep.on').dataset.i==='{n}'", 8)
+        js("document.querySelector('#sysbtn').click()")
+        wait_for("document.querySelector('#sysmodal').classList.contains('open')", 5)
+        js("document.querySelector('#syssetup').click()")
+        check("setup reopens from System", wait_for("document.querySelector('#setup').classList.contains('open')", 5) and on_step(2))
+        js("document.querySelector('#wsteps .wstep[data-i=\"1\"]').click()")
+        check("scan step shows this PC", wait_for("document.querySelectorAll('#wbody .sysrow').length>=12", 30))
+        nxt()
+        check("modules step: core always on, voice suggested on the graphics card", on_step(2) and wait_for(
+            "document.querySelector('.mod[data-id=voice] .opt.on') && document.querySelector('.mod[data-id=voice] .opt.on').dataset.mode==='gpu'", 8))
+        check("later modules greyed", js("document.querySelectorAll('.mod.later').length") == 5)
+        shot("31-setup-modules")
+        nxt()
+        check("install step lists what's missing with size and source", on_step(3) and wait_for(
+            "document.querySelectorAll('#wbody .inst').length===5 && document.querySelector('#wbody').innerText.includes('GB')", 10))
+        js("document.querySelector('#winstall').click()")
+        check("nothing installs without each OK", wait_for("document.querySelector('#wfootnote').innerText.includes('needs your OK')", 5))
+        js("document.querySelector('#wallok').click()")
+        shot("32-setup-install-ok")
+        js("document.querySelector('#winstall').click()")
+        check("install runs with progress", wait_for("document.querySelectorAll('#wbody .bar').length>=1 || document.querySelector('#wbody').innerText.includes('installed and checked')", 10))
+        check("voice module installed and checked", wait_for("document.querySelector('#wbody').innerText.includes('installed and checked')", 30),
+              (js("document.querySelector('#wbody').innerText") or "")[-300:])
+        shot("33-setup-installed")
+        nxt()
+        check("accounts step explains the three kinds", on_step(4) and wait_for(
+            "document.querySelector('#wbody').innerText.includes('Anthropic API key')", 8))
+        nxt()
+        check("can't continue without an account", wait_for("document.querySelector('#wfootnote').innerText.includes('Connect an account')", 5))
+        js(f"window.TEST_KEY={json.dumps(os.environ.get('UI_DRIVE_TEST_KEY', ''))}")
+        js("api('/api/accounts', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({provider:'anthropic_api', api_key: window.TEST_KEY})})"
+           ".then(()=>showStep(4)).then(()=>window._accOk=1)")
+        wait_for("window._accOk===1", 8)
+        check("connected account listed", wait_for("document.querySelector('#wbody').innerText.includes('✓')", 8))
+        nxt()
+        check("voice step offers to add your own voice", on_step(5) and wait_for("!!document.querySelector('#wvadd')", 15))
+        js("document.querySelector('#wvname').value='My narrator';"
+           "{const dt=new DataTransfer(); dt.items.add(new File([new Uint8Array(64)], 'take.wav', {type:'audio/wav'}));"
+           "document.querySelector('#wvfile').files=dt.files}")
+        js("document.querySelector('#wvadd').click()")
+        check("voice needs the permission tick", wait_for("document.querySelector('#wvmsg').innerText.includes('permission')", 5))
+        js("document.querySelector('#wvok').checked=true; document.querySelector('#wvadd').click()")
+        check("voice added", wait_for("document.querySelector('#wvmsg').innerText.includes('Added')", 8))
+        js("document.querySelector('#wvtune').click()")
+        check("tuning asks for the GPU first", wait_for("document.querySelector('#wvtunebox').innerText.includes('needs your OK')", 8))
+        js("document.querySelector('#wvtunebox [data-a=once]').click()")
+        check("tuning finds the best settings", wait_for("document.querySelector('#wvtunebox').innerText.includes('Best for')", 30),
+              js("document.querySelector('#wvtunebox').innerText"))
+        shot("34-setup-voice")
+        nxt()
+        check("test step", on_step(6) and wait_for("!!document.querySelector('#wtchat')", 8))
+        js("document.querySelector('#wtchat').click()")
+        check("test message answered", wait_for("document.querySelector('#wtchatout').innerText.includes('✓')", 20),
+              js("document.querySelector('#wtchatout').innerText"))
+        js("document.querySelector('#wtvoice').click()")
+        check("15-word voice test plays", wait_for("!!document.querySelector('#wtvoiceout audio')", 30),
+              js("document.querySelector('#wtvoiceout').innerText"))
+        shot("35-setup-test")
+        nxt()
+        check("Finish closes setup", wait_for("!document.querySelector('#setup').classList.contains('open')", 8))
+        check("setup remembered as done", js("fetch('/api/setup',{headers:{'X-OneProd-Token':TOKEN}}).then(r=>r.json()).then(j=>window._done=j.done)") is not None
+              and wait_for("window._done===true", 5))
 
     # dark mode (Windows dark theme)
     send("Emulation.setEmulatedMedia", features=[{"name": "prefers-color-scheme", "value": "dark"}])

@@ -2,8 +2,8 @@
 
     setup.json   {"done": bool, "step": n, "chose_folder": bool}
 
-The wizard opens by itself only on a genuinely new install: no setup.json, no projects and
-no accounts. Anyone already using the app (like the studio PC) is never interrupted; they
+The wizard opens by itself only on a genuinely new install: setup not finished, no projects
+and no accounts. Anyone already using the app (like the studio PC) is never interrupted; they
 can open it any time from System, "Run setup again".
 """
 from __future__ import annotations
@@ -15,6 +15,7 @@ import string
 import sys
 from pathlib import Path
 
+GB = 1024 ** 3                 # same unit as the System screen
 STEPS = ["welcome", "scan", "modules", "install", "accounts", "voice", "test"]
 
 
@@ -40,14 +41,15 @@ class SetupState:
         return self.public()
 
     def first_run(self) -> bool:
-        return not self.file.exists() and not self.store.list_projects() and not self.accounts.list()
+        # not "no setup.json yet": opening the wizard writes the step, which must not end first run
+        return not self._load().get("done") and not self.store.list_projects() and not self.accounts.list()
 
     def public(self) -> dict:
         d = self._load()
         free = shutil.disk_usage(self.data_dir).free if self.data_dir.exists() else 0
         return {"done": bool(d.get("done")), "step": int(d.get("step") or 0), "steps": STEPS,
                 "chose_folder": bool(d.get("chose_folder")), "first_run": self.first_run(),
-                "data_dir": str(self.data_dir), "data_free_gb": round(free / 1e9, 1)}
+                "data_dir": str(self.data_dir), "data_free_gb": round(free / GB, 1)}
 
 
 def drives() -> list[dict]:
@@ -61,6 +63,6 @@ def drives() -> list[dict]:
                     u = shutil.disk_usage(root)
                 except OSError:
                     continue
-                out.append({"drive": f"{letter}:", "free_gb": round(u.free / 1e9, 1),
-                            "total_gb": round(u.total / 1e9, 1), "suggest": f"{letter}:\\OneProduction"})
+                out.append({"drive": f"{letter}:", "free_gb": round(u.free / GB, 1),
+                            "total_gb": round(u.total / GB, 1), "suggest": f"{letter}:\\OneProduction"})
     return out
