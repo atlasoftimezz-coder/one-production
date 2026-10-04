@@ -601,6 +601,19 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
                 "voices": meta.get("voices", []), "presets": meta.get("presets", {}),
                 "approved": approvals.always("voiceover"), "tool": TOOLS["voiceover"]}
 
+    @app.get("/api/voice/sample/{name}")
+    async def voice_sample(name: str) -> FileResponse:
+        """The reference clip itself, so the user can hear a voice before choosing it."""
+        try:
+            meta = await voice_svc.meta()
+        except Exception:
+            raise HTTPException(503, "the voice engine isn't running")
+        folder = Path(meta.get("voices_dir") or ".").resolve()
+        path = (folder / name).resolve()
+        if name not in meta.get("voices", []) or path.parent != folder or not path.is_file():
+            raise HTTPException(404, "no such voice")
+        return FileResponse(path, media_type="audio/wav")
+
     @app.post("/api/voice/start")
     async def voice_start() -> dict:
         try:

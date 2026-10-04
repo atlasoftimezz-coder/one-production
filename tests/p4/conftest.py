@@ -25,11 +25,16 @@ class FakeVoiceApp:
         self.specs = []
         self.polls = {}
         self.fail = False
+        self.voices = out_dir / "voices"           # reference clips, like the real voices folder
+        self.voices.mkdir(exist_ok=True)
+        for v in ("human_ref48.wav", "buster_ref48.wav"):
+            (self.voices / v).write_bytes(b"RIFF....WAVE" + v.encode())
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         path = request.url.path
         if path == "/api/meta":
             return httpx.Response(200, json={"voices": ["human_ref48.wav", "buster_ref48.wav"],
+                                             "voices_dir": str(self.voices),
                                              "presets": {"clone_exact": {"label": "Clone the reference exactly"},
                                                          "narrator": {"label": "Narrator"}}})
         if path == "/api/jobs" and request.method == "POST":

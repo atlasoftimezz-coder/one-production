@@ -27,7 +27,8 @@ with socket.socket() as _s:
 prof = SCR / "chrome-prof"
 chrome = subprocess.Popen([CHROME, "--headless=new", f"--remote-debugging-port={PORT}",
                            f"--user-data-dir={prof}", f"--window-size={W},{H}",
-                           "--no-first-run", "--no-default-browser-check", "about:blank"],
+                           "--no-first-run", "--no-default-browser-check",
+                           "--autoplay-policy=no-user-gesture-required", "about:blank"],
                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 try:
     for _ in range(50):
@@ -293,7 +294,17 @@ try:
               wait_for("document.querySelector('#vstats').innerText.includes('14 spoken words')", 8),
               js("document.querySelector('#vstats').innerText"))
         check("voices come from the voice app", "human_ref48.wav" in (js("document.querySelector('#vvoice').innerText") or ""))
+        js("document.querySelector('#vplay').click()")
+        check("play button plays the chosen voice", wait_for(
+            "voiceSample.playing==='human_ref48.wav' && !voiceSample.audio.paused && voiceSample.audio.currentTime>0", 8),
+            js("JSON.stringify({p: voiceSample.playing, paused: voiceSample.audio.paused, err: String(voiceSample.audio.error && voiceSample.audio.error.code)})"))
+        check("button turns into stop", js("document.querySelector('#vplay').textContent") == "■")
+        js("const s=document.querySelector('#vvoice'); s.value='buster_ref48.wav'; s.dispatchEvent(new Event('change'))")
+        check("picking another voice switches the sample", wait_for(
+            "voiceSample.playing==='buster_ref48.wav' && voiceSample.audio.src.startsWith('blob:')", 8))
         shot("17-voice-dialog")
+        js("document.querySelector('#vplay').click()")
+        check("stop button stops it", js("voiceSample.audio.paused && voiceSample.playing===null") is True)
         js("document.querySelector('#vgo').click()")
         check("GPU approval asked before anything runs", wait_for(
             "document.querySelector('#vapprove').innerText.includes('needs your OK')", 8))

@@ -182,3 +182,13 @@ def test_voice_app_is_started_in_the_background(make_client):
         assert st["running"] is True and "human_ref48.wav" in st["voices"]
     finally:
         os.system(f'for /f "tokens=5" %a in (\'netstat -ano ^| findstr :{port} ^| findstr LISTENING\') do taskkill /PID %a /F >nul 2>&1')
+
+
+def test_reference_clip_can_be_heard_before_choosing(client):
+    r = client.get("/api/voice/sample/human_ref48.wav")
+    assert r.status_code == 200 and r.content == b"RIFF....WAVEhuman_ref48.wav"
+    assert r.headers["content-type"] == "audio/wav"
+    for bad in ("nobody.wav", "..%2F..%2Fsecret.wav", "%2E%2E%5Cvoices%5Chuman_ref48.wav"):
+        assert client.get(f"/api/voice/sample/{bad}").status_code == 404, bad
+    assert client.get("/api/voice/sample/human_ref48.wav",
+                      headers={"X-OneProd-Token": "wrong"}).status_code == 401
