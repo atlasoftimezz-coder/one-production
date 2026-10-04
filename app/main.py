@@ -15,7 +15,7 @@ import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
 from pydantic import BaseModel
 
@@ -40,6 +40,7 @@ from .voice import VoiceError, VoiceJobs, VoiceService
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 UPLOAD_CHUNK = 1024 * 1024
+MAX_CLIP = 50 * 1024 * 1024      # a 30 s wav is ~3-6 MB; anything far bigger is not a reference clip
 DEMO_ACCOUNT = {"id": "demo", "provider": "demo", "label": "Demo (no account)", "enabled": True,
                 "status": "ok", "model": None}
 log = logging.getLogger("oneprod.app")
@@ -613,6 +614,40 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
         if name not in meta.get("voices", []) or path.parent != folder or not path.is_file():
             raise HTTPException(404, "no such voice")
         return FileResponse(path, media_type="audio/wav")
+
+    @app.post("/api/voice/clone")
+    async def voice_clone(name: str = Form(...), consent: bool = Form(False),
+                          file: UploadFile | None = File(None),
+                          project: str | None = Form(None), project_file: str | None = Form(None)) -> dict:
+        """Add a new voice: a 10-30 s clip from the PC or from a project's files."""
+        if not consent:
+            raise HTTPException(400, "only clone your own voice or one you have permission to use")
+        safe = "".join(ch for ch in name if ch.isalnum() or ch in "-_ ").strip()
+        if not safe:
+            raise HTTPException(400, "give the voice a name (letters, numbers, - and _)")
+        if file is not None:
+            src_name, data = file.filename or "clip.wav", await file.read(MAX_CLIP + 1)
+        elif project and project_file:
+            _project(project)
+            try:
+                path = store.file_path(project, project_file)
+            except NotFound:
+                raise HTTPException(404, "file not found")
+            src_name, data = path.name, path.read_bytes()[:MAX_CLIP + 1]
+        else:
+            raise HTTPException(400, "choose a clip")
+        ext = Path(src_name).suffix.lower()
+        if ext not in (".wav", ".mp3", ".flac"):
+            raise HTTPException(400, "reference clips must be .wav, .mp3 or .flac")
+        if len(data) > MAX_CLIP:
+            raise HTTPException(400, "that clip is too big - 10 to 30 seconds is all a clone needs")
+        try:
+            await voice_svc.ensure_running()
+            if f"{safe}_ref48.wav" in (await voice_svc.meta()).get("voices", []):
+                raise HTTPException(409, f"there is already a voice called {safe} - pick another name")
+            return await voice_svc.add_voice(safe + ext, data)
+        except VoiceError as e:
+            raise HTTPException(400, str(e))
 
     @app.post("/api/voice/start")
     async def voice_start() -> dict:

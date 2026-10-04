@@ -95,6 +95,14 @@ class VoiceService:
             r.raise_for_status()
             return r.json()
 
+    async def add_voice(self, filename: str, data: bytes) -> dict:
+        """vo-app cleans the clip (high-pass, loudness, 48 kHz mono) and saves <name>_ref48.wav."""
+        async with self._client(timeout=120) as c:
+            r = await c.post(self.url + "/api/voices", files={"file": (filename, data)})
+            if r.status_code != 200:
+                raise VoiceError(r.json().get("detail", f"HTTP {r.status_code}"))
+            return r.json()
+
     async def make_srt(self, audio: Path, script: Path, out: Path) -> None:
         """vo-app's make_srt.py: timing from speech recognition, text from the script."""
         proc = await asyncio.create_subprocess_exec(

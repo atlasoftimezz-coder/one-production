@@ -307,6 +307,16 @@
            color: var(--ink); cursor: pointer; font-size: 14px; }
   .vplay:hover { border-color: var(--accent); }
   .vplay.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .vclone { border: 1px solid var(--line); background: var(--panel2); border-radius: 14px; padding: 12px 14px;
+            display: grid; gap: 10px; }
+  .vclone[hidden] { display: none; }
+  .vclone .hint { color: var(--dim); font-size: 12.5px; }
+  .vclone .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  @media (max-width: 700px) { .vclone .row { grid-template-columns: 1fr; } }
+  .vclone .check { display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--ink); }
+  .vclone .check input { width: auto; }
+  .vclone .msg { font-size: 13px; }
+  .vclone .msg.bad { color: var(--bad); } .vclone .msg.warn { color: var(--warn); } .vclone .msg.ok { color: var(--ok); }
   .vf label { display: block; font-size: 12px; color: var(--dim); margin: 0 0 4px; }
   .vf select, .vf input, .vf textarea { width: 100%; padding: 9px 11px; border-radius: 10px;
       border: 1px solid var(--line); background: var(--panel); outline: none; }
@@ -1117,7 +1127,24 @@ function renderVoiceForm(st, fileName) {
         <div class="vstats" id="vstats"></div></div>
       <div class="vf"><label for="vvoice">Voice (reference clip)</label>
         <div class="vpick"><select id="vvoice">${voices.map(v => `<option${v === L.voice ? " selected" : ""}>${esc(v)}</option>`).join("")}</select>
-          <button type="button" class="vplay" id="vplay" title="Hear this voice" aria-label="Hear this voice">▶</button></div></div>
+          <button type="button" class="vplay" id="vplay" title="Hear this voice" aria-label="Hear this voice">▶</button>
+          <button type="button" class="vplay" id="vnew" title="Clone a new voice" aria-label="Clone a new voice">＋</button></div></div>
+      <div class="vf full vclone" id="vclone" hidden>
+        <div><b>Clone a new voice</b>
+          <div class="hint">10–30 seconds of one person speaking clearly — no music, no other voices. Under ~8 s the clone drifts off the voice's pitch.</div></div>
+        <div class="row">
+          <input id="cname" maxlength="40" placeholder="Voice name, e.g. Narrator 2" aria-label="Voice name">
+          <select id="csrc" aria-label="Clip">
+            <option value="__pc__">A clip from my PC…</option>
+            ${(state.files || []).filter(f => /\.(wav|mp3|flac)$/i.test(f.name)).map(f => `<option value="${esc(f.name)}">From this project: ${esc(f.name)}</option>`).join("")}
+          </select></div>
+        <input id="cfile" type="file" accept=".wav,.mp3,.flac" aria-label="Clip file">
+        <label class="check"><input type="checkbox" id="cconsent"> This is my own voice, or I have permission to clone it</label>
+        <div class="msg" id="cmsg"></div>
+        <div style="display:flex;justify-content:flex-end;gap:8px">
+          <button type="button" class="btn" id="ccancel">Close</button>
+          <button type="button" class="btn primary" id="cgo">Add voice</button></div>
+      </div>
       <div class="vf"><label for="vpreset">Delivery</label>
         <select id="vpreset">${presets.map(([k, v]) => `<option value="${k}"${k === (L.preset || "clone_exact") ? " selected" : ""}>${esc(v.label)}</option>`).join("")}</select></div>
       <div class="vf"><label for="vpace">Pace</label>
@@ -1153,6 +1180,10 @@ function renderVoiceForm(st, fileName) {
   };
   $("#vplay").onclick = () => voiceSample.playing ? stopSample() : playSample($("#vvoice").value);
   $("#vvoice").onchange = () => { if (voiceSample.playing) playSample($("#vvoice").value); };
+  $("#vnew").onclick = () => { $("#vclone").hidden = !$("#vclone").hidden; if (!$("#vclone").hidden) $("#cname").focus(); };
+  $("#ccancel").onclick = () => $("#vclone").hidden = true;
+  $("#csrc").onchange = () => $("#cfile").style.display = $("#csrc").value === "__pc__" ? "" : "none";
+  $("#cgo").onclick = cloneVoice;
   $("#vsrc").onchange = sync; $("#vpace").onchange = sync;
   $("#vtext").oninput = () => { clearTimeout(state.voice.t); state.voice.t = setTimeout(sync, 400); };
   $("#vname").oninput = () => $("#vname").dataset.touched = "1";
@@ -1219,6 +1250,29 @@ function stopSample() {
   voiceSample.playing = null;
   const btn = $("#vplay");
   if (btn) { btn.classList.remove("on"); btn.textContent = "▶"; btn.title = "Hear this voice"; }
+}
+async function cloneVoice() {
+  const msg = (text, kind) => { $("#cmsg").textContent = text; $("#cmsg").className = "msg " + (kind || ""); };
+  const name = $("#cname").value.trim(), fromPc = $("#csrc").value === "__pc__";
+  if (!name) return msg("Give the voice a name.", "bad");
+  if (fromPc && !$("#cfile").files[0]) return msg("Choose a clip.", "bad");
+  if (!$("#cconsent").checked) return msg("Tick the permission box — only clone your own voice or one you may use.", "bad");
+  const fd = new FormData();
+  fd.append("name", name); fd.append("consent", "true");
+  if (fromPc) fd.append("file", $("#cfile").files[0]);
+  else { fd.append("project", state.current); fd.append("project_file", $("#csrc").value); }
+  $("#cgo").disabled = true; msg("Cleaning the clip and adding the voice…");
+  try {
+    const r = await (await api("/api/voice/clone", { method: "POST", body: fd })).json();
+    const st = await (await api("/api/voice/status")).json();
+    $("#vvoice").innerHTML = st.voices.filter(v => !/^_upload_/.test(v))
+      .map(v => `<option${v === r.name ? " selected" : ""}>${esc(v)}</option>`).join("");
+    if (r.warning) msg(`Added ${r.name} (${r.seconds} s) — but ${r.warning}. A longer clip will clone better.`, "warn");
+    else msg(`Added ${r.name} (${r.seconds} s) and selected it — it's playing now.`, "ok");
+    $("#cname").value = ""; $("#cfile").value = ""; $("#cconsent").checked = false;
+    playSample(r.name);
+  } catch (e) { msg(e.message, "bad"); }
+  finally { $("#cgo").disabled = false; }
 }
 function closeVoice() { stopSample(); $("#voicemodal").classList.remove("open"); }
 $("#voiceclose").onclick = closeVoice;

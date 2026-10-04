@@ -6,6 +6,8 @@ progress, then "done" with tiny fake wav/mp3 files written next to this script.
 """
 import argparse
 import json
+import re
+import wave
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -14,6 +16,12 @@ OUT = Path(__file__).parent / "out"
 VOICES = Path(__file__).parent / "voices"
 JOBS: dict[str, dict] = {}
 LOCK = threading.Lock()
+
+
+def _silence(path):
+    """A real, playable half second of silence."""
+    with wave.open(str(path), "wb") as w:
+        w.setnchannels(1); w.setsampwidth(2); w.setframerate(8000); w.writeframes(bytes(8000))
 
 
 class H(BaseHTTPRequestHandler):
@@ -27,7 +35,7 @@ class H(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == "/api/meta":
-            return self._json(200, {"voices": ["human_ref48.wav", "buster_ref48.wav"], "voices_dir": str(VOICES),
+            return self._json(200, {"voices": sorted(f.name for f in VOICES.iterdir()), "voices_dir": str(VOICES),
                                     "presets": {"clone_exact": {"label": "Clone the reference exactly"},
                                                 "narrator": {"label": "Narrator"}}})
         if self.path.startswith("/api/jobs/"):
@@ -54,6 +62,11 @@ class H(BaseHTTPRequestHandler):
         self._json(404, {"detail": "not found"})
 
     def do_POST(self):
+        if self.path == "/api/voices":
+            body = self.rfile.read(int(self.headers.get("content-length", 0)))
+            stem = Path(re.search(rb'filename="([^"]+)"', body).group(1).decode()).stem
+            _silence(VOICES / f"{stem}_ref48.wav")
+            return self._json(200, {"name": f"{stem}_ref48.wav", "seconds": 15.0, "warning": None})
         if self.path == "/api/jobs":
             spec = json.loads(self.rfile.read(int(self.headers.get("content-length", 0))))
             with LOCK:
@@ -70,8 +83,6 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=int, required=True)
     VOICES.mkdir(exist_ok=True)
-    for v in ("human_ref48.wav", "buster_ref48.wav"):     # a real, playable half second of silence
-        import wave
-        with wave.open(str(VOICES / v), "wb") as w:
-            w.setnchannels(1); w.setsampwidth(2); w.setframerate(8000); w.writeframes(bytes(8000))
+    for v in ("human_ref48.wav", "buster_ref48.wav"):
+        _silence(VOICES / v)
     ThreadingHTTPServer(("127.0.0.1", ap.parse_args().port), H).serve_forever()

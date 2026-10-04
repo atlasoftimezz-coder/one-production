@@ -192,3 +192,35 @@ def test_reference_clip_can_be_heard_before_choosing(client):
         assert client.get(f"/api/voice/sample/{bad}").status_code == 404, bad
     assert client.get("/api/voice/sample/human_ref48.wav",
                       headers={"X-OneProd-Token": "wrong"}).status_code == 401
+
+
+def clone(c, name="Narrator 2", consent="true", **kw):
+    data = {"name": name, "consent": consent, **{k: v for k, v in kw.items() if k != "clip"}}
+    files = {"file": kw["clip"]} if "clip" in kw else None
+    return c.post("/api/voice/clone", data=data, files=files)
+
+
+def test_clone_a_new_voice_from_the_pc(client):
+    r = clone(client, clip=("my take.mp3", b"ID3 a clean narration take"))
+    assert r.status_code == 200 and r.json()["name"] == "Narrator 2_ref48.wav" and r.json()["warning"] is None
+    assert client.fake.cloned[-1] == ("Narrator 2.mp3", b"ID3 a clean narration take")
+    assert "Narrator 2_ref48.wav" in client.get("/api/voice/status").json()["voices"]
+    assert client.get("/api/voice/sample/Narrator 2_ref48.wav").status_code == 200   # can be heard at once
+
+
+def test_clone_from_a_file_already_in_the_project(client, project):
+    name = upload(client, project, "interview.wav", b"RIFF short clip")
+    r = clone(client, name="Guest", project=project, project_file=name)
+    assert r.status_code == 200 and r.json()["warning"]                   # short clip -> warned
+    assert client.fake.cloned[-1] == ("Guest.wav", b"RIFF short clip")
+
+
+def test_clone_refuses_without_permission_bad_input_or_a_taken_name(client, project):
+    clip = ("a.wav", b"RIFF x")
+    assert clone(client, consent="false", clip=clip).status_code == 400
+    assert clone(client, name="../../", clip=clip).status_code == 400
+    assert clone(client, clip=("a.txt", b"hello")).status_code == 400
+    assert clone(client).status_code == 400                                 # no clip at all
+    assert clone(client, project=project, project_file="nope.wav").status_code == 404
+    assert clone(client, name="human", clip=clip).status_code == 409        # human_ref48.wav exists
+    assert client.fake.cloned == []                                         # nothing reached the voice app

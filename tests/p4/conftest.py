@@ -1,4 +1,5 @@
 import json
+import re
 import shutil
 import sys
 import zipfile
@@ -25,6 +26,7 @@ class FakeVoiceApp:
         self.specs = []
         self.polls = {}
         self.fail = False
+        self.cloned = []
         self.voices = out_dir / "voices"           # reference clips, like the real voices folder
         self.voices.mkdir(exist_ok=True)
         for v in ("human_ref48.wav", "buster_ref48.wav"):
@@ -33,10 +35,19 @@ class FakeVoiceApp:
     def handler(self, request: httpx.Request) -> httpx.Response:
         path = request.url.path
         if path == "/api/meta":
-            return httpx.Response(200, json={"voices": ["human_ref48.wav", "buster_ref48.wav"],
+            return httpx.Response(200, json={"voices": sorted(f.name for f in self.voices.iterdir()),
                                              "voices_dir": str(self.voices),
                                              "presets": {"clone_exact": {"label": "Clone the reference exactly"},
                                                          "narrator": {"label": "Narrator"}}})
+        if path == "/api/voices" and request.method == "POST":
+            body = request.content
+            fname = re.search(rb'filename="([^"]+)"', body).group(1).decode()
+            data = body.split(b"\r\n\r\n", 1)[1].rsplit(b"\r\n--", 1)[0]
+            self.cloned.append((fname, data))
+            stem = Path(fname).stem
+            (self.voices / f"{stem}_ref48.wav").write_bytes(b"RIFF....WAVE" + data[:20])
+            return httpx.Response(200, json={"name": f"{stem}_ref48.wav", "seconds": 4.0 if b"short" in data else 15.0,
+                                             "warning": "that clip is 4.0s; under about 8s ..." if b"short" in data else None})
         if path == "/api/jobs" and request.method == "POST":
             spec = json.loads(request.content)
             self.specs.append(spec)
