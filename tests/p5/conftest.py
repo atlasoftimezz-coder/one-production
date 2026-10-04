@@ -193,12 +193,15 @@ def agent(tmp_path, monkeypatch, request):
                         voice_app_dir=str(voice_dir), voice_python=sys.executable)
     app = create_app(settings, token=TOKEN, voice_transport=httpx.MockTransport(fake_voice.handler),
                      api_transport=httpx.MockTransport(api_handler),                    # never the real API
-                     agent_client=lambda options: FakeAgent(options, script))
+                     agent_client=lambda options: FakeAgent(options, script),
+                     codex_transport=lambda argv, env, cwd: FakeCodex(argv, env, cwd))
+    FakeCodex.shared = {}
     c = TestClient(app, base_url="http://127.0.0.1")
     c.__enter__()
     request.addfinalizer(lambda: c.__exit__(None, None, None))
     c.headers[TOKEN_HEADER] = TOKEN
     c.data_dir, c.script, c.fake, c.keyring = tmp_path / "data", script, fake_voice, kr
+    c.codex = FakeCodex.shared
     c.get("/api/voice/status")
     c.pid = c.post("/api/projects", json={"name": "Debt"}).json()["id"]
     c.post(f"/api/projects/{c.pid}/files", files={"files": ("ep1.md", b"## Debt\nCancel the debt today.\n")})
@@ -243,3 +246,131 @@ def wait_ask(c, timeout=10):
 def answer(c, ask, how):
     r = c.post(f"/api/projects/{c.pid}/agent/answer", json={"id": ask["id"], "answer": how})
     assert r.status_code == 200, r.text
+
+
+# ---------------------------------------------------------------- Codex app-server stand-in
+class FakeCodex:
+    """Speaks the app-server JSON-RPC like codex-cli 0.157.1. The test sets shared["turns"]
+    (lists of steps) and reads shared["log"] (every message we sent) and shared["decisions"].
+        ("text", "...")                     item/agentMessage/delta
+        ("cmd", command, actions)           commandExecution + approval request
+        ("patch", path, inside)             fileChange; asks only when outside the project
+        ("tool", name, args)                item/tool/call (dynamic studio tool)
+        ("usage", inp, out)                 thread/tokenUsage/updated
+        ("limits", used_5h_percent)         account/rateLimits/updated
+        ("sleep", s) / ("fail", message, info)
+    """
+    shared: dict = {}
+
+    def __init__(self, argv, env, cwd):
+        self.argv, self.env, self.cwd = argv, env, cwd
+        self.inbox: asyncio.Queue = asyncio.Queue()
+        self.outbox: asyncio.Queue = asyncio.Queue()
+        self.st = FakeCodex.shared
+        self.st.setdefault("log", []).append({"argv": argv, "env": env, "cwd": str(cwd), "msgs": []})
+        self.me = self.st["log"][-1]
+        self.waiting: dict = {}
+        self.task = None
+
+    async def start(self):
+        self.task = asyncio.get_running_loop().create_task(self._serve())
+
+    async def send(self, msg):
+        self.me["msgs"].append(msg)
+        await self.inbox.put(msg)
+
+    async def recv(self):
+        return await self.outbox.get()
+
+    async def close(self):
+        if self.task:
+            self.task.cancel()
+
+    async def _note(self, method, params):
+        await self.outbox.put({"method": method, "params": params})
+
+    async def _ask(self, rid, method, params):
+        fut = asyncio.get_running_loop().create_future()
+        self.waiting[rid] = fut
+        await self.outbox.put({"id": rid, "method": method, "params": params})
+        return await fut
+
+    async def _serve(self):
+        turn_task = None
+        while True:
+            msg = await self.inbox.get()
+            if "method" not in msg:                         # a response to one of our requests
+                fut = self.waiting.pop(msg["id"], None)
+                if fut and not fut.done():
+                    fut.set_result(msg.get("result") or msg.get("error"))
+                continue
+            m, rid, p = msg["method"], msg.get("id"), msg.get("params") or {}
+            if m == "initialize":
+                await self.outbox.put({"id": rid, "result": {"userAgent": "fake"}})
+            elif m in ("thread/start", "thread/resume"):
+                tid = p.get("threadId") or "th-1"
+                await self.outbox.put({"id": rid, "result": {"thread": {"id": tid}, "model": "gpt-fake"}})
+            elif m == "turn/start":
+                await self.outbox.put({"id": rid, "result": {"turn": {"id": "tu-1"}}})
+                turn_task = asyncio.get_running_loop().create_task(self._turn())
+            elif m == "turn/interrupt":
+                if turn_task:
+                    turn_task.cancel()
+                await self._note("turn/completed", {"threadId": "th-1", "turn": {"id": "tu-1", "status": "interrupted"}})
+
+    async def _turn(self):
+        steps = self.st["turns"].pop(0) if self.st.get("turns") else [("text", "Done.")]
+        ids = {"threadId": "th-1", "turnId": "tu-1"}
+        for n, st in enumerate(steps):
+            iid = f"it{n}"
+            if st[0] == "text":
+                await self._note("item/agentMessage/delta", {**ids, "itemId": iid, "delta": st[1]})
+            elif st[0] == "cmd":
+                _, command, actions = st
+                item = {"type": "commandExecution", "id": iid, "command": command, "commandActions": actions,
+                        "status": "inProgress"}
+                await self._note("item/started", {**ids, "item": item, "startedAtMs": 0})
+                r = await self._ask(100 + n, "item/commandExecution/requestApproval",
+                                    {**ids, "itemId": iid, "command": command, "commandActions": actions})
+                self.st.setdefault("decisions", []).append(r["decision"])
+                ok = r["decision"] in ("accept", "acceptForSession")
+                await self._note("item/completed", {**ids, "completedAtMs": 0, "item": {
+                    **item, "status": "completed" if ok else "declined", "exitCode": 0 if ok else None,
+                    "aggregatedOutput": "ok" if ok else ""}})
+            elif st[0] == "patch":
+                _, path, inside = st
+                item = {"type": "fileChange", "id": iid, "status": "inProgress",
+                        "changes": [{"path": path, "kind": {"type": "add"}, "diff": "+x"}]}
+                await self._note("item/started", {**ids, "item": item, "startedAtMs": 0})
+                ok = True
+                if not inside:
+                    r = await self._ask(100 + n, "item/fileChange/requestApproval",
+                                        {**ids, "itemId": iid, "startedAtMs": 0})
+                    self.st.setdefault("decisions", []).append(r["decision"])
+                    ok = r["decision"] == "accept"
+                await self._note("item/completed", {**ids, "completedAtMs": 0,
+                                                    "item": {**item, "status": "completed" if ok else "declined"}})
+            elif st[0] == "tool":
+                _, name, args = st
+                r = await self._ask(100 + n, "item/tool/call", {**ids, "callId": iid, "tool": name, "arguments": args})
+                self.st.setdefault("tool_results", []).append(r)
+            elif st[0] == "usage":
+                await self._note("thread/tokenUsage/updated", {**ids, "tokenUsage": {
+                    "last": {"inputTokens": st[1], "outputTokens": st[2], "cachedInputTokens": 0},
+                    "total": {"inputTokens": st[1], "outputTokens": st[2], "cachedInputTokens": 0}}})
+            elif st[0] == "limits":
+                await self._note("account/rateLimits/updated", {"rateLimits": {
+                    "primary": {"usedPercent": st[1], "windowDurationMins": 300, "resetsAt": int(time.time()) + 3600},
+                    "secondary": {"usedPercent": 12, "windowDurationMins": 10080, "resetsAt": int(time.time()) + 86400}}})
+            elif st[0] == "sleep":
+                await asyncio.sleep(st[1])
+            elif st[0] == "fail":
+                await self._note("turn/completed", {"threadId": "th-1", "turn": {
+                    "id": "tu-1", "status": "failed", "error": {"message": st[1], "codexErrorInfo": st[2]}}})
+                return
+        await self._note("turn/completed", {"threadId": "th-1", "turn": {"id": "tu-1", "status": "completed"}})
+
+
+def codex_account(c):
+    from tests.p2.conftest import signed_in
+    return signed_in(c, "codex")

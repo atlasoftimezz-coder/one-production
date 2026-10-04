@@ -12,6 +12,7 @@ One function decides for both Claude and Codex, so the two agents can't drift ap
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 
 READS = {"Read", "Glob", "Grep", "LS", "NotebookRead"}
@@ -96,7 +97,7 @@ def describe(tool: str, tool_input: dict, root: Path) -> tuple[str, str]:
         target = rel(next(iter(paths_of(tool_input)), "")) or tool_input.get("pattern", "")
         return verb, target
     if tool in SHELL:
-        return "Run command", str(tool_input.get("command") or tool_input.get("code") or "")[:400]
+        return "Run command", unwrap_shell(str(tool_input.get("command") or tool_input.get("code") or ""))[:400]
     if tool == "WebFetch":
         return "Open web page", str(tool_input.get("url", ""))
     if tool == "WebSearch":
@@ -105,3 +106,17 @@ def describe(tool: str, tool_input: dict, root: Path) -> tuple[str, str]:
         todos = tool_input.get("todos") or []
         return "Update plan", f"{len(todos)} steps"
     return tool, ", ".join(f"{k}={str(v)[:60]}" for k, v in list(tool_input.items())[:3])
+
+
+_WRAPPER = re.compile(r'^\s*"?[^"]*?(powershell|pwsh|cmd)(\.exe)?"?\s+(-NoProfile\s+)?(-Command|/c|/C)\s+(.*)$', re.I | re.S)
+
+
+def unwrap_shell(command: str) -> str:
+    """'"...powershell.exe" -Command "Get-ChildItem"' -> 'Get-ChildItem', for display only."""
+    m = _WRAPPER.match(command or "")
+    if not m:
+        return command
+    inner = m.group(5).strip()
+    if len(inner) >= 2 and inner[0] == inner[-1] == '"':
+        inner = inner[1:-1]
+    return inner

@@ -25,6 +25,7 @@ from .accounts import DEFAULT_SWITCH, DEFAULT_WARN, PROVIDERS, SAME_SERVICE_SWIT
     AccountError, Accounts
 from . import actions
 from .agent.claude_agent import ClaudeAgent
+from .agent.codex_agent import CodexAgent
 from .agent.runs import Runs
 from .agent.studio import INSTRUCTIONS as STUDIO_INSTRUCTIONS, Studio
 from .chat import SYSTEM, build_prompt, ndjson, reply_events
@@ -115,11 +116,12 @@ class VoiceIn(ScriptIn):
     from_action: float | None = None  # time of the assistant message whose Run card started this
 
 
-AGENT_PROVIDERS = ("claude", "anthropic_api")          # codex joins when its app-server agent lands
+AGENT_PROVIDERS = ("claude", "anthropic_api", "codex")
 
 
 def create_app(settings: Settings, token: str | None = None, *, api_transport=None,
-               login_console: bool | None = None, voice_transport=None, agent_client=None) -> FastAPI:
+               login_console: bool | None = None, voice_transport=None, agent_client=None,
+               codex_transport=None) -> FastAPI:
     if login_console is None:
         login_console = settings.login_console
     token = token or secrets.token_urlsafe(32)
@@ -133,7 +135,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
     runs = Runs()
     claude_agent = ClaudeAgent(settings.claude_cmd, settings.data_dir, client_factory=agent_client,
                                api_key_of=Accounts.api_key)
-    codex_agent = None                                    # P5 step 2: codex app-server
+    codex_agent = CodexAgent(settings.codex_cmd, transport_factory=codex_transport)
     work = settings.data_dir / "cache" / "run"          # empty cwd: CLIs pick up no project files
     providers = {
         "demo": Demo(),
@@ -649,7 +651,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
                 log.exception("agent run failed")
                 res["error"] = Fail("fatal", f"internal error: {e.__class__.__name__}")
             err, usage = res["error"], res["usage"]
-            if res["windows"] and acc["provider"] == "claude":
+            if res["windows"] and acc["provider"] in ("claude", "codex"):      # API keys report none
                 accounts.record_rate_limit(acc["id"], res["windows"], "allowed")
             if err and err.kind == "auth":
                 accounts.mark_auth_error(acc["id"], err.message)
