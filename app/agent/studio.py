@@ -40,8 +40,10 @@ class Tool:
 class Studio:
     """Studio tools bound to one project. `on_job(job)` lets the run show the voice card."""
 
-    def __init__(self, pid: str, store, voice_svc, voice_jobs, on_job: Callable[[dict], None]):
+    def __init__(self, pid: str, store, voice_svc, voice_jobs, on_job: Callable[[dict], None],
+                 tuned: Callable[[str], dict | None] | None = None):
         self.pid, self.store, self.svc, self.jobs, self.on_job = pid, store, voice_svc, voice_jobs, on_job
+        self.tuned = tuned or (lambda voice: None)          # settings tune.py found for a voice
 
     def tools(self) -> list[Tool]:
         return [
@@ -95,9 +97,11 @@ class Studio:
         if pace == "wpm" and not (wpm and 90 <= float(wpm) <= 240):
             return "target_wpm must be between 90 and 240 when pace_mode is wpm."
         name = "".join(c for c in (args.get("name") or path.stem) if c.isalnum() or c in "-_ ").strip()[:80]
+        t = self.tuned(args["voice"]) or {}
         spec = {"voice": args["voice"], "name": name or "voiceover", "preset": args.get("preset") or "clone_exact",
                 "pace_mode": pace, "target_wpm": float(wpm) if wpm else None, "grid_gap": 1.5, "auto_fix": True,
-                "exaggeration": None, "cfg_weight": None, "temperature": None}
+                "exaggeration": t.get("exaggeration"), "cfg_weight": t.get("cfg_weight"),
+                "temperature": t.get("temperature")}
         job = self.jobs.start(self.pid, text, spec, path.name)
         self.store.append_message(self.pid, "user", f"Voice {path.name} with {args['voice']}"
                                   + (f" at {int(float(wpm))} wpm" if pace == "wpm" else ""),

@@ -19,6 +19,12 @@ TOOLS = {
         "uses": "your graphics card (GPU) for the voice clone, roughly 1 minute of work per "
                 "minute of audio, plus a few minutes of CPU for the read-check and subtitles",
     },
+    "voice_tune": {
+        "label": "Finding the best settings for a voice",
+        "cost_class": HEAVY,
+        "uses": "your graphics card (GPU) for about 3 minutes - it renders the same sentence 7 ways "
+                "and keeps the one closest to the voice",
+    },
 }
 
 

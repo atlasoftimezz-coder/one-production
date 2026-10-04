@@ -1,0 +1,8 @@
+# The heavy pieces (torch, chatterbox-tts, faster-whisper) must already be installed
+# in the interpreter you launch with - this app does not install them.
+fastapi
+uvicorn
+python-multipart
+soundfile
+librosa
+numpy

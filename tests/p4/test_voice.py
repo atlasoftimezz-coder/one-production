@@ -38,7 +38,7 @@ def test_allow_once_is_not_remembered(client, project):
 def test_always_allow_is_remembered_and_revocable(client, project):
     assert start(client, project, text=SCRIPT, approve="always").status_code == 200
     assert start(client, project, text=SCRIPT).status_code == 200
-    assert client.get("/api/approvals").json() == {"voiceover": True}
+    assert client.get("/api/approvals").json()["voiceover"] is True
     client.delete("/api/approvals/voiceover")
     assert start(client, project, text=SCRIPT).status_code == 409
 
@@ -166,7 +166,9 @@ def test_status_lists_voices_and_presets(client):
 def test_not_set_up_is_explained_not_crashed(make_client):
     c = make_client(configured=False, transport="real", url="http://127.0.0.1:9")
     st = c.get("/api/voice/status").json()
-    assert st["configured"] is False and len(st["missing"]) == 2 and st["running"] is False
+    # P7: a PC without the voice app is told where to install it, in one plain sentence
+    assert st["configured"] is False and st["running"] is False
+    assert len(st["missing"]) == 1 and "System, Modules" in st["missing"][0]
     pid = c.post("/api/projects", json={"name": "x"}).json()["id"]
     job = start(c, pid, text=SCRIPT, approve="always").json()
     done = wait_job(c, job["id"])

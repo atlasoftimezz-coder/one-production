@@ -101,6 +101,21 @@ def _env_overrides() -> dict:
     return out
 
 
+def save_setting(key: str, value) -> Path:
+    """Write one value into the settings file, keeping everything else in it."""
+    path = settings_file()
+    data = {}
+    if path.is_file():
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except ValueError:
+            data = {}
+    data[key] = value
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=1), encoding="utf-8")
+    return path
+
+
 def load_settings() -> Settings:
     values: dict = {"data_dir": _localappdata() / "OneProduction"}
     path = settings_file()

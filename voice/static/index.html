@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Voiceover Studio</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#161a21; --panel2:#1c212a; --line:#272e3a;
+    --ink:#e6e9ef; --dim:#98a2b3; --accent:#6ea8fe; --ok:#3fb950; --warn:#d29922; --bad:#f85149;
+    --radius:10px;
+  }
+  @media (prefers-color-scheme: light){
+    :root{ --bg:#f6f7f9; --panel:#fff; --panel2:#f0f2f5; --line:#dfe3ea;
+           --ink:#12151a; --dim:#5b6675; --accent:#1e60d6; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:14px/1.5 ui-sans-serif,system-ui,"Segoe UI",Roboto,sans-serif}
+  header{padding:18px 22px;border-bottom:1px solid var(--line);display:flex;
+         align-items:baseline;gap:14px;flex-wrap:wrap}
+  h1{font-size:17px;margin:0;letter-spacing:-.01em}
+  .sub{color:var(--dim);font-size:12.5px}
+  main{display:grid;grid-template-columns:minmax(380px,1.1fr) minmax(360px,1fr);
+       gap:18px;padding:18px 22px;align-items:start}
+  @media (max-width:900px){ main{grid-template-columns:1fr} }
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px}
+  .card h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);
+           margin:0 0 12px}
+  label{display:block;font-size:12.5px;color:var(--dim);margin:12px 0 5px}
+  label:first-of-type{margin-top:0}
+  input,select,textarea,button{font:inherit;color:var(--ink);background:var(--panel2);
+       border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%}
+  textarea{min-height:260px;resize:vertical;font-family:ui-monospace,Consolas,monospace;font-size:12.5px}
+  button{cursor:pointer;background:var(--accent);color:#fff;border-color:transparent;font-weight:600}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  button.ghost{background:var(--panel2);color:var(--ink);border-color:var(--line);font-weight:500}
+  .row{display:flex;gap:10px}
+  .row>*{flex:1;min-width:0}
+  .presets{display:grid;gap:8px}
+  .preset{border:1px solid var(--line);border-radius:8px;padding:10px 12px;cursor:pointer;
+          background:var(--panel2)}
+  .preset[aria-pressed="true"]{border-color:var(--accent);
+          box-shadow:inset 0 0 0 1px var(--accent)}
+  .preset b{display:block;font-size:13px}
+  .preset span{color:var(--dim);font-size:12px}
+  details{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
+  summary{cursor:pointer;color:var(--dim);font-size:12.5px}
+  .grid4{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+  .sec{border:1px solid var(--line);border-radius:8px;padding:9px 11px;margin-bottom:7px;
+       background:var(--panel2)}
+  .sec .top{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+  .sec .name{font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .pill{font-size:11px;padding:2px 7px;border-radius:999px;border:1px solid var(--line);
+        color:var(--dim);white-space:nowrap}
+  .pill.ok{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 45%,transparent)}
+  .pill.check{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 45%,transparent)}
+  .pill.rendering{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 45%,transparent)}
+  .meta{color:var(--dim);font-size:12px;margin-top:3px}
+  .diff{font-family:ui-monospace,Consolas,monospace;font-size:11.5px;color:var(--dim);
+        margin-top:5px;padding-left:9px;border-left:2px solid var(--line)}
+  .diff b{color:var(--ink);font-weight:600}
+  .status{padding:10px 12px;border-radius:8px;background:var(--panel2);
+          border:1px solid var(--line);font-size:13px}
+  .status.bad{border-color:var(--bad);color:var(--bad)}
+  .result{margin-top:12px}
+  audio{width:100%;margin-top:10px}
+  code{font-family:ui-monospace,Consolas,monospace;font-size:12px;color:var(--dim);
+       word-break:break-all}
+  .warnbar{margin:0 22px;padding:10px 12px;border:1px solid var(--warn);border-radius:8px;
+           color:var(--warn);font-size:12.5px}
+  .hint{color:var(--dim);font-size:11.5px;margin-top:5px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Voiceover Studio</h1>
+  <span class="sub">local render &middot; every section read-checked against the script</span>
+</header>
+<div id="problems"></div>
+
+<main>
+  <section class="card">
+    <h2>Script</h2>
+    <textarea id="script" placeholder="Paste the script.
+
+Lines like  [0:42] Hashima Island  or  ## Hashima Island  are treated as on-screen
+headings and are not spoken. With [m:ss] stamps you can pick Timestamp grid below and
+each section will start exactly on its stamp."></textarea>
+    <div class="hint" id="scriptstat">&nbsp;</div>
+
+    <label for="name">Output name</label>
+    <input id="name" value="voiceover">
+  </section>
+
+  <section class="card">
+    <h2>Voice</h2>
+    <label for="voice">Reference clip</label>
+    <select id="voice"></select>
+    <div class="hint">10&ndash;30s of clean single-speaker narration clones best. Under ~8s the
+      clone loses the voice's pitch.</div>
+
+    <label for="upload">Add a reference clip</label>
+    <input id="upload" type="file" accept=".wav,.mp3,.flac">
+    <div class="hint" id="uphint">&nbsp;</div>
+
+    <label>Delivery</label>
+    <div class="presets" id="presets"></div>
+
+    <label for="pace">Pace</label>
+    <select id="pace">
+      <option value="natural">Natural &mdash; whatever the voice does</option>
+      <option value="wpm">Target words per minute</option>
+      <option value="grid">Timestamp grid &mdash; stretch to hit every [m:ss]</option>
+      <option value="grid_pad">Timestamp grid, no stretching &mdash; keeps the voice exact</option>
+    </select>
+    <div class="row" id="pacerow" style="margin-top:8px">
+      <div id="wpmwrap" hidden>
+        <label for="wpm" style="margin-top:0">Words per minute</label>
+        <input id="wpm" type="number" value="150" min="90" max="240">
+      </div>
+      <div>
+        <label for="gap" style="margin-top:0">Gap after each section (s)</label>
+        <input id="gap" type="number" value="1.5" min="0" max="6" step="0.1">
+      </div>
+    </div>
+
+    <details>
+      <summary>Override the preset</summary>
+      <div class="grid4" style="margin-top:10px">
+        <div><label for="exag" style="margin-top:0">Exaggeration</label>
+             <input id="exag" type="number" step="0.05" min="0" max="1" placeholder="preset"></div>
+        <div><label for="cfg" style="margin-top:0">CFG weight</label>
+             <input id="cfg" type="number" step="0.05" min="0" max="1" placeholder="preset"></div>
+        <div><label for="temp" style="margin-top:0">Temperature</label>
+             <input id="temp" type="number" step="0.05" min="0.1" max="1.5" placeholder="preset"></div>
+        <div><label for="pitch" style="margin-top:0">Pitch factor</label>
+             <input id="pitch" type="number" step="0.01" min="0.5" max="1.5" placeholder="preset"></div>
+      </div>
+      <div class="hint">Higher exaggeration widens pitch range but also raises pitch.
+        Pitch factor 0.699 drops about 6 semitones.</div>
+      <label style="display:flex;align-items:center;gap:8px;margin-top:10px">
+        <input id="autofix" type="checkbox" checked style="width:auto">
+        <span>Re-render sections that fail the read-check</span>
+      </label>
+    </details>
+
+    <button id="go" style="margin-top:14px">Render voiceover</button>
+  </section>
+
+  <section class="card" id="jobcard" style="grid-column:1/-1">
+    <h2>Progress</h2>
+    <div class="status" id="status">Nothing running. Paste a script and hit render.</div>
+    <div id="sections" style="margin-top:12px"></div>
+    <div class="result" id="result"></div>
+  </section>
+</main>
+
+<script>
+const $ = s => document.querySelector(s);
+let META = null, PRESET = "narrator", POLL = null;
+
+async function api(path, opts){
+  const r = await fetch(path, opts);
+  if(!r.ok){ throw new Error((await r.json().catch(()=>({detail:r.statusText}))).detail); }
+  return r.json();
+}
+
+function renderPresets(){
+  $("#presets").innerHTML = "";
+  for(const [key, p] of Object.entries(META.presets)){
+    const b = document.createElement("div");
+    b.className = "preset"; b.setAttribute("role","button");
+    b.setAttribute("aria-pressed", String(key === PRESET));
+    b.innerHTML = `<b>${p.label}</b><span>${p.note}</span>`;
+    b.onclick = () => { PRESET = key; renderPresets(); };
+    $("#presets").appendChild(b);
+  }
+}
+
+function fillVoices(sel){
+  $("#voice").innerHTML = META.voices.map(v=>`<option${v===sel?" selected":""}>${v}</option>`).join("");
+}
+
+async function boot(){
+  META = await api("/api/meta");
+  fillVoices(); renderPresets();
+  if(META.problems.length){
+    $("#problems").innerHTML = `<div class="warnbar">${META.problems.join("<br>")}</div>`;
+  }
+}
+
+$("#script").addEventListener("input", () => {
+  const t = $("#script").value;
+  const words = (t.match(/\b[\w']+\b/g)||[]).length;
+  const stamps = (t.match(/^\s*\[\d+:\d{2}\]/gm)||[]).length;
+  $("#scriptstat").textContent =
+    `${words} words including headings` + (stamps ? ` · ${stamps} timestamp${stamps>1?"s":""} found` : "");
+});
+
+$("#pace").addEventListener("change", e => {
+  $("#wpmwrap").hidden = e.target.value !== "wpm";
+});
+
+$("#upload").addEventListener("change", async e => {
+  const f = e.target.files[0]; if(!f) return;
+  $("#uphint").textContent = "converting…";
+  const fd = new FormData(); fd.append("file", f);
+  try{
+    const r = await api("/api/voices", {method:"POST", body:fd});
+    META = await api("/api/meta"); fillVoices(r.name);
+    $("#uphint").textContent = r.warning ? "added " + r.name + " — " + r.warning
+                                         : `added ${r.name} (${r.seconds}s)`;
+  }catch(err){ $("#uphint").textContent = "could not add that clip: " + err.message; }
+});
+
+const num = id => { const v = $(id).value.trim(); return v === "" ? null : Number(v); };
+
+$("#go").addEventListener("click", async () => {
+  const spec = {
+    script: $("#script").value,
+    voice: $("#voice").value,
+    name: $("#name").value || "voiceover",
+    preset: PRESET,
+    pace_mode: $("#pace").value,
+    target_wpm: $("#pace").value === "wpm" ? Number($("#wpm").value) : null,
+    grid_gap: Number($("#gap").value),
+    auto_fix: $("#autofix").checked,
+    exaggeration: num("#exag"), cfg_weight: num("#cfg"),
+    temperature: num("#temp"), pitch: num("#pitch"),
+  };
+  $("#go").disabled = true; $("#result").innerHTML = ""; $("#sections").innerHTML = "";
+  $("#status").className = "status"; $("#status").textContent = "queued…";
+  try{
+    const {id} = await api("/api/jobs", {method:"POST",
+      headers:{"content-type":"application/json"}, body: JSON.stringify(spec)});
+    watch(id);
+  }catch(err){
+    $("#status").className = "status bad"; $("#status").textContent = err.message;
+    $("#go").disabled = false;
+  }
+});
+
+function watch(id){
+  clearInterval(POLL);
+  POLL = setInterval(async () => {
+    let j; try{ j = await api("/api/jobs/" + id); }catch{ return; }
+    $("#status").className = "status" + (j.status === "failed" ? " bad" : "");
+    $("#status").textContent = j.status === "failed" ? j.error : j.message;
+    $("#sections").innerHTML = (j.sections||[]).map(s => {
+      const wer = s.wer === null ? "" : ` · read-check ${s.wer.toFixed(4)}`;
+      const pace = s.speech ? ` · ${s.speech}s · ${s.wpm} wpm` : "";
+      const seed = s.seed !== 4242 ? ` · reseeded ${s.seed}` : "";
+      const diffs = (s.diffs||[]).map(d =>
+        `<div class="diff">${d.op} — script: <b>${d.script}</b> · heard: <b>${d.heard}</b></div>`).join("");
+      return `<div class="sec"><div class="top">
+          <span class="name">${s.i+1}. ${s.title || "(untitled section)"}</span>
+          <span class="pill ${s.status}">${s.status}</span></div>
+        <div class="meta">${s.words} words${wer}${pace}${seed}</div>${diffs}</div>`;
+    }).join("");
+
+    if(j.status === "done" || j.status === "failed"){
+      clearInterval(POLL); $("#go").disabled = false;
+      if(j.result){
+        const r = j.result;
+        const flagged = r.flagged.length
+          ? `<div class="meta" style="color:var(--warn)">sections still failing the read-check: ${r.flagged.join(", ")} — listen to those before publishing</div>`
+          : `<div class="meta" style="color:var(--ok)">every section passed the read-check</div>`;
+        $("#result").innerHTML = `
+          <div class="status"><b>${r.clock}</b> · ${r.words} words · ${r.wpm} wpm overall</div>
+          ${flagged}
+          <audio controls src="/api/preview/${j.id}/mp3"></audio>
+          <div class="meta" style="margin-top:8px">saved to<br><code>${r.wav}</code><br><code>${r.mp3}</code></div>`;
+      }
+    }
+  }, 900);
+}
+
+boot();
+</script>
+</body>
+</html>

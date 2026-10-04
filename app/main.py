@@ -24,6 +24,10 @@ from . import handoff
 from .accounts import DEFAULT_SWITCH, DEFAULT_WARN, PROVIDERS, SAME_SERVICE_SWITCHING, SUBSCRIPTIONS, \
     AccountError, Accounts
 from . import actions, system
+from .config import save_setting
+from .installer import InstallError, Installer
+from .modules import ENGINE_DIR, Modules
+from .setup import SetupState, drives
 from .backups import BackupError, Backups, Busy
 from .profile import Profile, ProfileError, Throttled
 from .agent.claude_agent import ClaudeAgent
@@ -44,7 +48,7 @@ from .storage import NotFound, Store
 from .tools import Approvals, TOOLS
 from .usage import RANGES, Ledger, range_start
 from .version import __version__
-from .voice import VoiceError, VoiceJobs, VoiceService
+from .voice import VoiceTuner, VoiceError, VoiceJobs, VoiceService
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 UPLOAD_CHUNK = 1024 * 1024
@@ -99,6 +103,28 @@ class ScriptIn(BaseModel):
     text: str | None = None          # or pasted text
 
 
+class VoiceModeIn(BaseModel):
+    mode: str
+
+
+class InstallIn(BaseModel):
+    approve: list[str] = []
+
+
+class SetupIn(BaseModel):
+    step: int | None = None
+    done: bool | None = None
+
+
+class FolderIn(BaseModel):
+    path: str
+
+
+class TuneIn(BaseModel):
+    voice: str
+    approve: str | None = None
+
+
 class BackupIn(BaseModel):
     include_media: bool | None = None
 
@@ -150,7 +176,8 @@ AGENT_PROVIDERS = ("claude", "anthropic_api", "codex")
 
 def create_app(settings: Settings, token: str | None = None, *, api_transport=None,
                login_console: bool | None = None, voice_transport=None, agent_client=None,
-               codex_transport=None, backup_delay: float = 120, backup_tick: float = 3600) -> FastAPI:
+               codex_transport=None, backup_delay: float = 120, backup_tick: float = 3600,
+               restart=None, gpu_probe=None, tune_script: Path | None = None) -> FastAPI:
     if login_console is None:
         login_console = settings.login_console
     token = token or secrets.token_urlsafe(32)
@@ -164,6 +191,11 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
     runs = Runs()
     backups = Backups(settings.data_dir, store, redact)
     profile = Profile(settings.data_dir)
+    modules = Modules(settings, settings.data_dir)
+    installer = Installer()
+    setup_state = SetupState(settings.data_dir, store, accounts)
+    tuner = VoiceTuner(voice_svc, settings.data_dir, tune_script or ENGINE_DIR / "tune.py")
+    gpu_cache: dict = {}
     claude_agent = ClaudeAgent(settings.claude_cmd, settings.data_dir, client_factory=agent_client,
                                api_key_of=Accounts.api_key)
     codex_agent = CodexAgent(settings.codex_cmd, transport_factory=codex_transport)
@@ -201,8 +233,25 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
                 log.exception("daily backup failed")
             await asyncio.sleep(backup_tick)
 
+    async def gpu_info(refresh: bool = False) -> dict | None:
+        """The first NVIDIA card (cached: nvidia-smi takes a moment)."""
+        if refresh or "gpu" not in gpu_cache:
+            if gpu_probe is not None:
+                gpu_cache["gpu"] = gpu_probe()
+            else:
+                g = await system.gpu(system.run)
+                gpu_cache["gpu"] = (g.get("gpus") or [None])[0]
+        return gpu_cache["gpu"]
+
+    async def reconfigure_voice() -> None:
+        voice_svc.configure(*modules.voice_config(await gpu_info()))
+
     @asynccontextmanager
     async def lifespan(_app):
+        try:
+            await reconfigure_voice()
+        except Exception:                              # noqa: BLE001 - voice is optional
+            log.exception("voice module check failed")
         ticker = asyncio.get_running_loop().create_task(daily_backups())
         yield
         ticker.cancel()
@@ -629,7 +678,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
         acc = _account(body.account_id or "demo")
         if not acc["enabled"]:
             raise HTTPException(400, "that account is turned off")
-        if settings.agent_mode and acc["provider"] in AGENT_PROVIDERS:
+        if settings.agent_mode and acc["provider"] in AGENT_PROVIDERS and agent_ready(acc):
             return await run_agent(pid, acc, body.message)
         studio = await studio_state(pid)
         prompt = build_prompt(store.history(pid), body.message,
@@ -689,6 +738,126 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
         except BackupError as e:
             raise HTTPException(400, str(e))
 
+    # ---------------------------------------------------------------- modules + install (R13/R14)
+    @app.get("/api/modules")
+    async def list_modules() -> dict:
+        gpu = await gpu_info()
+        return {"modules": modules.status(gpu, installer.running() and installer.module == "voice"),
+                "gpu": gpu}
+
+    @app.patch("/api/modules/voice")
+    async def set_voice_mode(body: VoiceModeIn) -> dict:
+        if installer.running():
+            raise HTTPException(409, "an install is running - wait for it or press Cancel")
+        try:
+            modules.set_voice(body.mode)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        await reconfigure_voice()
+        return await list_modules()
+
+    def voice_items(gpu, mode=None):
+        r = modules.recipe(gpu, mode)
+        return r, r.items()
+
+    @app.get("/api/install/plan")
+    async def install_plan(module: str = "voice") -> dict:
+        if module != "voice":
+            raise HTTPException(404, "only the voice module installs anything")
+        gpu = await gpu_info()
+        if modules.external():
+            return {"module": "voice", "external": True, "items": []}
+        if modules.voice_mode(gpu) == "off":
+            raise HTTPException(400, "switch the voice module on first")
+        r, items = voice_items(gpu)
+        return {"module": "voice", "mode": r.mode, "torch_build": r.torch_kind, "ready": r.ready(),
+                "items": installer.plan("voice", items)}
+
+    @app.post("/api/install")
+    async def install(body: InstallIn) -> dict:
+        gpu = await gpu_info()
+        if installer.module != "voice" or not installer.items:
+            await install_plan("voice")
+        r = modules.recipe(gpu)
+        loop = asyncio.get_running_loop()
+
+        def done(result):
+            loop.call_soon_threadsafe(lambda: asyncio.ensure_future(reconfigure_voice()))
+        try:
+            installer.start(body.approve, verify=r.verify, on_done=done)
+        except InstallError as e:
+            raise HTTPException(409 if installer.running() else 400, str(e))
+        return installer.state()
+
+    @app.get("/api/install")
+    def install_state() -> dict:
+        return installer.state()
+
+    @app.post("/api/install/cancel")
+    def install_cancel() -> dict:
+        return {"cancelled": installer.cancel()}
+
+    @app.get("/api/setup")
+    def get_setup() -> dict:
+        return {**setup_state.public(), "drives": drives(), "can_restart": restart is not None}
+
+    @app.patch("/api/setup")
+    def patch_setup(body: SetupIn) -> dict:
+        return setup_state.save(step=body.step, done=body.done)
+
+    @app.post("/api/setup/data-folder")
+    async def choose_data_folder(body: FolderIn) -> dict:
+        raw = body.path.strip().strip('"')
+        target = Path(os.path.expandvars(raw)).expanduser()
+        if not target.is_absolute():
+            raise HTTPException(400, "give the full folder path, e.g. D:\\OneProduction")
+        if target.resolve() == settings.data_dir.resolve():
+            setup_state.save(chose_folder=True, step=1)
+            return {"restarting": False, **setup_state.public()}
+        if not setup_state.first_run() and (store.list_projects() or accounts.list()):
+            raise HTTPException(409, "this copy already has projects or accounts - moving them isn't automatic yet")
+        try:
+            target.mkdir(parents=True, exist_ok=True)
+            probe = target / ".write-test"
+            probe.write_text("ok")
+            probe.unlink()
+        except OSError as e:
+            raise HTTPException(400, f"can't use that folder: {e.strerror or e}")
+        moved = settings.model_copy(update={"data_dir": target})
+        moved.ensure_dirs()
+        SetupState(target, store, accounts).save(chose_folder=True, step=1)
+        save_setting("data_dir", str(target))
+        if restart is None:
+            return {"restarting": False, "saved": True, "data_dir": str(target),
+                    "message": "Saved - close One Production and start it again to use the new folder."}
+        asyncio.get_running_loop().call_later(0.8, restart)
+        return {"restarting": True, "data_dir": str(target)}
+
+    @app.post("/api/voice/tune")
+    async def tune_voice(body: TuneIn) -> dict:
+        need = approvals.check("voice_tune", body.approve)
+        if need:
+            from fastapi.responses import JSONResponse
+            return JSONResponse({"needs_approval": need}, status_code=409)
+        if tuner.state.get("running"):
+            raise HTTPException(409, "already tuning a voice")
+        try:
+            await voice_svc.ensure_running()
+            meta = await voice_svc.meta()
+        except VoiceError as e:
+            raise HTTPException(400, str(e))
+        if body.voice not in meta.get("voices", []):
+            raise HTTPException(404, "no such voice")
+        task = asyncio.get_running_loop().create_task(tuner.run(body.voice, meta.get("voices_dir")))
+        background.add(task)
+        task.add_done_callback(background.discard)
+        await asyncio.sleep(0)
+        return tuner.state
+
+    @app.get("/api/voice/tune")
+    def tune_state() -> dict:
+        return {**tuner.state, "tuned": {k: v.get("best") for k, v in tuner.tuned().items()}}
+
     # ---------------------------------------------------------------- system scan (R13 step 2)
     @app.get("/api/system")
     async def system_scan() -> dict:
@@ -747,6 +916,17 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
             return None
         return approvals.check("voiceover", None)
 
+    def agent_ready(acc: dict) -> bool:
+        """Agent mode needs the official client on this PC (Claude Code for Claude logins and
+        API keys, Codex for Codex logins). An API key without Claude Code still chats (P7)."""
+        if acc["provider"] in ("claude", "anthropic_api"):
+            from .agent.claude_agent import claude_exe
+            return bool(claude_exe(settings.claude_cmd)) or agent_client is not None
+        if acc["provider"] == "codex":
+            from .providers.cli import resolve
+            return bool(resolve("codex", settings.codex_cmd)) or codex_transport is not None
+        return False
+
     def agent_for(acc: dict):
         return claude_agent if acc["provider"] in ("claude", "anthropic_api") else codex_agent
 
@@ -762,7 +942,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
         # a fresh session (new project, or another account taking over) gets the recent chat
         prompt = message if sid else build_prompt(store.history(pid), message).replace(SYSTEM + "\n\n", "", 1)
         store.append_message(pid, "user", message)
-        studio = Studio(pid, store, voice_svc, voice_jobs,
+        studio = Studio(pid, store, voice_svc, voice_jobs, tuned=tuner.for_voice,
                         on_job=lambda job: run.emit({"t": "voicejob", "id": job["id"], "source": job["source"],
                                                      "voice": job["voice"]}))
 
@@ -930,7 +1110,8 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
                 meta = {}
         return {"configured": not missing, "missing": missing, "running": running,
                 "voices": meta.get("voices", []), "presets": meta.get("presets", {}),
-                "approved": approvals.always("voiceover"), "tool": TOOLS["voiceover"]}
+                "approved": approvals.always("voiceover"), "tool": TOOLS["voiceover"],
+                "tuned": {k: v.get("best") for k, v in tuner.tuned().items()}}
 
     @app.get("/api/voice/sample/{name}")
     async def voice_sample(name: str) -> FileResponse:
@@ -1007,10 +1188,12 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
             raise HTTPException(400, "set the words per minute")
         name = (body.name or (Path(body.file).stem if body.file else "voiceover")).strip()[:80] or "voiceover"
         name = "".join(c for c in name if c.isalnum() or c in "-_ ").strip() or "voiceover"
+        tuned = tuner.for_voice(body.voice) or {}
         spec = {"voice": body.voice, "name": name, "preset": body.preset, "pace_mode": body.pace_mode,
                 "target_wpm": body.target_wpm, "grid_gap": body.grid_gap, "auto_fix": True,
-                "exaggeration": body.exaggeration, "cfg_weight": body.cfg_weight,
-                "temperature": body.temperature}
+                "exaggeration": body.exaggeration if body.exaggeration is not None else tuned.get("exaggeration"),
+                "cfg_weight": body.cfg_weight if body.cfg_weight is not None else tuned.get("cfg_weight"),
+                "temperature": body.temperature if body.temperature is not None else tuned.get("temperature")}
         job = voice_jobs.start(pid, text, spec, source)
         extra = {"from_action": body.from_action} if body.from_action else {}
         store.append_message(pid, "user", f"Voice {source} with {body.voice}"

@@ -36,9 +36,21 @@ class VoiceService:
         self.transport = transport
         self._proc: subprocess.Popen | None = None
         self.last_meta: dict | None = None          # voices/presets as last seen, for the chat
+        self.env: dict[str, str] = {}               # VOAPP_* folders for an installed module
+        self.off_reason: str | None = None
+
+    def configure(self, app_dir: Path | None, python: Path | None, env: dict | None = None,
+                  off_reason: str | None = None) -> None:
+        """Point at the user's own voice app or at the module the setup wizard installed (P7)."""
+        self.app_dir = Path(app_dir) if app_dir else None
+        self.python = Path(python) if python else None
+        self.env = dict(env or {})
+        self.off_reason = off_reason
 
     # ---------------------------------------------------------------- setup
     def missing(self) -> list[str]:
+        if self.off_reason:
+            return [self.off_reason]
         out = []
         if not self.app_dir or not (self.app_dir / "server.py").is_file():
             out.append("voice_app_dir: folder of the voiceover app (with server.py)")
@@ -66,7 +78,8 @@ class VoiceService:
         self._proc = subprocess.Popen(
             [str(self.python), str(self.app_dir / "server.py"), "--port", port],
             cwd=str(self.app_dir), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            stderr=subprocess.DEVNULL, env={**os.environ, **self.env},
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         deadline = time.time() + START_TIMEOUT
         while time.time() < deadline:
             if await self.running():
@@ -111,10 +124,78 @@ class VoiceService:
             str(self.python), str(self.app_dir / "make_srt.py"), str(audio), str(script), str(out),
             cwd=str(self.app_dir), stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
-            env={**os.environ, "PYTHONUTF8": "1"})
+            env={**os.environ, **self.env, "PYTHONUTF8": "1"})
         _, err = await proc.communicate()
         if proc.returncode != 0 or not out.exists():
             raise VoiceError("subtitles failed: " + err.decode("utf-8", "replace").strip()[-300:])
+
+
+class VoiceTuner:
+    """Finds the Chatterbox settings that sound most like a voice (tune.py, ships in ./voice)
+    and remembers them per voice in data_dir/voice_settings.json. The dialog and the agent
+    use them as that voice's defaults. GPU work: the caller passes it through the R12 gate."""
+
+    def __init__(self, service: VoiceService, data_dir: Path, script: Path):
+        self.svc = service
+        self.file = data_dir / "voice_settings.json"
+        self.work = data_dir / "cache" / "tune"
+        self.script = script
+        self.state: dict = {"running": False}
+        self.proc: asyncio.subprocess.Process | None = None
+
+    def tuned(self) -> dict:
+        if self.file.exists():
+            try:
+                return json.loads(self.file.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                pass
+        return {}
+
+    def for_voice(self, voice: str | None) -> dict | None:
+        t = self.tuned().get(voice or "")
+        return t.get("best") if t else None
+
+    async def run(self, voice: str, voices_dir: str | None) -> None:
+        if self.state.get("running"):
+            raise VoiceError("already tuning a voice")
+        self.work.mkdir(parents=True, exist_ok=True)
+        out = self.work / f"{voice}.json"
+        out.unlink(missing_ok=True)
+        self.state = {"running": True, "voice": voice, "step": 0, "total": 0, "detail": "starting", "error": None}
+        env = {**os.environ, **self.svc.env, "PYTHONUTF8": "1"}
+        if voices_dir:
+            env["VOAPP_VOICES"] = voices_dir
+        tail: list[str] = []
+        try:
+            self.proc = await asyncio.create_subprocess_exec(
+                str(self.svc.python), str(self.script), "--ref", voice, "--out", str(out),
+                cwd=str(self.script.parent), stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT, env=env,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            async for raw in self.proc.stdout:
+                line = raw.decode("utf-8", "replace").strip()
+                tail = (tail + [line])[-8:]
+                if line.startswith("STEP "):
+                    n, _, what = line[5:].partition(" ")
+                    a, _, b = n.partition("/")
+                    if a.isdigit() and b.isdigit():
+                        self.state.update(step=int(a), total=int(b), detail=what)
+            code = await self.proc.wait()
+            if code != 0 or not out.exists():
+                raise VoiceError("tuning failed: " + " | ".join(l for l in tail if l)[-400:])
+            result = json.loads(out.read_text(encoding="utf-8"))
+            all_ = self.tuned()
+            all_[voice] = {"best": result["best"], "device": result.get("device"), "tuned_at": time.time(),
+                           "ranking": result.get("ranking", [])[:7], "seconds": result.get("seconds")}
+            self.file.write_text(json.dumps(all_, indent=1), encoding="utf-8")
+            self.state.update(running=False, done=True, best=result["best"], detail="done")
+        except asyncio.CancelledError:
+            if self.proc and self.proc.returncode is None:
+                self.proc.kill()
+            self.state.update(running=False, error="stopped")
+            raise
+        except Exception as e:                       # noqa: BLE001 - shown in the wizard
+            self.state.update(running=False, error=str(e)[:500])
 
 
 class VoiceJobs:

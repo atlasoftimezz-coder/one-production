@@ -39,34 +39,52 @@ def pick_port(preferred: int) -> int:
 
 
 def main() -> None:
-    settings = load_settings()
-    settings.ensure_dirs()
-    log_file = settings.data_dir / "logs" / "app.log"
-    handlers = [logging.FileHandler(log_file, encoding="utf-8"), logging.StreamHandler(sys.stdout)]
-    for h in handlers:
-        h.addFilter(RedactingFilter())
-    logging.basicConfig(level=settings.log_level.upper(),
-                        format="%(asctime)s %(levelname)s %(name)s: %(message)s", handlers=handlers)
-    log = logging.getLogger("oneprod")
+    """Runs until the window closes. Choosing another data folder in the setup wizard restarts
+    the server in that folder (same window, new session token, a fresh browser tab)."""
+    configured = False
+    while True:
+        settings = load_settings()
+        settings.ensure_dirs()
+        log_file = settings.data_dir / "logs" / "app.log"
+        handlers = [logging.FileHandler(log_file, encoding="utf-8"), logging.StreamHandler(sys.stdout)]
+        for h in handlers:
+            h.addFilter(RedactingFilter())
+        logging.basicConfig(level=settings.log_level.upper(), force=configured,
+                            format="%(asctime)s %(levelname)s %(name)s: %(message)s", handlers=handlers)
+        configured = True
+        log = logging.getLogger("oneprod")
 
-    port = pick_port(settings.port)
-    url = f"http://{LOOPBACK}:{port}/"
-    app = create_app(settings)
-    # The token travels only in the URL fragment, which browsers never send to the server,
-    # and the page removes it from the address bar and history on load.
-    launch_url = f"{url}#t={app.state.token}"
+        port = pick_port(settings.port)
+        url = f"http://{LOOPBACK}:{port}/"
+        wanted = {"restart": False}
+        box: dict = {}
 
-    log.info("One Production %s starting on %s (data: %s)", __version__, url, settings.data_dir)
-    print(f"\n  One Production {__version__}\n  {url}\n  data: {settings.data_dir}\n"
-          f"  Close this window to stop.\n", flush=True)
+        def restart() -> None:
+            wanted["restart"] = True
+            box["server"].should_exit = True
 
-    if settings.open_browser:
-        threading.Timer(1.0, webbrowser.open, args=(launch_url,)).start()
-    else:
-        # Headless/test runs: the launch link goes to the console only, never to the log file.
-        print(f"  launch: {launch_url}\n", flush=True)
+        app = create_app(settings, restart=restart)
+        # The token travels only in the URL fragment, which browsers never send to the server,
+        # and the page removes it from the address bar and history on load.
+        launch_url = f"{url}#t={app.state.token}"
 
-    uvicorn.run(app, host=LOOPBACK, port=port, log_level=settings.log_level, log_config=None)
+        log.info("One Production %s starting on %s (data: %s)", __version__, url, settings.data_dir)
+        print(f"\n  One Production {__version__}\n  {url}\n  data: {settings.data_dir}\n"
+              f"  Close this window to stop.\n", flush=True)
+
+        if settings.open_browser:
+            threading.Timer(1.0, webbrowser.open, args=(launch_url,)).start()
+        else:
+            # Headless/test runs: the launch link goes to the console only, never to the log file.
+            print(f"  launch: {launch_url}\n", flush=True)
+
+        server = uvicorn.Server(uvicorn.Config(app, host=LOOPBACK, port=port, log_level=settings.log_level,
+                                               log_config=None))
+        box["server"] = server
+        server.run()
+        if not wanted["restart"]:
+            break
+        print("  Restarting in the new data folder...\n", flush=True)
 
 
 if __name__ == "__main__":
