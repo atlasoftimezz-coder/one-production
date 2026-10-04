@@ -350,6 +350,31 @@
   .vcard { align-self: center; width: min(640px, 100%); border: 1px solid var(--line); border-radius: 16px;
            background: var(--panel); padding: 14px 16px; box-shadow: var(--shadow); animation: rise .22s ease-out; }
   .vcard.done { border-color: var(--ok); } .vcard.failed { border-color: var(--bad); }
+  /* agent mode (P5): steps the agent takes, and approval cards */
+  .bubble .seg { white-space: pre-wrap; }
+  .row.assistant .bubble:has(.step, .askcard) { width: min(640px, 100%); }
+  .bubble .seg:empty { display: none; }
+  .step { display: flex; gap: 8px; align-items: baseline; font-size: 12.5px; color: var(--dim);
+          margin: 6px 0; padding: 5px 9px; border-radius: 9px; background: var(--bg2); border: 1px solid var(--line); }
+  .step .dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--accent);
+               animation: pulse 1s ease-in-out infinite; transform: translateY(-1px); }
+  .step.ok .dot { background: var(--ok); animation: none; }
+  .step.bad .dot { background: var(--bad); animation: none; }
+  .step b { color: var(--ink); font-weight: 600; flex: none; }
+  .step code { font: 12px ui-monospace, Consolas, monospace; overflow: hidden; text-overflow: ellipsis;
+               white-space: nowrap; min-width: 0; }
+  @keyframes pulse { 50% { opacity: .35; } }
+  .askcard { margin: 8px 0; border: 1px solid var(--warn); background: rgba(251,191,36,.08); border-radius: 12px;
+             padding: 10px 12px; display: grid; gap: 7px; white-space: normal; }
+  .askcard .why { color: var(--dim); font-size: 12.5px; }
+  .askcard pre { margin: 0; padding: 7px 9px; border-radius: 8px; background: var(--bg2); border: 1px solid var(--line);
+                 font: 12px/1.45 ui-monospace, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere;
+                 max-height: 180px; overflow: auto; }
+  .askcard .row2 { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
+  .askcard.done { border-color: var(--line); background: none; }
+  .askcard .verdict { font-size: 12.5px; }
+  #stop { display: none; }
+  #stop.on { display: grid; }
   /* a studio action the assistant proposed: the user runs it */
   .acard { margin-top: 8px; border: 1px solid var(--accent); border-radius: 14px; background: var(--panel);
            padding: 11px 13px; display: grid; gap: 8px; max-width: 560px; }
@@ -462,6 +487,7 @@
         <button type="button" class="iconbtn" id="micbtn" title="Make a voiceover from a script"><svg class="icon"><use href="#i-mic"/></svg></button>
         <button type="button" class="iconbtn" id="switchbtn" title="Switch account… (saves a handoff and lets another account carry on)"><svg class="icon"><use href="#i-swap"/></svg></button>
         <textarea id="input" rows="1" placeholder="Pick or create a project to start…" disabled></textarea>
+        <button class="send" id="stop" type="button" title="Stop the agent" aria-label="Stop"><svg class="icon"><use href="#i-x"/></svg></button>
         <button class="send" id="send" disabled title="Send"><svg class="icon"><use href="#i-send"/></svg></button>
       </form>
       <div class="hint">Enter to send · Shift+Enter for a new line · pick which account answers on the left</div>
@@ -677,6 +703,9 @@ async function openProject(id) {
   // response if the user has already clicked another project - otherwise a late history
   // load would wipe a message (and its streaming reply) typed in the meantime.
   const seq = state.loadSeq = (state.loadSeq || 0) + 1;
+  // leaving a project detaches its live reply; the agent keeps working on the server and
+  // attachAgent() replays everything when the user comes back
+  if (state.consumer && state.consumer.pid !== id) state.consumer.cancel();
   state.current = id;
   const p = state.projects.find(x => x.id === id);
   document.querySelectorAll("#projects li").forEach(li => li.classList.toggle("active", li.dataset.id === id));
@@ -687,7 +716,9 @@ async function openProject(id) {
   if (seq !== state.loadSeq) return;
   renderThread(hist, p);
   loadFiles();
-  $("#input").disabled = false; $("#send").disabled = state.busy;
+  attachAgent(id);
+  $("#input").disabled = false; $("#send").disabled = state.busy === id;
+  $("#stop").classList.toggle("on", state.busy === id);
   $("#input").focus();
 }
 
@@ -742,6 +773,17 @@ function renderThread(hist, p) {
     if (m.role === "system") return addNote(m.text, m.handoff);
     if (m.role === "tool" && m.tool === "voiceover") return addVoiceCard(m.job);
     const b = addMsg(m.role, m.text);
+    if (m.role === "assistant" && m.steps && m.steps.length) {
+      const seg = document.createElement("div"); seg.className = "seg"; seg.textContent = m.text;
+      b.textContent = "";
+      m.steps.forEach(st => {
+        const el = document.createElement("div");
+        el.className = "step " + (st.ok === false ? "bad" : "ok"); el.title = st.summary || "";
+        el.innerHTML = `<span class="dot"></span><b>${esc(st.title)}</b><code>${esc(st.detail || "")}</code>`;
+        b.appendChild(el);
+      });
+      b.appendChild(seg);
+    }
     if (m.role === "assistant") decorate(b, m);
     if (m.role === "assistant" && m.action) addActionCard(b, m.action, m.time, usedActions.has(m.time));
     // a voiceover still running when the user left: bring its live card back
@@ -819,7 +861,7 @@ $("#input").addEventListener("keydown", e => {
 $("#composer").onsubmit = async e => {
   e.preventDefault();
   const text = $("#input").value;
-  if (!text.trim() || !state.current || state.busy) return;
+  if (!text.trim() || !state.current || state.busy === state.current) return;
   $("#input").value = ""; grow();
   addMsg("user", text);
   const accountId = $("#picker").value || "demo";
@@ -828,35 +870,69 @@ $("#composer").onsubmit = async e => {
 
 // One streamer for normal replies and for "continue on another account".
 async function streamReply(url, body, accountId) {
-  state.busy = true; $("#send").disabled = true;
+  const r = () => api(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  await consumeReply(r, accountId);
+}
+
+// Re-attach to an agent that is still working in this project (after switching back or a reload).
+async function attachAgent(pid) {
+  let st;
+  try { st = await (await api(`/api/projects/${pid}/agent`)).json(); } catch (e) { return; }
+  if (!st.running || state.current !== pid || state.busy === pid) return;
+  await consumeReply(() => api(`/api/projects/${pid}/agent/stream`), null);
+}
+
+async function consumeReply(request, accountId) {
+  const pid = state.current;
+  state.busy = pid; $("#send").disabled = true; $("#stop").classList.add("on");
+  let reader = null, cancelled = false;
+  state.consumer = { pid, cancel: () => { cancelled = true; if (reader) reader.cancel().catch(() => {}); } };
   const bubble = addMsg("assistant", "");
   bubble.innerHTML = `<span class="typing"><i></i><i></i><i></i></span>`;
   const meta = { account: accountId };
-  let offer = null;
+  let offer = null, proposal = null, started = false, seg = null, raw = "";
+  const steps = {}, asks = {};
+  const begin = () => { if (!started) { bubble.innerHTML = ""; started = true; } };
+  const text = v => {
+    begin();
+    if (!seg) { seg = document.createElement("div"); seg.className = "seg"; bubble.appendChild(seg); raw = ""; }
+    raw += v;
+    seg.textContent = raw.split("```action")[0].replace(/^\n+/, "").trimEnd();
+  };
+  const handle = ev => {
+    if (state.current !== pid) return;              // user moved to another project: the run carries on
+    if (ev.t === "text") text(ev.v);
+    else if (ev.t === "action") { begin(); bubble.querySelectorAll(".seg").forEach((e, i, all) => { if (i === all.length - 1) e.textContent = ev.text; }); proposal = ev; }
+    else if (ev.t === "step") {
+      begin(); seg = null;
+      const el = document.createElement("div");
+      el.className = "step";
+      el.innerHTML = `<span class="dot"></span><b>${esc(ev.title)}</b><code>${esc(ev.detail || "")}</code>`;
+      bubble.appendChild(el); steps[ev.id] = el;
+    } else if (ev.t === "step_done") {
+      const el = steps[ev.id];
+      if (el) { el.classList.add(ev.ok ? "ok" : "bad"); el.title = ev.summary || ""; }
+    } else if (ev.t === "ask") { begin(); seg = null; asks[ev.id] = addAskCard(bubble, ev, pid); }
+    else if (ev.t === "asked") { if (asks[ev.id]) settleAsk(asks[ev.id], ev.answer); }
+    else if (ev.t === "voicejob") {
+      addMsg("user", `Voice ${ev.source} with ${ev.voice}`); addVoiceCard(ev.id);
+      thread().appendChild(bubble.closest(".row"));    // keep the agent's reply below its voiceover card
+    }
+    else if (ev.t === "usage") meta.usage = { in: ev.input_tokens, out: ev.output_tokens, model: ev.model };
+    else if (ev.t === "limit") {
+      const a = state.accounts.find(x => x.id === accountId);
+      if (a) a.rate_limit = { windows: ev.windows, status: ev.status };
+    } else if (ev.t === "error") {
+      meta.error = { kind: ev.kind, message: ev.message }; meta.interrupted = ev.interrupted;
+      if (ev.kind === "auth") loadAccounts();
+    } else if (ev.t === "switch_offer") offer = ev;
+  };
   try {
-    const r = await api(url, { method: "POST", headers: { "Content-Type": "application/json" },
-                               body: JSON.stringify(body) });
-    const reader = r.body.getReader(), dec = new TextDecoder();
-    let buf = "", first = true, raw = "", proposal = null;
-    const handle = ev => {
-      if (ev.t === "text") {
-        if (first) { bubble.textContent = ""; first = false; raw = ""; }
-        raw += ev.v;
-        bubble.textContent = raw.split("```action")[0].trimEnd();
-      } else if (ev.t === "action") {
-        bubble.textContent = ev.text; proposal = ev;
-      } else if (ev.t === "usage") {
-        meta.usage = { in: ev.input_tokens, out: ev.output_tokens, model: ev.model };
-      } else if (ev.t === "limit") {
-        const a = state.accounts.find(x => x.id === accountId);
-        if (a) a.rate_limit = { windows: ev.windows, status: ev.status };
-      } else if (ev.t === "error") {
-        meta.error = { kind: ev.kind, message: ev.message }; meta.interrupted = ev.interrupted;
-        if (ev.kind === "auth") loadAccounts();
-      } else if (ev.t === "switch_offer") {
-        offer = ev;
-      }
-    };
+    const r = await request();
+    reader = r.body.getReader();
+    if (cancelled) reader.cancel().catch(() => {});
+    const dec = new TextDecoder();
+    let buf = "";
     for (;;) {
       const { value, done } = await reader.read();
       if (done) break;
@@ -866,16 +942,54 @@ async function streamReply(url, body, accountId) {
         const line = buf.slice(0, nl).trim(); buf = buf.slice(nl + 1);
         if (line) handle(JSON.parse(line));
       }
-      $("#messages").scrollTop = $("#messages").scrollHeight;
+      if (state.current === pid) $("#messages").scrollTop = $("#messages").scrollHeight;
     }
-    if (first) bubble.textContent = "";
-    decorate(bubble, meta);
-    if (proposal) addActionCard(bubble, proposal.action, proposal.time, false);
-    if (offer) showOffer(offer);
+    if (!started) bubble.textContent = "";
+    if (state.current === pid) {
+      decorate(bubble, meta);
+      if (proposal) addActionCard(bubble, proposal.action, proposal.time, false);
+      if (offer) showOffer(offer);
+      loadFiles();                                    // the agent may have created or changed files
+    }
     loadAccounts().catch(() => {});
-  } catch (err) { bubble.textContent = "Couldn't get a reply: " + err.message; bubble.classList.add("err"); }
-  state.busy = false; $("#send").disabled = false; $("#input").focus();
+  } catch (err) {
+    if (!cancelled) { bubble.textContent = "Couldn't get a reply: " + err.message; bubble.classList.add("err"); }
+  }
+  if (state.busy === pid) state.busy = false;
+  if (state.consumer && state.consumer.pid === pid) state.consumer = null;
+  if (state.current === pid) { $("#send").disabled = false; $("#stop").classList.remove("on"); $("#input").focus(); }
 }
+
+const ASK_BUTTONS = {
+  normal: [["deny", "Deny", "btn"], ["session", "Allow this session", "btn"], ["once", "Allow once", "btn primary"]],
+  gate: [["deny", "Not now", "btn"], ["always", "Always allow", "btn"], ["once", "Allow once", "btn primary"]],
+};
+function addAskCard(bubble, ev, pid) {
+  const card = document.createElement("div");
+  card.className = "askcard";
+  card.innerHTML = `<div><b>${esc(ev.title)}</b> — needs your OK</div>
+    ${ev.detail ? `<pre>${esc(ev.detail)}</pre>` : ""}
+    <div class="why">Why it asks: ${esc(ev.reason)}</div>
+    <div class="row2">${ASK_BUTTONS[ev.gate ? "gate" : "normal"].map(([a, label, cls]) =>
+      `<button class="${cls}" data-a="${a}">${label}</button>`).join("")}</div>`;
+  card.querySelectorAll("[data-a]").forEach(b => b.onclick = async () => {
+    card.querySelectorAll("button").forEach(x => x.disabled = true);
+    try {
+      await api(`/api/projects/${pid}/agent/answer`, { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: ev.id, answer: b.dataset.a }) });
+    } catch (e) { toast(e.message, true); card.querySelectorAll("button").forEach(x => x.disabled = false); }
+  });
+  bubble.appendChild(card);
+  return card;
+}
+function settleAsk(card, answer) {
+  card.classList.add("done");
+  const said = { once: "Allowed once", session: "Allowed for this session", always: "Always allowed", deny: "Denied" }[answer] || answer;
+  card.querySelector(".row2").innerHTML = `<span class="verdict" style="color:var(${answer === "deny" ? "--bad" : "--ok"})">${said}</span>`;
+}
+$("#stop").onclick = async () => {
+  try { await api(`/api/projects/${state.current}/agent/stop`, { method: "POST" }); } catch (e) { toast(e.message, true); }
+};
 
 // ---------- switching accounts (plan R3)
 const OFFER_TITLE = {
@@ -929,7 +1043,7 @@ async function showHandoff(name) {
 }
 
 $("#switchbtn").onclick = async () => {
-  if (!state.current || state.busy) return;
+  if (!state.current || state.busy === state.current) return;
   const accountId = $("#picker").value || "demo";
   const o = await (await api(`/api/projects/${state.current}/switch`, { method: "POST",
     headers: { "Content-Type": "application/json" }, body: JSON.stringify({ account_id: accountId }) })).json();

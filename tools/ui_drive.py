@@ -403,6 +403,82 @@ try:
         check("the open project is untouched", "Voice test" in names() and
               js("document.querySelectorAll('.vcard.done').length") == before + 1)
 
+    # agent mode (P5) - server runs with a scripted agent (tests/p5/test_ui_agent.py)
+    if os.environ.get("UI_DRIVE_AGENT") == "1":
+        go = lambda name: js("[...document.querySelectorAll('#projects li[data-id]')].find(l=>l.innerText.includes('%s')).click()" % name)
+        # set up here, after the standard steps, so they still run against Demo in an empty app
+        js("""(async()=>{
+          const j = {method:'POST', headers:{'Content-Type':'application/json'}};
+          const a = await (await api('/api/accounts', {...j, body: JSON.stringify({provider:'claude'})})).json();
+          await api(`/api/accounts/${a.id}/login`, {method:'POST'});
+          for (let i = 0; i < 60; i++) {
+            const c = await (await api(`/api/accounts/${a.id}/check`, {method:'POST'})).json();
+            if (c.status === 'ok') break;
+            await new Promise(r => setTimeout(r, 100));
+          }
+          const p = await (await api('/api/projects', {...j, body: JSON.stringify({name:'Agent test'})})).json();
+          const fd = new FormData(); fd.append('files', new File(['## Hook\\nDebt is a machine.\\n'], 'ep1.md'));
+          await api(`/api/projects/${p.id}/files`, {method:'POST', body: fd});
+          window._agentAcc = a.id; await loadProjects();
+        })()""")
+        check("agent account signed in", wait_for("!!window._agentAcc", 15))
+        acc_id = js("window._agentAcc")
+        go("Agent test")
+        wait_for("!document.querySelector('#input').disabled", 8)
+        js(f"loadAccounts().then(()=>{{const p=document.querySelector('#picker'); p.value='{acc_id}'; p.dispatchEvent(new Event('change'))}})")
+        time.sleep(0.6)
+        send_msg = lambda t: js("document.querySelector('#input').value=%s; document.querySelector('#composer').requestSubmit()" % json.dumps(t))
+
+        # turn 1: edits inside the project freely, asks before a command
+        send_msg("Tighten the hook and check the audio")
+        check("agent shows its steps live", wait_for("document.querySelectorAll('.bubble .step').length>=2", 10))
+        check("Stop button shown while it works", js("document.querySelector('#stop').classList.contains('on')") is True)
+        check("command needs approval", wait_for("!!document.querySelector('.askcard')", 10),
+              js("(document.querySelector('.askcard')||{}).innerText||''"))
+        card = js("document.querySelector('.askcard').innerText") or ""
+        check("approval card shows the exact command", "ffprobe hook.mp3" in card and "runs a command" in card, card[:120])
+        shot("22-agent-ask")
+        js("[...document.querySelectorAll('.askcard button')].find(b=>b.innerText==='Deny').click()")
+        check("Deny is recorded on the card", wait_for("document.querySelector('.askcard').innerText.includes('Denied')", 8))
+        check("turn finishes", wait_for("!document.querySelector('#stop').classList.contains('on')", 10))
+        check("edit inside the project ran without asking", js(
+            "[...document.querySelectorAll('.bubble .step')].some(s=>s.innerText.includes('Write') && s.classList.contains('ok'))") is True)
+        check("denied command marked as failed", js(
+            "[...document.querySelectorAll('.bubble .step')].some(s=>s.innerText.includes('Run command') && s.classList.contains('bad'))") is True)
+        check("new file appears in Files", wait_for("document.querySelector('#files').innerText.includes('hook.md')", 8))
+        shot("23-agent-done")
+
+        # turn 2: leave while it works, come back: it re-attaches and replays
+        send_msg("Write the outro")
+        wait_for("document.querySelector('#stop').classList.contains('on')", 5)
+        time.sleep(0.4)
+        go("Ghost Towns")
+        time.sleep(0.6)
+        check("other project usable while the agent works", js("document.querySelector('#send').disabled") is False or
+              js("document.querySelector('#input').disabled") is False)
+        go("Agent test")
+        check("coming back re-attaches to the live run", wait_for(
+            "[...document.querySelectorAll('.bubble .seg')].some(s=>s.innerText.includes('Outro draft one'))", 10))
+        check("re-attached run finishes", wait_for(
+            "[...document.querySelectorAll('.bubble .seg')].some(s=>s.innerText.includes('Outro done'))", 15))
+        wait_for("!document.querySelector('#stop').classList.contains('on')", 10)
+
+        # turn 3: Stop
+        send_msg("Do something long")
+        wait_for("document.querySelector('#stop').classList.contains('on')", 5)
+        wait_for("[...document.querySelectorAll('.bubble .seg')].some(s=>s.innerText.includes('Starting a long job'))", 8)
+        js("document.querySelector('#stop').click()")
+        check("Stop ends the run", wait_for("!document.querySelector('#stop').classList.contains('on')", 10))
+        check("what it said before Stop is kept", wait_for(
+            "[...document.querySelectorAll('.row.assistant')].pop().innerText.includes('Starting a long job')", 5))
+
+        # history after reload of the project keeps the steps
+        go("Ghost Towns")
+        time.sleep(0.4); go("Agent test")
+        check("steps kept in history (done and denied)", wait_for(
+            "document.querySelectorAll('.bubble .step.ok').length>=1 && document.querySelectorAll('.bubble .step.bad').length>=1", 8))
+        shot("24-agent-history")
+
     # dark mode (Windows dark theme)
     send("Emulation.setEmulatedMedia", features=[{"name": "prefers-color-scheme", "value": "dark"}])
     time.sleep(0.3); shot("06b-dark")
