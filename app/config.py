@@ -53,6 +53,9 @@ class Settings(BaseModel):
     voice_app_dir: str | None = None
     voice_python: str | None = None
     voice_app_url: str = "http://127.0.0.1:8720"
+    # Agent mode (P5): Claude / API accounts work like Claude Code in the project folder.
+    # Off = the plain chat from P2-P4 (cheaper, no file or tool access).
+    agent_mode: bool = True
 
     @field_validator("host")
     @classmethod
@@ -93,6 +96,8 @@ def _env_overrides() -> dict:
             out[key] = v
     if v := os.environ.get("ONEPROD_LOGIN_CONSOLE"):
         out["login_console"] = v.strip().lower() not in ("0", "false", "no", "off")
+    if v := os.environ.get("ONEPROD_AGENT_MODE"):
+        out["agent_mode"] = v.strip().lower() not in ("0", "false", "no", "off")
     return out
 
 

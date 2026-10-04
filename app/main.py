@@ -6,6 +6,7 @@ Everything under /api/ needs the session token (see security/guard.py).
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import platform
@@ -23,6 +24,9 @@ from . import handoff
 from .accounts import DEFAULT_SWITCH, DEFAULT_WARN, PROVIDERS, SAME_SERVICE_SWITCHING, SUBSCRIPTIONS, \
     AccountError, Accounts
 from . import actions
+from .agent.claude_agent import ClaudeAgent
+from .agent.runs import Runs
+from .agent.studio import INSTRUCTIONS as STUDIO_INSTRUCTIONS, Studio
 from .chat import SYSTEM, build_prompt, ndjson, reply_events
 from .config import Settings
 from .providers.anthropic_api import AnthropicAPI
@@ -92,6 +96,11 @@ class ScriptIn(BaseModel):
     text: str | None = None          # or pasted text
 
 
+class AgentAnswer(BaseModel):
+    id: str
+    answer: str
+
+
 class VoiceIn(ScriptIn):
     voice: str
     name: str | None = None
@@ -106,8 +115,11 @@ class VoiceIn(ScriptIn):
     from_action: float | None = None  # time of the assistant message whose Run card started this
 
 
+AGENT_PROVIDERS = ("claude", "anthropic_api")          # codex joins when its app-server agent lands
+
+
 def create_app(settings: Settings, token: str | None = None, *, api_transport=None,
-               login_console: bool | None = None, voice_transport=None) -> FastAPI:
+               login_console: bool | None = None, voice_transport=None, agent_client=None) -> FastAPI:
     if login_console is None:
         login_console = settings.login_console
     token = token or secrets.token_urlsafe(32)
@@ -118,6 +130,10 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
     approvals = Approvals(settings.data_dir)
     voice_svc = VoiceService(settings, voice_transport)
     voice_jobs = VoiceJobs(voice_svc, store, settings.data_dir)
+    runs = Runs()
+    claude_agent = ClaudeAgent(settings.claude_cmd, settings.data_dir, client_factory=agent_client,
+                               api_key_of=Accounts.api_key)
+    codex_agent = None                                    # P5 step 2: codex app-server
     work = settings.data_dir / "cache" / "run"          # empty cwd: CLIs pick up no project files
     providers = {
         "demo": Demo(),
@@ -227,6 +243,29 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
                              store.list_files(pid), reason=reason, account=acc)
 
     # ---------------------------------------------------------------- the reply pipeline
+    def after_reply(pid: str, acc: dict, error) -> list[dict]:
+        """Switch / backup decisions after any reply, chat or agent (plan R3, D6)."""
+        if acc["id"] == "demo":
+            return []
+        fresh = accounts.get(acc["id"])
+        pct, kind = usage_pct(fresh)
+        reason = None
+        if error and error.kind == "limit":
+            ledger.record_limit_hit(acc["id"], error.message, pct if kind == "estimated" else
+                                    (100.0 if kind == "exact" else None))
+            reason = "limit"
+        elif pct is not None and pct >= fresh.get("switch_pct", DEFAULT_SWITCH):
+            reason = "threshold"
+        if reason:
+            path = write_handoff(pid, reason, fresh)
+            return [{"t": "switch_offer", "reason": reason, "from": acc["id"], "usage_pct": pct,
+                     "usage_kind": kind, "handoff": path.name, "from_resets_at": resets_of(fresh),
+                     "eligible": eligible(fresh)}]
+        replies = sum(1 for m in store.history(pid) if m["role"] == "assistant")
+        if replies and replies % handoff.BACKUP_EVERY == 0:
+            write_handoff(pid, "backup", fresh)
+        return []
+
     def run_reply(pid: str, acc: dict, prompt: str, studio: tuple | None = None):
         """Stream one reply, save it, record usage, and decide whether to offer a switch."""
         provider = providers[acc["provider"]]
@@ -279,26 +318,8 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
                                outcome="error" if error else "ok", err_kind=error.kind if error else None,
                                windows=state["windows"])
 
-            # ---- switch / backup decisions (plan R3, D6)
-            if acc["id"] != "demo":
-                fresh = accounts.get(acc["id"])
-                pct, kind = usage_pct(fresh)
-                reason = None
-                if error and error.kind == "limit":
-                    ledger.record_limit_hit(acc["id"], error.message, pct if kind == "estimated" else
-                                            (100.0 if kind == "exact" else None))
-                    reason = "limit"
-                elif pct is not None and pct >= fresh.get("switch_pct", DEFAULT_SWITCH):
-                    reason = "threshold"
-                if reason:
-                    path = write_handoff(pid, reason, fresh)
-                    yield ndjson({"t": "switch_offer", "reason": reason, "from": acc["id"],
-                                  "usage_pct": pct, "usage_kind": kind, "handoff": path.name,
-                                  "from_resets_at": resets_of(fresh), "eligible": eligible(fresh)})
-                else:
-                    replies = sum(1 for m in store.history(pid) if m["role"] == "assistant")
-                    if replies and replies % handoff.BACKUP_EVERY == 0:
-                        write_handoff(pid, "backup", fresh)
+            for ev in after_reply(pid, acc, error):
+                yield ndjson(ev)
             yield ndjson({"t": "done"})
 
         return StreamingResponse(stream(), media_type="application/x-ndjson",
@@ -551,6 +572,8 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
         acc = _account(body.account_id or "demo")
         if not acc["enabled"]:
             raise HTTPException(400, "that account is turned off")
+        if settings.agent_mode and acc["provider"] in AGENT_PROVIDERS:
+            return await run_agent(pid, acc, body.message)
         studio = await studio_state(pid)
         prompt = build_prompt(store.history(pid), body.message,
                               actions.context(*studio) + "\n\n" + actions.HELP)
@@ -573,6 +596,127 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
         return store.list_files(pid), voices, (meta or {}).get("presets", {}), voice_jobs.for_project(pid)
 
     background: set = set()
+
+    # ---------------------------------------------------------------- agent mode (plan P5)
+    def sessions_file(pid: str) -> Path:
+        return store.project_dir(pid) / "agent-sessions.json"
+
+    def agent_session(pid: str, acc_id: str) -> str | None:
+        f = sessions_file(pid)
+        return (json.loads(f.read_text(encoding="utf-8")) if f.exists() else {}).get(acc_id)
+
+    def save_agent_session(pid: str, acc_id: str, sid: str | None) -> None:
+        if not sid:
+            return
+        f = sessions_file(pid)
+        data = json.loads(f.read_text(encoding="utf-8")) if f.exists() else {}
+        data[acc_id] = sid
+        f.write_text(json.dumps(data), encoding="utf-8")
+
+    def voice_gate(remember: bool = False):
+        if remember:
+            approvals.check("voiceover", "always")
+            return None
+        return approvals.check("voiceover", None)
+
+    def agent_for(acc: dict):
+        return claude_agent if acc["provider"] in ("claude", "anthropic_api") else codex_agent
+
+    async def run_agent(pid: str, acc: dict, message: str) -> StreamingResponse:
+        root = store.files_dir(pid)
+        try:
+            run = runs.start(pid, root)
+        except RuntimeError as e:
+            raise HTTPException(409, str(e))
+        sid = agent_session(pid, acc["id"])
+        files, voices, presets, jobs = await studio_state(pid)
+        instructions = STUDIO_INSTRUCTIONS + "\n\n" + actions.context(files, voices, presets, jobs)
+        # a fresh session (new project, or another account taking over) gets the recent chat
+        prompt = message if sid else build_prompt(store.history(pid), message).replace(SYSTEM + "\n\n", "", 1)
+        store.append_message(pid, "user", message)
+        studio = Studio(pid, store, voice_svc, voice_jobs,
+                        on_job=lambda job: run.emit({"t": "voicejob", "id": job["id"], "source": job["source"],
+                                                     "voice": job["voice"]}))
+
+        async def work():
+            res = {"error": None, "text": "", "steps": [], "usage": None, "windows": None, "session_id": sid}
+            try:
+                res = await agent_for(acc).run(run, runs, acc, prompt, sid, instructions, studio,
+                                               acc.get("model"), voice_gate)
+            except asyncio.CancelledError:
+                res["error"] = Fail("fatal", "Stopped.")
+            except Exception as e:                       # noqa: BLE001
+                log.exception("agent run failed")
+                res["error"] = Fail("fatal", f"internal error: {e.__class__.__name__}")
+            err, usage = res["error"], res["usage"]
+            if res["windows"] and acc["provider"] == "claude":
+                accounts.record_rate_limit(acc["id"], res["windows"], "allowed")
+            if err and err.kind == "auth":
+                accounts.mark_auth_error(acc["id"], err.message)
+            meta = {"account": acc["id"], "provider": acc["provider"], "agent": True, "steps": res["steps"]}
+            if usage:
+                meta["usage"] = {"in": usage.input_tokens, "out": usage.output_tokens,
+                                 "cost_usd": usage.cost_usd, "model": usage.model}
+                run.emit({"t": "usage", "input_tokens": usage.input_tokens, "output_tokens": usage.output_tokens,
+                          "model": usage.model})
+            if err:
+                meta["error"] = {"kind": err.kind, "message": err.message}
+                meta["interrupted"] = err.interrupted
+                run.emit({"t": "error", "kind": err.kind, "message": err.message, "interrupted": err.interrupted})
+            store.append_message(pid, "assistant", res["text"], **meta)
+            save_agent_session(pid, acc["id"], res.get("session_id"))
+            ledger.record_call(account=acc["id"], provider=acc["provider"], project=pid, usage=usage,
+                               outcome="error" if err else "ok", err_kind=err.kind if err else None,
+                               windows=res["windows"])
+            for ev in after_reply(pid, acc, err):
+                run.emit(ev)
+            runs.finish(run)
+            run.emit({"t": "done"})
+
+        run.task = asyncio.get_running_loop().create_task(work())
+        return StreamingResponse(follow(run), media_type="application/x-ndjson", headers={"Cache-Control": "no-store"})
+
+    async def follow(run):
+        q = run.listen()
+        try:
+            while True:
+                ev = await q.get()
+                yield ndjson(ev)
+                if ev["t"] == "done":
+                    break
+        finally:
+            if q in run.listeners:
+                run.listeners.remove(q)
+
+    @app.get("/api/projects/{pid}/agent")
+    def agent_state(pid: str) -> dict:
+        _project(pid)
+        run = runs.busy(pid)
+        return {"running": bool(run), "asks": list(run.asks.values()) if run else [],
+                "session_allow": sorted(runs.session_allow.get(pid, set()))}
+
+    @app.get("/api/projects/{pid}/agent/stream")
+    def agent_stream(pid: str) -> StreamingResponse:
+        """Re-attach to a run that is still working (after switching projects or a reload)."""
+        _project(pid)
+        run = runs.busy(pid)
+        if not run:
+            raise HTTPException(404, "the agent isn't working in this project")
+        return StreamingResponse(follow(run), media_type="application/x-ndjson", headers={"Cache-Control": "no-store"})
+
+    @app.post("/api/projects/{pid}/agent/answer")
+    def agent_answer(pid: str, body: AgentAnswer) -> dict:
+        _project(pid)
+        if body.answer not in ("once", "session", "always", "deny"):
+            raise HTTPException(400, "answer must be once, session, always or deny")
+        if not runs.answer(pid, body.id, body.answer):
+            raise HTTPException(404, "that question is no longer waiting")
+        return {"ok": True}
+
+    @app.post("/api/projects/{pid}/agent/stop")
+    def agent_stop(pid: str) -> dict:
+        _project(pid)
+        return {"stopped": runs.stop(pid)}
 
     # ---------------------------------------------------------------- handoff + switching (R3)
     @app.get("/api/projects/{pid}/handoffs")

@@ -88,7 +88,7 @@ def make_client(tmp_path, fake_cmds, monkeypatch, request):
     def make(reply_timeout=20):
         settings = Settings(data_dir=tmp_path / "data", claude_cmd=str(fake_cmds / "claude.cmd"),
                             codex_cmd=str(fake_cmds / "codex.cmd"), reply_timeout=reply_timeout,
-                            anthropic_base_url="https://api.test")
+                            anthropic_base_url="https://api.test", agent_mode=False)   # P2-P4 test the chat path
         app = create_app(settings, token=TOKEN, api_transport=httpx.MockTransport(api_handler),
                          login_console=False)
         c = TestClient(app, base_url="http://127.0.0.1")

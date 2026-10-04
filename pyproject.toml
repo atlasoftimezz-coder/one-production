@@ -10,6 +10,7 @@ dependencies = [
     "python-multipart",
     "httpx",
     "keyring",
+    "claude-agent-sdk",      # P5: drives the real Claude Code agent (official SDK)
 ]
 
 [project.optional-dependencies]

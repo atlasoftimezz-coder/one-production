@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def test_switch_and_usage_in_headless_chrome(tmp_path, fake_cmds):
     env = os.environ.copy()
-    env.update({"ONEPROD_DATA_DIR": str(tmp_path / "data"), "ONEPROD_OPEN_BROWSER": "false",
+    env.update({"ONEPROD_AGENT_MODE": "false", "ONEPROD_DATA_DIR": str(tmp_path / "data"), "ONEPROD_OPEN_BROWSER": "false",
                 "ONEPROD_SETTINGS_FILE": str(tmp_path / "s.json"), "ONEPROD_LOG_LEVEL": "warning",
                 "ONEPROD_CLAUDE_CMD": str(fake_cmds / "claude.cmd"),
                 "ONEPROD_CODEX_CMD": str(fake_cmds / "codex.cmd"),

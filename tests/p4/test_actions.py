@@ -85,7 +85,7 @@ def studio(tmp_path, fake_voice, voice_dir, monkeypatch, request):
     monkeypatch.setattr("app.voice.POLL", 0.05)
     settings = Settings(data_dir=tmp_path / "data", claude_cmd=str(bin_ / "claude.cmd"),
                         codex_cmd=str(bin_ / "codex.cmd"), reply_timeout=20,
-                        voice_app_dir=str(voice_dir), voice_python=sys.executable)
+                        voice_app_dir=str(voice_dir), voice_python=sys.executable, agent_mode=False)
     c = TestClient(create_app(settings, token=TOKEN, voice_transport=httpx.MockTransport(fake_voice.handler),
                               login_console=False), base_url="http://127.0.0.1")
     c.__enter__()
