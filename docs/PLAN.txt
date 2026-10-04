@@ -335,7 +335,7 @@ D:\Software\Voice\voices\{adam,buster,human}_ref48.wav   voice references
 
 7. PHASES - EACH ONE CHECKED TWICE BEFORE THE NEXT STARTS
 ---------------------------------------------------------
-12 phases (P0-P11). Each phase is small enough to test in one sitting and ends at a GATE:
+12 phases (P0-P12). Each phase is small enough to test in one sitting and ends at a GATE:
 
   AUTO CHECK   - Claude runs the phase's test suite: `check.bat P<n>`
                  (pytest under tests\p<n>\ + scripted end-to-end runs). Produces
@@ -346,8 +346,8 @@ D:\Software\Voice\voices\{adam,buster,human}_ref48.wav   voice references
                  Next phase starts only after sign-off. A failed manual item becomes a fix
                  + a new automated test, so it can never silently come back.
 
-Every phase also re-runs ALL earlier phases' auto checks (regression), so P5 green means
-P0-P5 are still green.
+Every phase also re-runs ALL earlier phases' auto checks (regression), so P6 green means
+P0-P6 are still green.
 
 ---------------------------------------------------------------------------------------
 P0  FOUNDATION                                                       [MVP - 4 Oct]
@@ -397,7 +397,31 @@ P4  VOICEOVER IN CHAT                                                [MVP - 4 Oc
   MANUAL: [ ] listen to the first 60 s - does it sound like the Human voice? (EAR GATE)
           [ ] open the SRT in a player - subtitles line up
 
-P5  BACKUPS + SYSTEM SCAN                                  [MVP complete after this]
+P5  AGENT MODE - chat works like Claude Code / Codex                 [MVP]
+  Why : user, 2026-10-04: "it should work like claude code not claude chat, likewise codex".
+        Decided: free inside the project folder, ask outside; API keys are agents too;
+        P4 signed off first.
+  Build : Claude logins AND API keys run the real Claude Code agent through the official
+          Claude Agent SDK (cwd = project folder, per-account config dir, own session per
+          project, resume between messages). Codex logins run through the official
+          `codex app-server` (JSON-RPC, workspace-write sandbox). One permission policy for
+          both: read/search/edit/create inside the project = allowed; shell commands,
+          anything outside the project, deletes, web = Approve card in the chat; GPU/paid
+          studio tools = existing R12 gate. Studio tools offered to the agent: make_voiceover,
+          voiceover_status, list_voices, make_subtitles. Live step list in the chat (read X,
+          edited Y, ran Z), approval cards (Allow once / Always for this project / Deny),
+          Stop button. User's own CLAUDE.md / settings / hooks never load.
+  AUTO  : fake SDK + fake app-server: edit inside project runs without asking; write
+          outside project and every shell command produce an approval card and wait;
+          Deny is reported back to the agent; session id reused on the next message;
+          voiceover tool call goes through the GPU gate; Stop kills the run; usage + rate
+          limits still recorded; one real Claude and one real Codex run (opt-in, tiny).
+  MANUAL: [ ] "Add 15 WPM" -> the agent works out the pace and starts the voiceover itself
+          [ ] ask it to tighten the script's intro -> it edits the file in the project
+          [ ] ask it to run a command -> Approve card appears; Deny stops it
+          [ ] same task on Codex behaves the same
+
+P6  BACKUPS + SYSTEM SCAN                                  [MVP complete after this]
   Build : daily backup zip + restore (R11); read-only system scan screen (R13 step 2);
           local profile login (R7).
   AUTO  : backup -> delete project -> restore -> byte-equal; scan output matches this PC
@@ -405,7 +429,7 @@ P5  BACKUPS + SYSTEM SCAN                                  [MVP complete after t
   MANUAL: [ ] restore yesterday's backup of one project from the UI
           [ ] scan screen tells the truth about your PC
 
-P6  SETUP WIZARD + MODULES                                       [Friends release]
+P7  SETUP WIZARD + MODULES                                       [Friends release]
   Build : full first-run wizard (R13), module switches with greyed-out reasons (R14).
   AUTO  : wizard run in a clean Windows test user: API-key-only path reaches working chat;
           "no NVIDIA" mocked -> Voice offered as CPU/off; cancelled download resumes; no
@@ -413,7 +437,7 @@ P6  SETUP WIZARD + MODULES                                       [Friends releas
   MANUAL: [ ] run the wizard yourself in a new Windows user account start to finish
           [ ] every screen understandable without asking me
 
-P7  PACKAGING + UPDATES + SUPPORT                                [Friends release]
+P8  PACKAGING + UPDATES + SUPPORT                                [Friends release]
   Build : installer/zip, launcher, updater + rollback (R15), diagnostics export, sample
           project, in-app guide (R16).
   AUTO  : install from package into empty folder -> app starts; update to v+1 -> data
@@ -421,7 +445,7 @@ P7  PACKAGING + UPDATES + SUPPORT                                [Friends releas
   MANUAL: [ ] ONE FRIEND installs it on their PC from zero and voices the sample project
           [ ] their diagnostics zip, if needed, is enough for me to find the problem
 
-P8  ORCHESTRATOR                                                       [Phase 2]
+P9  ORCHESTRATOR                                                       [Phase 2]
   Build : master (Opus) + workers (Sonnet), concurrency, file locks, GPU queue,
           re-pinning on limits, review round + token caps (R4, R10).
   AUTO  : 3 workers, limit forced on one account -> re-pins and finishes; no eligible
@@ -430,20 +454,20 @@ P8  ORCHESTRATOR                                                       [Phase 2]
   MANUAL: [ ] give the master a 3-part task -> watch workers, read the final review
           [ ] the cost shown is acceptable to you
 
-P9  PRODUCTION ENGINE (quality gates + visuals + edit)                 [Phase 2]
+P10  PRODUCTION ENGINE (quality gates + visuals + edit)                 [Phase 2]
   Build : numeric gates per stage, research/script/animation/video-editor/packaging workers,
           ffmpeg editor default, Resolve/Storyblocks adapters behind licence flags.
   AUTO  : seeded bad take rejected; 6-semitone pitch shift fails voice gate; final video
           duration = VO +/-0.5 s, A/V drift < 40 ms, no black frames.
   MANUAL: [ ] watch one full episode end to end - would you publish it?
 
-P10 DEV ORCHESTRATION (dispatch.py)                                     [Phase 2]
+P11 DEV ORCHESTRATION (dispatch.py)                                     [Phase 2]
   Build : dev\dispatch.json + dispatch.py, cross-model review files (D1).
   AUTO  : claude floor mocked low -> codex picked; Codex review file appears for a
           Claude-written change.
   MANUAL: [ ] read 2 review files - are they useful, not noise?
 
-P11 TERMS, SIGN-IN, LEARNING LOOP                                        [Later]
+P12 TERMS, SIGN-IN, LEARNING LOOP                                        [Later]
   Build : R8 terms check doc, subscription chaining (only if allowed), Google sign-in,
           permission-prompted OS MCP write/exec, post-publish learning loop.
   AUTO  : chaining stays disabled while terms-check.md marks any provider "not allowed";
@@ -451,10 +475,10 @@ P11 TERMS, SIGN-IN, LEARNING LOOP                                        [Later]
   MANUAL: [ ] read terms-check.md and decide on chaining
           [ ] approve or reject the first learning-loop suggestion
 
-Out of scope until after P11: hosted multi-tenant server; Mac support beyond Core.
+Out of scope until after P12: hosted multi-tenant server; Mac support beyond Core.
 
-Timeline reality: P0-P5 = MVP. P0-P2 fit 4 Oct; P3-P5 likely spill a few days because
-each gate includes your manual check. Friends release = P6-P7. Production = P8-P11.
+Timeline reality: P0-P6 = MVP. P0-P2 fit 4 Oct; P3-P6 likely spill a few days because
+each gate includes your manual check. Friends release = P7-P8. Production = P9-P12.
 
 
 9. RISKS
@@ -471,7 +495,7 @@ each gate includes your manual check. Friends release = P6-P7. Production = P8-P
     fallback is one login per Windows user.
   - Local OS MCP is effectively shell access -> R6 prompts are mandatory, not optional.
   - DaVinci Resolve external scripting is Studio-only; Storyblocks needs a paid key.
-  - Scope: production grade is months of work; 4 Oct delivers P0-P2, MVP = P0-P5.
+  - Scope: production grade is months of work; 4 Oct delivers P0-P2, MVP = P0-P6.
 
 
 10. VERIFICATION
@@ -531,7 +555,7 @@ D:\Projects\YT project\ exists and is empty, 218 GB free on D:.
                          dev:  pytest, httpx
   requirements.lock      pinned with `uv pip compile` (reproducible for friends later)
   setup_dev.ps1          uv venv .venv --python 3.12 ; uv pip sync requirements.lock
-                         (dev runtime; the bundled embeddable Python replaces it in P7)
+                         (dev runtime; the bundled embeddable Python replaces it in P8)
   start.bat              .venv\Scripts\python -m app   (fails with a clear message if
                          .venv is missing: "run setup_dev.ps1 first")
   check.bat              .venv\Scripts\python tools\check.py %1
