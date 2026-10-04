@@ -63,9 +63,14 @@ try:
         (OUT / f"{name}.png").write_bytes(base64.b64decode(data)); return name
 
     def wait_for(expr, timeout=8):
+        # An expression may throw while the page is still loading (element not there yet) -
+        # that means "not yet", not "fail". Only the timeout decides failure.
         end = time.time() + timeout
         while time.time() < end:
-            if js(expr): return True
+            try:
+                if js(expr): return True
+            except RuntimeError:
+                pass
             time.sleep(0.15)
         return False
 
@@ -267,6 +272,61 @@ try:
             "[...document.querySelectorAll('.offer:not(.used)')].some(o=>o.querySelector('[data-dismiss]'))", 8))
         js("document.querySelector('.offer:not(.used) [data-dismiss]').click()")
         check("'not now' dismisses it", not js("!!document.querySelector('.offer:not(.used) [data-dismiss]')"))
+
+    # voiceover (P4) - server runs against the stand-in voice app
+    if os.environ.get("UI_DRIVE_VOICE") == "1":
+        js("document.querySelector('#newbtn').click(); document.querySelector('#projname').value='Voice test';"
+           " document.querySelector('#newform').requestSubmit()")
+        wait_for("document.querySelector('#crumb').innerText.includes('Voice test') && !document.querySelector('#input').disabled")
+        script = OUT / "ghost-towns-ep1.txt"
+        script.write_text("## Pripyat\n\nPripyat is an abandoned city in northern Ukraine.\n\n"
+                          "## Hashima\n\nHashima is an island off Nagasaki.\n", encoding="utf-8")
+        doc = send("DOM.getDocument")["root"]["nodeId"]
+        node = send("DOM.querySelector", nodeId=doc, selector="#fileinput")["nodeId"]
+        send("DOM.setFileInputFiles", nodeId=node, files=[str(script)])
+        check("script file shows a voice button", wait_for("!!document.querySelector('#files .fvoice')", 10))
+        js("document.querySelector('#files .fvoice').click()")
+        check("voice dialog opens with the script picked", wait_for(
+            "document.querySelector('#voicemodal').classList.contains('open') && "
+            "document.querySelector('#vsrc') && document.querySelector('#vsrc').value==='ghost-towns-ep1.txt'", 30))
+        check("dialog shows spoken-word count (titles not counted)",
+              wait_for("document.querySelector('#vstats').innerText.includes('14 spoken words')", 8),
+              js("document.querySelector('#vstats').innerText"))
+        check("voices come from the voice app", "human_ref48.wav" in (js("document.querySelector('#vvoice').innerText") or ""))
+        shot("17-voice-dialog")
+        js("document.querySelector('#vgo').click()")
+        check("GPU approval asked before anything runs", wait_for(
+            "document.querySelector('#vapprove').innerText.includes('needs your OK')", 8))
+        shot("18-voice-approval")
+        js("document.querySelector('#vapprove [data-a=\"always\"]').click()")
+        check("dialog closes and a voice card appears", wait_for(
+            "!document.querySelector('#voicemodal').classList.contains('open') && !!document.querySelector('.vcard')", 10))
+        check("card shows progress per section", wait_for("document.querySelectorAll('.vcard .vsec').length===2", 15))
+        check("card finishes", wait_for("document.querySelector('.vcard').classList.contains('done')", 30))
+        card = js("document.querySelector('.vcard').innerText") or ""
+        check("card shows length, words, pace", "1:01" in card and "160 words" in card and "157 wpm" in card, card[:120])
+        check("mp3, wav and srt listed on the card",
+              all(x in card for x in ("ghost-towns-ep1.mp3", "ghost-towns-ep1.wav", "ghost-towns-ep1.srt")))
+        check("player present", js("!!document.querySelector('.vcard audio')"))
+        check("files appear in the project", wait_for(
+            "['ghost-towns-ep1.mp3','ghost-towns-ep1.wav','ghost-towns-ep1.srt'].every(n=>"
+            "[...document.querySelectorAll('#files .fname')].some(e=>e.innerText===n))", 10))
+        shot("19-voice-done")
+        # second run: already approved, so no question
+        js("document.querySelector('#micbtn').click()")
+        wait_for("!!document.querySelector('#vgo')", 15)
+        js("document.querySelector('#vgo').click()")
+        check("'Always allow' remembered - no second question", wait_for(
+            "!document.querySelector('#voicemodal').classList.contains('open') && document.querySelectorAll('.vcard').length===2", 10))
+        wait_for("[...document.querySelectorAll('.vcard')].every(c=>c.classList.contains('done'))", 30)
+        check("second render gets its own file names", wait_for(
+            "[...document.querySelectorAll('#files .fname')].some(e=>e.innerText==='ghost-towns-ep1 (1).mp3')", 10))
+        # cards come back after reloading the project
+        js("document.querySelector('#projects li[data-id]:nth-child(2)') && document.querySelector('#projects li[data-id]:nth-child(2)').click()")
+        time.sleep(0.5)
+        js("[...document.querySelectorAll('#projects li[data-id]')].find(l=>l.innerText.includes('Voice test')).click()")
+        check("voice cards restored from history", wait_for(
+            "document.querySelectorAll('.vcard.done').length===2", 15))
 
     # dark mode (Windows dark theme)
     send("Emulation.setEmulatedMedia", features=[{"name": "prefers-color-scheme", "value": "dark"}])

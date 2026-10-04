@@ -31,9 +31,12 @@ from .providers.codex_cli import CodexCLI
 from .providers.demo import Demo
 from .security.guard import GuardMiddleware
 from .security.redact import redact, register_secret
+from .scripts import SUPPORTED as SCRIPT_TYPES, read_script, stats as script_stats
 from .storage import NotFound, Store
+from .tools import Approvals, TOOLS
 from .usage import RANGES, Ledger, range_start
 from .version import __version__
+from .voice import VoiceError, VoiceJobs, VoiceService
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 UPLOAD_CHUNK = 1024 * 1024
@@ -82,8 +85,26 @@ class OrderIn(BaseModel):
     ids: list[str]
 
 
+class ScriptIn(BaseModel):
+    file: str | None = None          # a file already in the project
+    text: str | None = None          # or pasted text
+
+
+class VoiceIn(ScriptIn):
+    voice: str
+    name: str | None = None
+    preset: str = "clone_exact"
+    pace_mode: str = "natural"
+    target_wpm: float | None = None
+    grid_gap: float = 1.5
+    exaggeration: float | None = None
+    cfg_weight: float | None = None
+    temperature: float | None = None
+    approve: str | None = None       # None | "once" | "always"  (heavy-job gate, R12)
+
+
 def create_app(settings: Settings, token: str | None = None, *, api_transport=None,
-               login_console: bool | None = None) -> FastAPI:
+               login_console: bool | None = None, voice_transport=None) -> FastAPI:
     if login_console is None:
         login_console = settings.login_console
     token = token or secrets.token_urlsafe(32)
@@ -91,6 +112,9 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
     store = Store(settings.data_dir)
     accounts = Accounts(settings.data_dir)
     ledger = Ledger(settings.data_dir)
+    approvals = Approvals(settings.data_dir)
+    voice_svc = VoiceService(settings, voice_transport)
+    voice_jobs = VoiceJobs(voice_svc, store, settings.data_dir)
     work = settings.data_dir / "cache" / "run"          # empty cwd: CLIs pick up no project files
     providers = {
         "demo": Demo(),
@@ -545,5 +569,91 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
                                             f"from {hpath.name}", handoff=hpath.name, switch_to=to_acc["id"])
         prompt = SYSTEM + "\n\n" + handoff.continue_prompt(hpath.read_text(encoding="utf-8"), interrupted)
         return run_reply(pid, to_acc, prompt)
+
+    # ---------------------------------------------------------------- voiceover (R5, R12)
+    def _script_from(pid: str, body: ScriptIn) -> tuple[str, str]:
+        if body.file:
+            try:
+                path = store.file_path(pid, body.file)
+            except NotFound:
+                raise HTTPException(404, "file not found")
+            if path.suffix.lower() not in SCRIPT_TYPES:
+                raise HTTPException(400, "scripts must be .docx, .txt or .md")
+            try:
+                return read_script(path), path.name
+            except Exception as e:
+                raise HTTPException(400, f"couldn't read that file: {e.__class__.__name__}")
+        if body.text and body.text.strip():
+            return body.text, "pasted text"
+        raise HTTPException(400, "pick a script file or paste the script")
+
+    @app.get("/api/voice/status")
+    async def voice_status() -> dict:
+        missing = voice_svc.missing()
+        running = await voice_svc.running()
+        meta = {}
+        if running:
+            try:
+                meta = await voice_svc.meta()
+            except Exception:
+                meta = {}
+        return {"configured": not missing, "missing": missing, "running": running,
+                "voices": meta.get("voices", []), "presets": meta.get("presets", {}),
+                "approved": approvals.always("voiceover"), "tool": TOOLS["voiceover"]}
+
+    @app.post("/api/voice/start")
+    async def voice_start() -> dict:
+        try:
+            await voice_svc.ensure_running()
+        except VoiceError as e:
+            raise HTTPException(400, str(e))
+        return await voice_status()
+
+    @app.post("/api/projects/{pid}/script-stats")
+    def script_info(pid: str, body: ScriptIn) -> dict:
+        _project(pid)
+        text, source = _script_from(pid, body)
+        return {"source": source, **script_stats(text)}
+
+    @app.post("/api/projects/{pid}/voice")
+    async def start_voice(pid: str, body: VoiceIn):
+        _project(pid)
+        text, source = _script_from(pid, body)
+        need = approvals.check("voiceover", body.approve)
+        if need:
+            from fastapi.responses import JSONResponse
+            return JSONResponse({"needs_approval": need}, status_code=409)
+        if body.pace_mode not in ("natural", "wpm", "grid", "grid_pad"):
+            raise HTTPException(400, "unknown pace mode")
+        if body.pace_mode == "wpm" and not body.target_wpm:
+            raise HTTPException(400, "set the words per minute")
+        name = (body.name or (Path(body.file).stem if body.file else "voiceover")).strip()[:80] or "voiceover"
+        name = "".join(c for c in name if c.isalnum() or c in "-_ ").strip() or "voiceover"
+        spec = {"voice": body.voice, "name": name, "preset": body.preset, "pace_mode": body.pace_mode,
+                "target_wpm": body.target_wpm, "grid_gap": body.grid_gap, "auto_fix": True,
+                "exaggeration": body.exaggeration, "cfg_weight": body.cfg_weight,
+                "temperature": body.temperature}
+        job = voice_jobs.start(pid, text, spec, source)
+        store.append_message(pid, "user", f"Voice {source} with {body.voice}", tool_request="voiceover",
+                             job=job["id"])
+        return job
+
+    @app.get("/api/voicejobs/{jid}")
+    def voice_job(jid: str) -> dict:
+        job = voice_jobs.get(jid)
+        if not job:
+            raise HTTPException(404, "job not found")
+        return job
+
+    @app.get("/api/approvals")
+    def list_approvals() -> dict:
+        return {t: approvals.always(t) for t in TOOLS}
+
+    @app.delete("/api/approvals/{tool}")
+    def revoke_approval(tool: str) -> dict:
+        if tool not in TOOLS:
+            raise HTTPException(404, "unknown tool")
+        approvals.set_always(tool, False)
+        return {t: approvals.always(t) for t in TOOLS}
 
     return app

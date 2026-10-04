@@ -298,6 +298,46 @@
   .utable td.num, .utable th.num { text-align: right; font-variant-numeric: tabular-nums; }
   .utable .empty { color: var(--faint); text-align: center; padding: 12px; }
 
+  /* ---------- voiceover (P4) ---------- */
+  .vgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
+  @media (max-width: 700px) { .vgrid { grid-template-columns: 1fr; } }
+  .vf label { display: block; font-size: 12px; color: var(--dim); margin: 0 0 4px; }
+  .vf select, .vf input, .vf textarea { width: 100%; padding: 9px 11px; border-radius: 10px;
+      border: 1px solid var(--line); background: var(--panel); outline: none; }
+  .vf textarea { min-height: 120px; resize: vertical; font: 12.5px/1.5 ui-monospace, Consolas, monospace; }
+  .vf.full { grid-column: 1 / -1; }
+  .vstats { color: var(--dim); font-size: 12.5px; margin-top: 6px; min-height: 18px; }
+  .vsetup { background: var(--bg2); border: 1px solid var(--warn); border-radius: 12px; padding: 12px 14px;
+            font-size: 13px; }
+  .vsetup code { font-size: 12px; }
+  .approve { border: 1px solid var(--warn); background: rgba(251,191,36,.08); border-radius: 14px;
+             padding: 14px; margin-top: 12px; }
+  .approve b { display: block; margin-bottom: 4px; }
+  .approve .row2 { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+  .vcard { align-self: center; width: min(640px, 100%); border: 1px solid var(--line); border-radius: 16px;
+           background: var(--panel); padding: 14px 16px; box-shadow: var(--shadow); animation: rise .22s ease-out; }
+  .vcard.done { border-color: var(--ok); } .vcard.failed { border-color: var(--bad); }
+  .vhead { display: flex; align-items: center; gap: 12px; }
+  .vicon { width: 38px; height: 38px; border-radius: 12px; background: var(--grad); color: #fff;
+           display: grid; place-items: center; flex: none; }
+  .vhead b { display: block; }
+  .vhead small { color: var(--dim); }
+  .vsecs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .vsec { font-size: 11.5px; padding: 3px 9px; border-radius: 999px; background: var(--panel2); color: var(--dim);
+          border: 1px solid var(--line); }
+  .vsec.ok { color: var(--ok); border-color: rgba(52,211,153,.4); }
+  .vsec.check { color: var(--warn); border-color: rgba(251,191,36,.5); }
+  .vsec.rendering { color: var(--accent); border-color: var(--accent); }
+  .vfiles { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .vchip { font-size: 12px; padding: 5px 10px; border-radius: 999px; background: var(--panel2);
+           border: 1px solid var(--line); font-weight: 600; }
+  .vchip:hover { border-color: var(--accent); }
+  .vcard audio { width: 100%; margin-top: 10px; }
+  .vwarn { color: var(--warn); font-size: 12.5px; margin-top: 8px; }
+  .verr { color: var(--bad); font-size: 12.5px; margin-top: 8px; }
+  .fvoice { opacity: 0; }
+  #files li:hover .fvoice { opacity: 1; }
+
   @media (max-width: 1100px) { #app { grid-template-columns: 230px 1fr 270px; } }
   @media (max-width: 860px) {
     #app { grid-template-columns: 1fr; grid-template-areas: "top" "main"; }
@@ -373,6 +413,7 @@
         <button type="button" class="iconbtn" id="attach" title="Attach files"><svg class="icon"><use href="#i-clip"/></svg></button>
         <label class="picker" title="Which account answers"><i class="pdot" id="pickdot"></i>
           <select id="picker"></select></label>
+        <button type="button" class="iconbtn" id="micbtn" title="Make a voiceover from a script"><svg class="icon"><use href="#i-mic"/></svg></button>
         <button type="button" class="iconbtn" id="switchbtn" title="Switch account… (saves a handoff and lets another account carry on)"><svg class="icon"><use href="#i-swap"/></svg></button>
         <textarea id="input" rows="1" placeholder="Pick or create a project to start…" disabled></textarea>
         <button class="send" id="send" disabled title="Send"><svg class="icon"><use href="#i-send"/></svg></button>
@@ -461,6 +502,18 @@
     <div class="mhead"><div style="flex:1"><h3>Handoff</h3><p id="hotitle"></p></div>
       <button class="iconbtn" id="hoclose" title="Close"><svg class="icon"><use href="#i-x"/></svg></button></div>
     <div class="mbody"><pre id="hobody" class="hobody"></pre></div>
+  </div>
+</div>
+
+<div class="scrim" id="voicemodal">
+  <div class="modal" role="dialog" aria-label="Voiceover">
+    <div class="mhead">
+      <div class="mark"><svg viewBox="0 0 24 24"><use href="#i-mic"/></svg></div>
+      <div style="flex:1"><h3>Make a voiceover</h3>
+        <p>Clones the voice from a reference clip, checks every section against the script, and adds the mp3, wav and subtitles to this project.</p></div>
+      <button class="iconbtn" id="voiceclose" title="Close"><svg class="icon"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="mbody" id="voicebody"></div>
   </div>
 </div>
 
@@ -581,11 +634,15 @@ function renderWelcome() {
           <b>New project</b><small>One project per video or channel</small></div>
         <div class="qcard" data-act="upload"><div class="qicon" style="background:#22c3a6"><svg class="icon"><use href="#i-doc"/></svg></div>
           <b>Bring a script</b><small>Upload a .docx, .txt or .md</small></div>
-        <div class="qcard soon"><span class="tag">P4</span><div class="qicon" style="background:#a855f7"><svg class="icon"><use href="#i-mic"/></svg></div>
+        <div class="qcard" data-act="voice"><div class="qicon" style="background:#a855f7"><svg class="icon"><use href="#i-mic"/></svg></div>
           <b>Voice a script</b><small>Clone your voice, get mp3 + subtitles</small></div>
       </div>
     </div>`;
   $("#messages").querySelector('[data-act="new"]').onclick = showNewForm;
+  $("#messages").querySelector('[data-act="voice"]').onclick = () => {
+    if (!state.current) { showNewForm(); toast("Create a project first, then add your script"); }
+    else openVoice();
+  };
   $("#messages").querySelector('[data-act="upload"]').onclick = () => {
     if (!state.current) { showNewForm(); toast("Create a project first, then add files"); }
     else $("#fileinput").click();
@@ -611,6 +668,7 @@ function renderThread(hist, p) {
   $("#messages").innerHTML = `<div class="thread"></div>`;
   hist.forEach(m => {
     if (m.role === "system") return addNote(m.text, m.handoff);
+    if (m.role === "tool" && m.tool === "voiceover") return addVoiceCard(m.job);
     const b = addMsg(m.role, m.text);
     if (m.role === "assistant") decorate(b, m);
   });
@@ -809,9 +867,12 @@ async function loadFiles() {
     return `<li><div class="ftype" style="background:${t.color}">${esc(t.label.toUpperCase())}</div>
       <div class="fmeta"><div class="fname" title="${esc(f.name)}">${esc(f.name)}</div>
       <div class="fsize">${size(f.size)} · ${ago(f.modified)}</div></div>
+      ${/\.(docx|txt|md)$/i.test(f.name) ? `<button class="iconbtn fvoice" data-name="${esc(f.name)}" title="Make a voiceover from this script"><svg class="icon"><use href="#i-mic"/></svg></button>` : ""}
       <button class="iconbtn fdl" data-name="${esc(f.name)}" title="Download"><svg class="icon"><use href="#i-down"/></svg></button></li>`;
   }).join("") || `<div class="fempty">No files in this project yet.</div>`;
   document.querySelectorAll("#files .fdl").forEach(b => b.onclick = () => download(b.dataset.name));
+  document.querySelectorAll("#files .fvoice").forEach(b => b.onclick = () => openVoice(b.dataset.name));
+  state.files = list;
 }
 
 async function download(name) {
@@ -1007,6 +1068,179 @@ $("#acccheck").onclick = async () => {
   state.accounts = await (await api("/api/accounts/check", { method: "POST" })).json();
   renderPicker(); renderAccounts();
 };
+
+// ---------- voiceover (plan R5, R12)
+state.voice = { last: {} };
+try { state.voice.last = JSON.parse(localStorage.getItem("op.voice") || "{}"); } catch (e) {}
+
+async function openVoice(fileName) {
+  if (!state.current) { toast("Pick a project first", true); return; }
+  $("#voicemodal").classList.add("open");
+  $("#voicebody").innerHTML = `<div class="vstats">Checking the voice engine…</div>`;
+  let st;
+  try { st = await (await api("/api/voice/status")).json(); }
+  catch (e) { $("#voicebody").innerHTML = `<div class="verr">${esc(e.message)}</div>`; return; }
+  if (!st.configured) {
+    $("#voicebody").innerHTML = `<div class="vsetup"><b>The voice module isn't set up on this PC.</b>
+      <p>It needs the separate voiceover app and its Python (with the voice model). Add these to
+      <code>%APPDATA%\\OneProduction\\settings.json</code>:</p>
+      <ul>${st.missing.map(m => `<li><code>${esc(m)}</code></li>`).join("")}</ul>
+      <p>Everything else in One Production works without it.</p></div>`;
+    return;
+  }
+  if (!st.running) {
+    $("#voicebody").innerHTML = `<div class="vstats">Starting the voice engine (the first time can take ~30 s)…</div>`;
+    try { st = await (await api("/api/voice/start", { method: "POST" })).json(); }
+    catch (e) { $("#voicebody").innerHTML = `<div class="verr">Couldn't start the voice engine: ${esc(e.message)}</div>`; return; }
+  }
+  renderVoiceForm(st, fileName);
+}
+
+function renderVoiceForm(st, fileName) {
+  const L = state.voice.last;
+  const scripts = (state.files || []).filter(f => /\.(docx|txt|md)$/i.test(f.name));
+  const voices = (st.voices || []).filter(v => !/^_upload_/.test(v));
+  const presets = Object.entries(st.presets || {});
+  const pick = fileName || (scripts[0] && scripts[0].name) || "__paste__";
+  $("#voicebody").innerHTML = `
+    <form id="voiceform" class="vgrid">
+      <div class="vf full"><label for="vsrc">Script</label>
+        <select id="vsrc">${scripts.map(f => `<option value="${esc(f.name)}"${f.name === pick ? " selected" : ""}>${esc(f.name)}</option>`).join("")}
+          <option value="__paste__"${pick === "__paste__" ? " selected" : ""}>Paste the script…</option></select>
+        <textarea id="vtext" placeholder="Paste the script. Lines like ## Title or [0:42] Title are on-screen titles and are not spoken." style="display:none;margin-top:8px"></textarea>
+        <div class="vstats" id="vstats"></div></div>
+      <div class="vf"><label for="vvoice">Voice (reference clip)</label>
+        <select id="vvoice">${voices.map(v => `<option${v === L.voice ? " selected" : ""}>${esc(v)}</option>`).join("")}</select></div>
+      <div class="vf"><label for="vpreset">Delivery</label>
+        <select id="vpreset">${presets.map(([k, v]) => `<option value="${k}"${k === (L.preset || "clone_exact") ? " selected" : ""}>${esc(v.label)}</option>`).join("")}</select></div>
+      <div class="vf"><label for="vpace">Pace</label>
+        <select id="vpace">
+          <option value="natural">Natural — the voice's own pace</option>
+          <option value="wpm">Target words per minute</option>
+          <option value="grid_pad">Timestamps, no stretching (keeps the voice exact)</option>
+          <option value="grid">Timestamps, stretch to fit</option></select></div>
+      <div class="vf"><label for="vwpm">Words per minute</label><input id="vwpm" type="number" min="90" max="240" value="${L.wpm || 155}"></div>
+      <div class="vf"><label for="vname">File name</label><input id="vname" maxlength="80"></div>
+      <div class="vf"><label>Fine-tune (optional)</label>
+        <div style="display:flex;gap:6px"><input id="vexag" type="number" step="0.05" placeholder="exag." title="Exaggeration (expressiveness)" value="${L.exag ?? ""}">
+          <input id="vcfg" type="number" step="0.05" placeholder="cfg" title="CFG weight" value="${L.cfg ?? ""}">
+          <input id="vtemp" type="number" step="0.05" placeholder="temp." title="Temperature" value="${L.temp ?? ""}"></div></div>
+      <div class="vf full" id="vapprove"></div>
+      <div class="vf full" style="display:flex;justify-content:flex-end;gap:8px">
+        <button type="button" class="btn" id="vcancel">Cancel</button>
+        <button class="btn primary" id="vgo">Make voiceover</button></div>
+    </form>`;
+  $("#vpace").value = L.pace || "natural";
+  const sync = async () => {
+    const paste = $("#vsrc").value === "__paste__";
+    $("#vtext").style.display = paste ? "" : "none";
+    $("#vwpm").disabled = $("#vpace").value !== "wpm";
+    if (!paste && !$("#vname").dataset.touched) $("#vname").value = $("#vsrc").value.replace(/\.[^.]+$/, "");
+    const body = paste ? { text: $("#vtext").value } : { file: $("#vsrc").value };
+    if (paste && !$("#vtext").value.trim()) { $("#vstats").textContent = ""; return; }
+    try {
+      const r = await (await api(`/api/projects/${state.current}/script-stats`, { method: "POST",
+        headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })).json();
+      $("#vstats").textContent = `${r.words.toLocaleString()} spoken words · ${r.sections} sections · about ${r.minutes_at_155} min at 155 wpm`;
+    } catch (e) { $("#vstats").textContent = e.message; }
+  };
+  $("#vsrc").onchange = sync; $("#vpace").onchange = sync;
+  $("#vtext").oninput = () => { clearTimeout(state.voice.t); state.voice.t = setTimeout(sync, 400); };
+  $("#vname").oninput = () => $("#vname").dataset.touched = "1";
+  $("#vcancel").onclick = closeVoice;
+  $("#voiceform").onsubmit = e => { e.preventDefault(); submitVoice(null); };
+  sync();
+}
+
+async function submitVoice(approve) {
+  const num_ = id => { const v = $(id).value.trim(); return v === "" ? null : Number(v); };
+  const paste = $("#vsrc").value === "__paste__";
+  const body = {
+    ...(paste ? { text: $("#vtext").value } : { file: $("#vsrc").value }),
+    voice: $("#vvoice").value, preset: $("#vpreset").value, pace_mode: $("#vpace").value,
+    target_wpm: $("#vpace").value === "wpm" ? Number($("#vwpm").value) : null,
+    name: $("#vname").value || null, exaggeration: num_("#vexag"), cfg_weight: num_("#vcfg"),
+    temperature: num_("#vtemp"), approve,
+  };
+  state.voice.last = { voice: body.voice, preset: body.preset, pace: body.pace_mode, wpm: Number($("#vwpm").value),
+                       exag: body.exaggeration, cfg: body.cfg_weight, temp: body.temperature };
+  try { localStorage.setItem("op.voice", JSON.stringify(state.voice.last)); } catch (e) {}
+  $("#vgo").disabled = true;
+  const r = await fetch(`/api/projects/${state.current}/voice`, { method: "POST",
+    headers: { "Content-Type": "application/json", "X-OneProd-Token": TOKEN }, body: JSON.stringify(body) });
+  $("#vgo").disabled = false;
+  if (r.status === 409) {
+    const need = (await r.json()).needs_approval;
+    $("#vapprove").innerHTML = `<div class="approve"><b>${esc(need.label)} needs your OK before it runs</b>
+      <div style="color:var(--dim);font-size:13px">It uses ${esc(need.uses)}.</div>
+      <div class="row2"><button type="button" class="btn" data-a="cancel">Cancel</button>
+        <button type="button" class="btn" data-a="once">Allow once</button>
+        <button type="button" class="btn primary" data-a="always">Always allow</button></div></div>`;
+    $("#vapprove").querySelectorAll("[data-a]").forEach(b => b.onclick = () =>
+      b.dataset.a === "cancel" ? ($("#vapprove").innerHTML = "") : submitVoice(b.dataset.a));
+    return;
+  }
+  if (r.status === 401) return lock();
+  if (!r.ok) { toast((await r.json().catch(() => ({}))).detail || "Couldn't start", true); return; }
+  const job = await r.json();
+  closeVoice();
+  addMsg("user", `Voice ${job.source} with ${job.voice}`);
+  addVoiceCard(job.id);
+}
+function closeVoice() { $("#voicemodal").classList.remove("open"); }
+$("#voiceclose").onclick = closeVoice;
+$("#voicemodal").addEventListener("click", e => { if (e.target.id === "voicemodal") closeVoice(); });
+$("#micbtn").onclick = () => openVoice();
+
+const VSTAT = { starting: "Starting", rendering: "Rendering", subtitles: "Making subtitles", done: "Done", failed: "Failed" };
+function addVoiceCard(jid) {
+  const card = document.createElement("div");
+  card.className = "vcard"; card.dataset.job = jid;
+  card.innerHTML = `<div class="vhead"><div class="vicon"><svg class="icon"><use href="#i-mic"/></svg></div>
+    <div style="flex:1"><b>Voiceover</b><small>loading…</small></div></div>`;
+  thread().appendChild(card);
+  $("#messages").scrollTop = $("#messages").scrollHeight;
+  pollVoice(card, jid);
+  return card;
+}
+
+async function pollVoice(card, jid) {
+  let job;
+  try { job = await (await api("/api/voicejobs/" + jid)).json(); }
+  catch (e) { card.querySelector("small").textContent = "couldn't load this voiceover"; return; }
+  if (!card.isConnected) return;               // user switched project: stop polling this card
+  renderVoiceCard(card, job);
+  if (job.status !== "done" && job.status !== "failed") setTimeout(() => pollVoice(card, jid), 2000);
+  else if (job.status === "done" && !card.dataset.filesLoaded) { card.dataset.filesLoaded = "1"; loadFiles(); }
+}
+
+function renderVoiceCard(card, job) {
+  card.className = "vcard " + job.status;
+  const r = job.result || {};
+  const secs = (job.sections || []).map(s => `<span class="vsec ${s.status}" title="${esc(s.title || "")}${
+      s.wer != null ? " · read-check " + s.wer : ""}">${s.i + 1}. ${esc((s.title || "section").slice(0, 18))}</span>`).join("");
+  const done = job.status === "done";
+  const keep = card.querySelector("audio");      // don't interrupt playback on re-render
+  if (done && keep && keep.dataset.loaded) return;
+  card.innerHTML = `<div class="vhead"><div class="vicon"><svg class="icon"><use href="#i-mic"/></svg></div>
+      <div style="flex:1"><b>${esc(job.name)} — ${esc(VSTAT[job.status] || job.status)}</b>
+      <small>${esc(job.voice)} · ${esc(job.source)}${done ? ` · ${esc(r.clock || "")} · ${r.words || 0} words · ${r.wpm || 0} wpm` : " · " + esc(job.step || "")}</small></div></div>
+    ${secs ? `<div class="vsecs">${secs}</div>` : ""}
+    ${done && r.flagged && r.flagged.length ? `<div class="vwarn">Sections ${r.flagged.join(", ")} still failed the read-check — listen to those before publishing.</div>` : ""}
+    ${done ? `<audio controls preload="none"></audio><div class="vfiles">${job.files.map(f => `<button class="vchip" data-f="${esc(f)}">⬇ ${esc(f)}</button>`).join("")}</div>` : ""}
+    ${job.status === "failed" ? `<div class="verr">${esc(job.error || "failed")}</div>` : ""}`;
+  card.querySelectorAll("[data-f]").forEach(b => b.onclick = () => download(b.dataset.f));
+  const mp3 = done && job.files.find(f => /\.mp3$/i.test(f));
+  if (mp3) {
+    const audio = card.querySelector("audio");
+    audio.addEventListener("play", async () => {
+      if (audio.dataset.loaded) return;
+      audio.pause();
+      const blob = await (await api(`/api/projects/${job.project}/files/${encodeURIComponent(mp3)}`)).blob();
+      audio.src = URL.createObjectURL(blob); audio.dataset.loaded = "1"; audio.play();
+    });
+  }
+}
 
 // ---------- usage page (plan R2)
 state.range = "today";

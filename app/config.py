@@ -1,4 +1,4 @@
-"""Settings for One Production.
+r"""Settings for One Production.
 
 Every path the app uses comes from here, so the same code runs on any PC. Values are
 resolved in order, later ones winning:
@@ -48,6 +48,11 @@ class Settings(BaseModel):
     anthropic_base_url: str | None = None   # only for tests / proxies
     reply_timeout: float = 300
     login_console: bool = True              # show the provider's sign-in in its own window
+    # Voiceover module (optional): the separate local voiceover app and the Python that has
+    # the voice model. Unset = the module shows "not set up" instead of failing.
+    voice_app_dir: str | None = None
+    voice_python: str | None = None
+    voice_app_url: str = "http://127.0.0.1:8720"
 
     @field_validator("host")
     @classmethod
@@ -83,6 +88,9 @@ def _env_overrides() -> dict:
         out["codex_cmd"] = v
     if v := os.environ.get("ONEPROD_ANTHROPIC_BASE_URL"):
         out["anthropic_base_url"] = v
+    for key in ("voice_app_dir", "voice_python", "voice_app_url"):
+        if v := os.environ.get("ONEPROD_" + key.upper()):
+            out[key] = v
     if v := os.environ.get("ONEPROD_LOGIN_CONSOLE"):
         out["login_console"] = v.strip().lower() not in ("0", "false", "no", "off")
     return out

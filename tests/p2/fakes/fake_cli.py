@@ -64,11 +64,15 @@ def claude(args, home: Path):
             return 1
         spends = os.environ.get("FAKE_MODE") == "usage_spends"
         pct = round(float(os.environ.get("FAKE_UTIL", "0.34")) * 100)
+        import datetime as _dt
+        def _when(**kw):                      # same text format as the real CLI, always in the future
+            d = _dt.datetime.now() + _dt.timedelta(**kw)
+            return f"{d:%b} {d.day}, {d.hour % 12 or 12}:{d:%M}{'am' if d.hour < 12 else 'pm'}"
         out({"type": "result", "subtype": "success", "is_error": False,
              "num_turns": 1 if spends else 0, "total_cost_usd": 0.01 if spends else 0,
              "result": "You are currently using your subscription to power your Claude Code usage\n\n"
-                       f"Current session: {pct}% used · resets Oct 3, 11:50pm (Asia/Kolkata)\n"
-                       "Current week (all models): 18% used · resets Oct 5, 7:30pm (Asia/Kolkata)\n"})
+                       f"Current session: {pct}% used · resets {_when(hours=2)} (Asia/Kolkata)\n"
+                       f"Current week (all models): 18% used · resets {_when(days=3)} (Asia/Kolkata)\n"})
         return 0
     prompt = sys.stdin.read()
     if log := os.environ.get("FAKE_LOG"):
