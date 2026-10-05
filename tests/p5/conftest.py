@@ -142,6 +142,7 @@ class FakeAgent:
         if name == "Write":
             p = Path(args["file_path"])
             p = p if p.is_absolute() else Path(self.o.cwd) / p
+            p.parent.mkdir(parents=True, exist_ok=True)              # like Claude Code's Write
             p.write_text(args["content"], encoding="utf-8")
             return f"wrote {p.name}", False
         return f"{name} ok", False

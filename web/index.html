@@ -383,6 +383,23 @@
   .prow textarea { resize: vertical; min-height: 54px; }
   .prow .pg { font-size: 12px; color: var(--dim); display: flex; gap: 6px; align-items: center; }
   .pwarn { color: var(--warn); font-size: 12px; min-height: 16px; }
+  .scard { display: grid; grid-template-columns: 110px 1fr 28px; gap: 3px 8px; align-items: center; font-size: 12px; margin: 6px 0 2px; }
+  .scard .bar { height: 7px; border-radius: 4px; background: var(--panel); overflow: hidden; }
+  .scard .bar i { display: block; height: 100%; border-radius: 4px; background: var(--ok); }
+  .scard .bar i.mid { background: var(--warn); } .scard .bar i.low { background: var(--bad); }
+  .scard .n { text-align: right; font-weight: 700; }
+  .sround { border-top: 1px solid var(--line); padding: 8px 0; }
+  .sround summary { cursor: pointer; font-weight: 700; }
+  .sround summary small { font-weight: 500; color: var(--dim); }
+  .sround ul { margin: 6px 0 0; padding-left: 18px; color: var(--bad); font-size: 12px; }
+  .sform { display: grid; grid-template-columns: 150px 1fr; gap: 10px 14px; align-items: center; font-size: 13px; }
+  .sform input, .sform select, .sform textarea { width: 100%; padding: 7px 9px; border-radius: 8px; border: 1px solid var(--line);
+                                                 background: var(--panel); color: var(--ink); font: inherit; font-size: 13px; }
+  .sform textarea { min-height: 84px; resize: vertical; }
+  .sform .full { grid-column: 1 / -1; }
+  .sset { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 10px; }
+  .sset summary { cursor: pointer; font-weight: 700; margin-bottom: 10px; }
+  .fosok { color: var(--ok); font-size: 12px; } .fosbad { color: var(--warn); font-size: 12px; }
   .tform { display: grid; grid-template-columns: 150px 1fr; gap: 10px 14px; align-items: center; font-size: 13px; }
   .tform select, .tform input { padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line);
                                 background: var(--panel); color: var(--ink); }
@@ -675,6 +692,7 @@
         <button type="button" class="iconbtn" id="teambtn" title="Team mode: a master (Opus) splits the goal and reviews, workers (Sonnet) do the parts in parallel"><svg class="icon"><use href="#i-team"/></svg></button>
         <span class="teamchip" id="teamchip" style="display:none" title="Team settings"></span>
         <span class="teamchip" id="partsbtn" style="display:none" title="Write the parts yourself - the master then only reviews">Parts…</span>
+        <button type="button" class="iconbtn" id="scriptbtn" title="Script Studio: competitor style + FacelessOS, reviewed by Opus until it passes"><svg class="icon"><use href="#i-doc"/></svg></button>
         <button type="button" class="iconbtn" id="micbtn" title="Make a voiceover from a script"><svg class="icon"><use href="#i-mic"/></svg></button>
         <button type="button" class="iconbtn" id="switchbtn" title="Switch account… (saves a handoff and lets another account carry on)"><svg class="icon"><use href="#i-swap"/></svg></button>
         <textarea id="input" rows="1" placeholder="Pick or create a project to start…" disabled></textarea>
@@ -849,6 +867,17 @@
   </div>
 </div>
 
+<div class="scrim" id="scriptmodal">
+  <div class="modal wide" role="dialog" aria-label="New script">
+    <div class="mhead">
+      <div class="mark"><svg viewBox="0 0 24 24"><use href="#i-doc"/></svg></div>
+      <div style="flex:1"><h3>New script</h3><p>Competitors' captions → their style → a FacelessOS script → Opus reviews it until it passes.</p></div>
+      <button class="iconbtn" id="scriptclose" title="Close"><svg class="icon"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="mbody" id="scriptbody"></div>
+  </div>
+</div>
+
 <div class="scrim" id="guidemodal">
   <div class="modal wide" role="dialog" aria-label="Guide">
     <div class="mhead">
@@ -876,6 +905,12 @@
          the same file. If a worker's account hits its limit it saves a handoff and carries on with another account; if none is
          left the team pauses — press <b>Resume</b> when one is free. A part that still isn't right after two reviews comes back to
          you. Spend caps per account (Usage page) pause the team before it spends more than you allow.</p>
+      <h4>Script Studio</h4>
+      <p>The page button below the message box writes a script from your competitors' style: paste their links (any format, or
+         pick a list file), and it reads their YouTube captions, writes a style guide, writes the script with your
+         <b>FacelessOS</b> system and has Opus score it on nine points. It rewrites until every score reaches 8 — or keeps the
+         best version after 5 rounds and lets you decide. Every version stays in <b>scripts/</b>. Set your FacelessOS folder once
+         under Settings in that window; the files are only read from there, never copied.</p>
       <h4>Voiceovers</h4>
       <p>The microphone next to a script (or just asking in the chat) clones your reference voice, reads every section back to check
          nothing was misread, masters to −14 LUFS and adds an mp3, a wav and subtitles to the project.
@@ -1140,6 +1175,8 @@ function renderThread(hist, p) {
       b.appendChild(seg);
     }
     if (m.role === "assistant" && m.team) teamSummary(b, m);
+    if (m.role === "assistant" && m.script) { const t = renderScript(b, { ...m.script, done: true }, state.current, null); t.el.classList.add("old"); }
+    if (m.role === "user" && m.script) b.insertAdjacentHTML("afterbegin", `<small style="display:block;opacity:.7;font-weight:700">SCRIPT STUDIO</small>`);
     if (m.role === "user" && m.team) b.insertAdjacentHTML("afterbegin", `<small style="display:block;opacity:.7;font-weight:700">TEAM GOAL</small>`);
     if (m.role === "assistant") decorate(b, m);
     if (m.role === "assistant" && m.action) addActionCard(b, m.action, m.time, usedActions.has(m.time));
@@ -1266,6 +1303,7 @@ async function consumeReply(request, accountId) {
   const handle = ev => {
     if (state.current !== pid) return;              // user moved to another project: the run carries on
     if (ev.t === "team") { begin(); team = renderTeam(bubble, ev.team, pid, team); return; }
+    if (ev.t === "script") { begin(); team = renderScript(bubble, ev.script, pid, team); return; }
     if (ev.w) {                                     // a worker's or the master's own activity
       if (team) teamActivity(team, ev);
       if (ev.t === "ask") { begin(); seg = null; asks[ev.id] = addAskCard(bubble, { ...ev, title: teamWho(team, ev.w) + ev.title }, pid); }
@@ -1462,6 +1500,118 @@ async function openTeam() {
 }
 $("#teamclose").onclick = () => $("#teammodal").classList.remove("open");
 
+// ---------- Script Studio (P10)
+const RUBRIC_NAMES = { hook: "Hook", structure: "Structure", retention: "Retention", rehooks: "Rehooks", anti_slop: "Anti-AI slop",
+                       authenticity: "Authenticity", style_match: "Style match", length: "Length", outro: "Outro / CTA" };
+const SCRIPT_STAGES = { fetching: "reading competitor captions", style: "writing the style guide", writing: "writing the script",
+                        review: "Opus is reviewing" };
+function scoreCard(c, pass) {
+  return `<div class="scard">${Object.keys(RUBRIC_NAMES).map(k => {
+    const v = (c.scores || {})[k] ?? 0, cls = v >= pass ? "" : v >= pass - 2 ? "mid" : "low";
+    return `<span>${RUBRIC_NAMES[k]}</span><span class="bar"><i class="${cls}" style="width:${v * 10}%"></i></span><span class="n">${v}</span>`;
+  }).join("")}</div>`;
+}
+function renderScript(bubble, d, pid, prev) {
+  const t = prev || { el: document.createElement("div"), act: {}, notes: [] };
+  if (!prev) { t.el.className = "teampanel"; bubble.prepend(t.el); }
+  t.data = { ...d, tasks: d.tasks || [] };
+  const pass = (d.config || {}).pass_score || 8, f = d.fetch || {}, r = d.result || {};
+  const live = !d.done && !["done", "needs_you", "failed", "stopped"].includes(d.state);
+  const head = live ? (d.state === "paused" ? "paused" : SCRIPT_STAGES[d.stage] || d.stage) :
+               ({ done: "passed", needs_you: "your call", failed: "stopped", stopped: "stopped" }[d.state] || d.state);
+  const task = id => (d.tasks || []).find(x => x.id === id);
+  const row = (id, label, extra) => { const x = task(id);
+    return `<div class="trow" data-t="${id}"><span class="tst ${x ? x.status : "queued"}">${x ? (TEAM_STATUS[x.status] || x.status) : "waiting"}</span>
+      <span class="tt">${label}</span><span class="ta">${esc([x && x.pins ? x.pins.map(accShort).join(" → ") : "", x && x.tokens ? num(x.tokens) + " tokens" : "",
+      extra || "", t.act[id] || ""].filter(Boolean).join(" · "))}</span>
+      ${x && x.why ? `<span class="tw">${esc(x.why)}</span>` : ""}
+      ${((x && x.handoffs) || []).map(h => `<span class="ta"><button class="linkbtn" data-ho="${esc(h)}">handoff ${esc(h)}</button></span>`).join("")}</div>`; };
+  const fetchLine = f.done != null && f.summary && f.summary.videos != null
+    ? `${f.done} transcript${f.done === 1 ? "" : "s"} · ${f.summary.median_wpm || "?"} wpm median` : (f.line || "starting…");
+  const rounds = (d.rounds || []).map((c, i, all) => `<details class="sround" ${i === all.length - 1 ? "open" : ""}>
+      <summary>Round ${c.round} — ${c.total}/10 ${c.passed ? "✓ passed" : ""} <small>· ${num(c.words || 0)} words${d.target_words ? " of ~" + num(d.target_words) : ""}</small></summary>
+      ${scoreCard(c, pass)}${(c.must_fix || []).length ? `<ul>${c.must_fix.map(m => `<li>${esc(m)}</li>`).join("")}</ul>` : ""}
+      ${c.notes ? `<div class="tnote">${esc(c.notes)}</div>` : ""}</details>`).join("");
+  t.el.innerHTML = `<div class="th">Script Studio <small>${esc(head)} · ${esc((d.brief || {}).topic || "")} · reviewer
+      ${esc(((d.config || {}).master_model) || "opus")} · pass mark ${pass}/10</small></div>
+    ${d.state === "paused" ? `<div class="tpause"><span style="flex:1">${esc(d.paused_why || "")}</span><button class="btn" data-resume>Resume</button></div>` : ""}
+    <div class="trow"><span class="tst ${f.done != null && f.summary ? "done" : "running"}">${f.done != null && f.summary ? "done" : "working"}</span>
+      <span class="tt">Competitors</span><span class="ta">${esc(fetchLine)}</span>
+      ${(f.problems || []).length ? `<span class="tw">${f.problems.length} not transcribed: ${esc(f.problems.slice(0, 3).map(x => x.why).join("; "))}</span>` : ""}</div>
+    ${row("style", "Style guide", "competitors/style-guide.md")}
+    ${row("script", "Script", d.script || "")}
+    ${rounds}
+    ${r.why || r.file ? `<div class="tnote" style="margin-top:8px;color:var(--ink)"><b>${r.passed ? "Ready:" : r.file ? "Best version kept:" : "Stopped:"}</b>
+       ${esc(r.file || "")}${r.round ? ` (round ${r.round}, ${r.total}/10)` : ""} — ${esc(r.why || "")}</div>` : ""}
+    ${(d.notes || []).map(n => `<div class="tnote">${esc(n)}</div>`).join("")}
+    <div class="tfoot">${live ? "working…" : ""}${t.act.master && live ? " · reviewer: " + esc(t.act.master) : ""}</div>`;
+  const rb = t.el.querySelector("[data-resume]");
+  if (rb) rb.onclick = async () => { rb.disabled = true; try { await api(`/api/projects/${pid}/team/resume`, { method: "POST" }); } catch (e) { toast(e.message, true); } };
+  t.el.querySelectorAll("[data-ho]").forEach(b => b.onclick = () => showHandoff(b.dataset.ho));
+  return t;
+}
+
+async function openScript() {
+  if (!state.current) return toast("Open a project first", true);
+  let c;
+  try { c = await (await api("/api/script/settings")).json(); } catch (e) { return toast(e.message, true); }
+  const s = c.settings, fos = c.facelessos;
+  const opt = (list, v) => list.map(([val, label]) => `<option value="${esc(val ?? "")}" ${String(val ?? "") === String(v ?? "") ? "selected" : ""}>${esc(label)}</option>`).join("");
+  const lists = (state.files || []).filter(f => /\.(txt|md|csv|tsv|docx|xlsx|json|html?)$/i.test(f.name) && !/^(competitors|scripts)\//.test(f.name));
+  const models = c.models.map(m => [m.id, m.label]), efforts = [["auto", "auto"], ...c.efforts.map(e => [e, e])];
+  $("#scriptbody").innerHTML = `<div class="sform">
+      <label>Video topic</label><input id="s_topic" placeholder="e.g. The city that vanished under the sea" value="${esc($("#input").value.trim())}">
+      <label>Format</label><select id="s_fmt">${opt(Object.entries(c.formats), "documentary")}</select>
+      <label>Length (minutes)</label><input id="s_min" type="number" min="1" max="180" step="0.5" value="10">
+      <label>Niche</label><input id="s_niche" placeholder="e.g. history mysteries">
+      <label>Channel notes</label><input id="s_notes" placeholder="tone, audience, things to avoid (optional)">
+      <label class="full">Competitors — paste anything with YouTube links (videos or channels; a channel gives its ${s.per_channel} most-viewed recent videos)</label>
+      <textarea class="full" id="s_links" placeholder="https://www.youtube.com/@channel&#10;https://youtu.be/…"></textarea>
+      <label>…or a list file</label><select id="s_file">${opt([["", "(none)"], ...lists.map(f => [f.name, f.name])], "")}</select>
+    </div>
+    <details class="sset" ${fos.ok ? "" : "open"}><summary>Settings ${fos.ok ? "" : "— add your FacelessOS folder first"}</summary><div class="sform">
+      <label>FacelessOS folder</label><div><input id="s_fos" placeholder="e.g. D:\\Youtube\\Faceless os" value="${esc(s.facelessos_dir || "")}">
+        <div class="${fos.ok ? "fosok" : "fosbad"}" id="s_fosst">${fos.ok ? `✓ ${fos.files.length} FacelessOS files found` : esc(fos.why)}</div></div>
+      <label>Review rounds at most</label><input id="s_rounds" type="number" min="1" max="20" value="${s.rounds}">
+      <label>Pass mark (each score)</label><input id="s_pass" type="number" min="1" max="10" value="${s.pass_score}">
+      <label>Stop if no better for</label><input id="s_stall" type="number" min="1" max="20" value="${s.stall}">
+      <label>Videos per channel</label><input id="s_perch" type="number" min="1" max="20" value="${s.per_channel}">
+      <label>Reviewer</label><div style="display:flex;gap:8px"><select id="s_mm">${opt(models, s.master_model)}</select><select id="s_me">${opt(efforts, s.master_effort || "auto")}</select></div>
+      <label>Writer</label><div style="display:flex;gap:8px"><select id="s_wm">${opt(models, s.worker_model)}</select><select id="s_we">${opt(efforts, s.worker_effort || "auto")}</select></div>
+      <span></span><div><button class="btn" id="s_save">Save settings</button></div></div>
+      <p class="tnote">Your FacelessOS files are read from that folder each time — never copied into projects, backups or the package.
+        Captions come free from YouTube; videos without captions are skipped and listed.</p></details>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px"><button class="btn primary" id="s_go">Write the script</button></div>`;
+  const saveSettings = async () => {
+    const body = { facelessos_dir: $("#s_fos").value.trim(), rounds: Number($("#s_rounds").value), pass_score: Number($("#s_pass").value),
+                   stall: Number($("#s_stall").value), per_channel: Number($("#s_perch").value), master_model: $("#s_mm").value,
+                   master_effort: $("#s_me").value, worker_model: $("#s_wm").value, worker_effort: $("#s_we").value };
+    const r = await (await api("/api/script/settings", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })).json();
+    $("#s_fosst").className = r.facelessos.ok ? "fosok" : "fosbad";
+    $("#s_fosst").textContent = r.facelessos.ok ? `✓ ${r.facelessos.files.length} FacelessOS files found` : r.facelessos.why;
+    return r;
+  };
+  $("#s_save").onclick = async () => { try { await saveSettings(); toast("Script settings saved"); } catch (e) { toast(e.message, true); } };
+  $("#s_go").onclick = async () => {
+    const pid = state.current;
+    const body = { topic: $("#s_topic").value.trim(), format: $("#s_fmt").value, minutes: Number($("#s_min").value) || 10,
+                   niche: $("#s_niche").value.trim(), notes: $("#s_notes").value.trim(), links_text: $("#s_links").value,
+                   links_file: $("#s_file").value || null };
+    if (!body.topic) return toast("What is the video about?", true);
+    if (!body.links_text.trim() && !body.links_file) return toast("Paste competitor links or pick a list file", true);
+    if (!state.busy || state.busy !== pid) {
+      $("#scriptmodal").classList.remove("open");
+      $("#input").value = ""; grow();
+      addMsg("user", `Script: ${body.topic}`);
+      await consumeReply(() => api(`/api/projects/${pid}/script`, { method: "POST", headers: { "Content-Type": "application/json" },
+                                                                    body: JSON.stringify(body) }), null);
+    }
+  };
+  $("#scriptmodal").classList.add("open");
+}
+$("#scriptbtn").onclick = openScript;
+$("#scriptclose").onclick = () => $("#scriptmodal").classList.remove("open");
+
 // ---------- your own parts (the master only reviews)
 const partsKey = () => "op-parts-" + state.current;
 function partsRead() {
@@ -1619,8 +1769,8 @@ async function loadFiles() {
   $("#files").innerHTML = list.map(f => {
     const t = ftype(f.name);
     return `<li><div class="ftype" style="background:${t.color}">${esc(t.label.toUpperCase())}</div>
-      <div class="fmeta"><div class="fname" title="${esc(f.name)}">${esc(f.name)}</div>
-      <div class="fsize">${size(f.size)} · ${ago(f.modified)}</div></div>
+      <div class="fmeta"><div class="fname" title="${esc(f.name)}">${esc(f.name.split("/").pop())}</div>
+      <div class="fsize">${f.name.includes("/") ? esc(f.name.split("/").slice(0, -1).join("/")) + "/ · " : ""}${size(f.size)} · ${ago(f.modified)}</div></div>
       ${/\.(docx|txt|md)$/i.test(f.name) ? `<button class="iconbtn fvoice" data-name="${esc(f.name)}" title="Make a voiceover from this script"><svg class="icon"><use href="#i-mic"/></svg></button>` : ""}
       <button class="iconbtn fdl" data-name="${esc(f.name)}" title="Download"><svg class="icon"><use href="#i-down"/></svg></button></li>`;
   }).join("") || `<div class="fempty">No files in this project yet.</div>`;

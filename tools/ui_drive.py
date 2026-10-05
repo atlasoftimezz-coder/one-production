@@ -589,6 +589,54 @@ try:
         shot("44-usage-caps")
         js("closeUsage()")
 
+    # Script Studio: competitors -> style guide -> FacelessOS script -> Opus review loop (P10)
+    if os.environ.get("UI_DRIVE_P10") == "1":
+        go = lambda name: js("[...document.querySelectorAll('#projects li[data-id]')].find(l=>l.innerText.includes('%s')).click()" % name)
+        js("""(async()=>{
+          const j = {method:'POST', headers:{'Content-Type':'application/json'}};
+          const a = await (await api('/api/accounts', {...j, body: JSON.stringify({provider:'claude'})})).json();
+          await api(`/api/accounts/${a.id}/login`, {method:'POST'});
+          for (let i = 0; i < 60; i++) {
+            const c = await (await api(`/api/accounts/${a.id}/check`, {method:'POST'})).json();
+            if (c.status === 'ok') break;
+            await new Promise(r => setTimeout(r, 100));
+          }
+          await api('/api/projects', {...j, body: JSON.stringify({name:'Script test'})});
+          window._sAcc = a.id; await loadProjects();
+        })()""")
+        check("script account signed in", wait_for("!!window._sAcc", 15))
+        go("Script test")
+        wait_for("!document.querySelector('#input').disabled", 8)
+        js("loadFiles()")
+        js("document.querySelector('#scriptbtn').click()")
+        check("New script dialog opens", wait_for("document.querySelector('#scriptmodal').classList.contains('open') && !!document.querySelector('#s_topic')", 8))
+        check("asks for the FacelessOS folder first", "pick the folder" in (js("document.querySelector('#s_fosst').innerText") or ""))
+        js("document.querySelector('#s_fos').value=%s; document.querySelector('#s_save').click()" % json.dumps(os.environ["UI_FOS"]))
+        check("FacelessOS folder found", wait_for("document.querySelector('#s_fosst').innerText.includes('FacelessOS files found')", 8),
+              js("document.querySelector('#s_fosst').innerText"))
+        js("""document.querySelector('#s_topic').value='The Lost City';
+              document.querySelector('#s_fmt').value='true_crime';
+              document.querySelector('#s_min').value='8';
+              document.querySelector('#s_links').value='My rivals: https://www.youtube.com/@mrfacts and youtu.be/NOCAPTION01';""")
+        shot("50-new-script")
+        js("document.querySelector('#s_go').click()")
+        check("Script Studio panel appears", wait_for("!!document.querySelector('.bubble .teampanel') && document.querySelector('.bubble .teampanel').innerText.includes('Script Studio')", 10))
+        check("competitor captions read, one skipped", wait_for(
+            "[...document.querySelectorAll('.teampanel')].pop().innerText.includes('4 transcripts') && [...document.querySelectorAll('.teampanel')].pop().innerText.includes('1 not transcribed')", 20))
+        check("first review: score card with must-fix", wait_for(
+            "[...document.querySelectorAll('.teampanel')].pop().querySelectorAll('.sround').length>=1 && [...document.querySelectorAll('.teampanel')].pop().innerText.includes('the hook takes 40 seconds')", 20))
+        shot("51-script-round1")
+        check("loops until the reviewer passes it", wait_for(
+            "[...document.querySelectorAll('.teampanel')].pop().innerText.includes('Ready:') && [...document.querySelectorAll('.teampanel')].pop().querySelectorAll('.sround').length===2", 20))
+        wait_for("!document.querySelector('#stop').classList.contains('on')", 10)
+        check("script and style guide in Files", wait_for(
+            "document.querySelector('#files').innerText.includes('the-lost-city') && document.querySelector('#files').innerText.includes('style-guide')", 8),
+            (js("document.querySelector('#files').innerText") or "")[:300])
+        shot("52-script-done")
+        go("Ghost Towns"); time.sleep(0.4); go("Script test")
+        check("Script Studio run kept in history", wait_for(
+            "document.querySelector('#messages').innerText.includes('SCRIPT STUDIO') && document.querySelectorAll('.bubble .sround').length===2", 8))
+
     # backups, system scan, profile + PIN (P6)
     if os.environ.get("UI_DRIVE_P6") == "1":
         go = lambda name: js("[...document.querySelectorAll('#projects li[data-id]')].find(l=>l.innerText.includes('%s')).click()" % name)

@@ -39,6 +39,8 @@ from .agent.claude_agent import ClaudeAgent
 from .agent.codex_agent import CodexAgent
 from .agent.runs import Runs
 from .agent.team import Team, TeamConfig
+from .agent.scriptflow import ScriptConfig, ScriptRun
+from . import competitors, faceless
 from .agent.studio import INSTRUCTIONS as STUDIO_INSTRUCTIONS, Studio
 from .chat import SYSTEM, build_prompt, ndjson, reply_events
 from .config import Settings
@@ -114,6 +116,29 @@ class TeamIn(BaseModel):
     goal: str = ""
     config: dict | None = None                 # overrides of the saved team settings for this run
     tasks: list[PartIn] | None = None          # the user's own parts: the master then only reviews
+
+
+class ScriptRunIn(BaseModel):
+    topic: str
+    format: str = "documentary"
+    minutes: float = 10
+    niche: str = ""
+    notes: str = ""
+    links_text: str = ""
+    links_file: str | None = None            # a competitor list saved in the project (any format)
+
+
+class ScriptSettingsIn(BaseModel):
+    facelessos_dir: str | None = None
+    rounds: int | None = None
+    pass_score: int | None = None
+    stall: int | None = None
+    per_channel: int | None = None
+    master_model: str | None = None
+    master_effort: str | None = None
+    worker_model: str | None = None
+    worker_effort: str | None = None
+    master_account: str | None = None
 
 
 class TeamSettingsIn(BaseModel):
@@ -213,7 +238,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
                login_console: bool | None = None, voice_transport=None, agent_client=None,
                codex_transport=None, backup_delay: float = 120, backup_tick: float = 3600,
                restart=None, gpu_probe=None, tune_script: Path | None = None, relaunch=None,
-               updater: Updater | None = None) -> FastAPI:
+               updater: Updater | None = None, ytdlp=None) -> FastAPI:
     if login_console is None:
         login_console = settings.login_console
     token = token or secrets.token_urlsafe(32)
@@ -541,7 +566,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
             saved.append({"name": target.name, "size": target.stat().st_size})
         return saved
 
-    @app.get("/api/projects/{pid}/files/{name}")
+    @app.get("/api/projects/{pid}/files/{name:path}")
     def download(pid: str, name: str) -> FileResponse:
         _project(pid)
         try:
@@ -1334,6 +1359,132 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
 
         run.task = asyncio.get_running_loop().create_task(work())
         return StreamingResponse(follow(run), media_type="application/x-ndjson", headers={"Cache-Control": "no-store"})
+
+    # ---------------------------------------------------------------- Script Studio (P10)
+    script_file = settings.data_dir / "script_settings.json"
+    ytdlp = ytdlp or competitors.YtDlp()
+
+    def script_settings() -> dict:
+        try:
+            saved = json.loads(script_file.read_text(encoding="utf-8")) if script_file.exists() else {}
+        except ValueError:
+            saved = {}
+        base = {k: getattr(ScriptConfig(), k) for k in ScriptConfig.__dataclass_fields__}
+        out = {**base, **{k: v for k, v in saved.items() if k in base}}
+        out["facelessos_dir"] = saved.get("facelessos_dir")
+        return out
+
+    @app.get("/api/script/settings")
+    def get_script_settings() -> dict:
+        s = script_settings()
+        return {"settings": s, "facelessos": faceless.status(s["facelessos_dir"]),
+                "formats": faceless.FORMATS, "models": M.choices("claude")["models"], "efforts": M.EFFORTS,
+                "rubric": faceless.RUBRIC}
+
+    @app.patch("/api/script/settings")
+    def patch_script_settings(body: ScriptSettingsIn) -> dict:
+        cur = script_settings()
+        given = body.model_dump(exclude_unset=True)
+        if "facelessos_dir" in given:
+            d = (given["facelessos_dir"] or "").strip().strip('"')
+            if d and not faceless.find(d):
+                raise HTTPException(400, "no FacelessOS files in that folder (looking for faceless-scripts-os-master.md)")
+            given["facelessos_dir"] = d or None
+        for k, lo, hi in (("rounds", 1, 20), ("pass_score", 1, 10), ("stall", 1, 20), ("per_channel", 1, 20)):
+            if k in given and (given[k] is None or not lo <= int(given[k]) <= hi):
+                raise HTTPException(400, f"{k.replace('_', ' ')} must be {lo}-{hi}")
+        for role in ("master", "worker"):
+            if f"{role}_effort" in given and given[f"{role}_effort"] in ("", "auto"):
+                given[f"{role}_effort"] = None
+            try:
+                M.check("claude", given.get(f"{role}_model", cur[f"{role}_model"]),
+                        given.get(f"{role}_effort", cur[f"{role}_effort"]))
+            except ValueError as e:
+                raise HTTPException(400, f"{'reviewer' if role == 'master' else 'writer'}: {e}")
+        if given.get("master_account"):
+            _account(given["master_account"])
+        cur.update(given)
+        script_file.write_text(json.dumps(cur, indent=1), encoding="utf-8")
+        return get_script_settings()
+
+    @app.post("/api/projects/{pid}/script")
+    async def start_script(pid: str, body: ScriptRunIn) -> StreamingResponse:
+        _project(pid)
+        topic = body.topic.strip()
+        if not topic:
+            raise HTTPException(400, "what is the video about?")
+        s = script_settings()
+        skills_dir = faceless.find(s["facelessos_dir"])
+        if not skills_dir:
+            raise HTTPException(400, "Script Studio needs your FacelessOS folder - set it in Script settings")
+        text = body.links_text or ""
+        if body.links_file:
+            try:
+                path = store.file_path(pid, body.links_file)
+            except NotFound:
+                raise HTTPException(404, "that competitor list isn't in this project")
+            try:
+                text += "\n" + competitors.read_list_file(path)
+            except Exception as e:                       # noqa: BLE001
+                raise HTTPException(400, f"couldn't read that file: {e.__class__.__name__}")
+        links = competitors.find_links(text)
+        if not links["items"]:
+            raise HTTPException(400, "no YouTube links found in the competitor list")
+        if not team_accounts():
+            raise HTTPException(400, "Script Studio needs at least one signed-in Claude, Codex or API-key account")
+        fmt = body.format if body.format in faceless.FORMATS else "documentary"
+        brief = {"topic": topic[:200], "format": fmt, "minutes": max(1.0, min(180.0, float(body.minutes or 10))),
+                 "niche": body.niche.strip()[:200], "notes": body.notes.strip()[:2000]}
+        cfg = ScriptConfig.from_dict(s)
+        skills = {role: faceless.load(skills_dir, role, fmt) for role in ("analyst", "writer", "reviewer")}
+        try:
+            run = runs.start(pid, store.files_dir(pid))
+        except RuntimeError as e:
+            raise HTTPException(409, str(e))
+        deps = team_deps(pid)
+        dest = store.files_dir(pid) / "competitors"
+
+        async def fetch(items, say):
+            res = await competitors.collect(items, dest, ytdlp, per_channel=cfg.per_channel, scan=cfg.scan,
+                                            progress=say)
+            return {**res, "summary": competitors.summary(res["transcripts"])}
+
+        deps.fetch = fetch
+        sr = ScriptRun(pid, brief, links["items"], run, deps, cfg, skills, state_file=store.project_dir(pid) / "script.json")
+        if links["skipped"]:
+            sr.notes.append(f"{len(links['skipped'])} non-YouTube link(s) skipped")
+        teams[pid] = sr
+        store.append_message(pid, "user", f"Script: {brief['topic']} ({faceless.FORMATS[fmt]}, {brief['minutes']:g} min)"
+                                          f" - {len(links['items'])} competitor link(s)", script=True)
+
+        async def work():
+            snap = await sr.go()
+            r = snap["result"]
+            if r.get("file"):
+                text = (f"Script ready: {r['file']} - " if r.get("passed") else f"Best version kept: {r['file']} - ") + \
+                       f"round {r['round']}, score {r['total']}/10, {r.get('words')} words. {r.get('why', '')}"
+            else:
+                text = "Script Studio stopped: " + (r.get("why") or snap["state"])
+            store.append_message(pid, "assistant", text, script={
+                "id": snap["id"], "state": snap["state"], "result": r, "rounds": [
+                    {k: c[k] for k in ("round", "scores", "total", "must_fix", "passed", "words")} for c in snap["rounds"]],
+                "fetch": {k: snap["fetch"].get(k) for k in ("done", "problems", "summary")}, "brief": snap["brief"],
+                "master": snap["master"], "tasks": [{k: t[k] for k in ("id", "title", "status", "pins", "tokens", "handoffs")}
+                                                    for t in snap["tasks"]]})
+            runs.finish(run)
+            run.emit({"t": "done"})
+
+        run.task = asyncio.get_running_loop().create_task(work())
+        return StreamingResponse(follow(run), media_type="application/x-ndjson", headers={"Cache-Control": "no-store"})
+
+    @app.get("/api/projects/{pid}/script")
+    def script_state(pid: str) -> dict:
+        _project(pid)
+        live = teams.get(pid)
+        if isinstance(live, ScriptRun) and runs.busy(pid):
+            return {"running": True, "script": live.snapshot()}
+        f = store.project_dir(pid) / "script.json"
+        return {"running": False, "script": json.loads(f.read_text(encoding="utf-8")) if f.exists() else None}
 
     @app.get("/api/projects/{pid}/team")
     def team_state(pid: str) -> dict:

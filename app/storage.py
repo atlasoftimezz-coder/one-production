@@ -104,13 +104,22 @@ class Store:
         return target
 
     def list_files(self, pid: str) -> list[dict]:
-        return [{"name": f.name, "size": f.stat().st_size, "modified": f.stat().st_mtime}
-                for f in sorted(self.files_dir(pid).iterdir()) if f.is_file()]
+        """Every file, also in sub-folders the assistant made (scripts/, competitors/): the name is the
+        path inside the project with '/'. Hidden folders and unfinished uploads are left out."""
+        folder = self.files_dir(pid)
+        out = []
+        for f in folder.rglob("*"):
+            rel = f.relative_to(folder)
+            if not f.is_file() or f.name.endswith(".part") or any(x.startswith(".") for x in rel.parts):
+                continue
+            out.append({"name": rel.as_posix(), "size": f.stat().st_size, "modified": f.stat().st_mtime})
+        return sorted(out, key=lambda x: (x["name"].count("/"), x["name"].lower()))
 
     def file_path(self, pid: str, name: str) -> Path:
         folder = self.files_dir(pid).resolve()
-        p = (folder / safe_filename(name)).resolve()
-        if p.parent != folder or not p.is_file():
+        parts = [safe_filename(x) for x in name.replace("\\", "/").split("/") if x not in ("", ".")]
+        p = folder.joinpath(*parts).resolve() if parts else folder
+        if folder not in p.parents or not p.is_file():
             raise NotFound(name)
         return p
 

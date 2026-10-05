@@ -460,6 +460,11 @@ P9  ORCHESTRATOR                                                       [Phase 2]
           Sonnet 5.5 / medium; Codex workers keep the account's own choice.
 
 P10  PRODUCTION ENGINE (quality gates + visuals + edit)                 [Phase 2]
+  PART 1 - SCRIPT STUDIO (user, 2026-10-05): competitor links (any format) -> YouTube captions
+          (yt-dlp, no download) -> measured numbers -> style guide (Sonnet) -> FacelessOS script
+          (Sonnet, the user's own FacelessOS folder, never copied) -> Opus review with a 9-line
+          FacelessOS score card -> loop until every score >= 8 and no must-fix; stop rules: 5 rounds,
+          no better for 2 rounds, review budget -> keep the best version. Gate: docs/gates/P10-manual.md.
   Build : numeric gates per stage, research/script/animation/video-editor/packaging workers,
           ffmpeg editor default, Resolve/Storyblocks adapters behind licence flags.
   AUTO  : seeded bad take rejected; 6-semitone pitch shift fails voice gate; final video

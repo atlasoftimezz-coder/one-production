@@ -2,6 +2,16 @@
 
 What changed in each version, in plain words. "Check for updates" shows the newest section.
 
+## 0.10.0 - 2026-10-05
+- Script Studio (the page button below the message box): paste competitor links in any format
+  (or pick a .txt/.csv/.docx/.xlsx list), and One Production reads their YouTube captions, measures
+  how they talk (words per minute, sentence length, hooks) and writes a style guide. A writer
+  (Sonnet) then writes the script with your FacelessOS system, and Opus reviews it with a
+  nine-point score card - rewrite and review again until every score is 8+, or it keeps the best
+  version after 5 rounds / no progress.
+- Your FacelessOS files are read from your own folder each time; they're never copied anywhere.
+- Files in sub-folders (scripts/, competitors/) now show in Files and can be downloaded and voiced.
+
 ## 0.9.0 - 2026-10-05
 - Team mode (the people button next to the account): give a goal; a master (Opus 5.5) splits it
   into parts, up to 3 workers (Sonnet 5.5) do them at the same time, and the master reviews each

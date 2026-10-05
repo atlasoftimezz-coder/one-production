@@ -354,7 +354,7 @@ class Team:
             await self.pause(why)
             task.status = "queued"
 
-    async def master_call(self, prompt: str, kind: str) -> dict:
+    async def master_call(self, prompt: str, kind: str, note: str = MASTER_NOTE, role: str = "master") -> dict:
         """Run the master; on a limit move it like a worker (same switching rules)."""
         moved_from = None
         while True:
@@ -371,7 +371,7 @@ class Team:
             model, effort = self.choice(acc, "master")
             sub = SubRun(self.run, "master", lambda tool, inp: self._master_write(tool, inp))
             self.run.emit({"t": "team_note", "text": f"{kind}…", "w": "master"})
-            res = await self.deps.call(acc, sub, prompt, MASTER_NOTE, model, effort, "master")
+            res = await self.deps.call(acc, sub, prompt, note, model, effort, role)
             u = res.get("usage")
             if u:
                 self.master_tokens["in"] += u.input_tokens

@@ -77,7 +77,10 @@ agent/           P5 agent mode: policy.py (free inside project, ask outside), ru
                  project, replayable events, approval futures, Stop), studio.py (studio tools:
                  list_voices, script_stats, make_voiceover, voiceover_status), claude_agent.py
                  (Claude Agent SDK), codex_agent.py (codex app-server JSON-RPC)
+                 scriptflow.py (P10 Script Studio: analyst -> writer <-> Opus reviewer loop)
                  team.py (P9 orchestrator: Team, Locks, SubRun, review/spend caps - deps injected)
+competitors.py   Script Studio: competitor links -> yt-dlp captions -> numbers (no AI)
+faceless.py      FacelessOS skills (read from the user's folder only) + review rubric
 models.py        model + effort table for every call path (Claude/API/Codex), validation, effort_for()
 usage.py         ledger usage.sqlite (calls + role, switches, limit_hits), spend queries, CSV export
 handoff.py       handoff.md writer (redacted) + continue prompt
@@ -137,6 +140,17 @@ voice/           engine.py, pipeline.py, server.py, make_srt.py, config.py, tune
   user's number is the only fan-out. No account → team pauses (Resume button; also re-checks every 60 s). Review: max 2 rounds,
   40k in / 8k out per round, 120k per task → otherwise "needs you". Spend caps per account
   (`cap_task_tokens`, `cap_day_tokens`, `cap_day_usd`) on the Usage page.
+- **Script Studio (P10 part 1)**, user, 2026-10-05: "Master opus should be reviewer for scripting use
+  facelessos … competitor list in any format … check the transcription style … looped until reviewer
+  satisfied". Built as `app/competitors.py` (links from any text/CSV/DOCX/XLSX; yt-dlp captions,
+  channel → top 5 by views of the last 30 uploads; numbers), `app/faceless.py` (find the skills
+  folder, skills per role/format, the 9-line RUBRIC), `app/agent/scriptflow.py` (`ScriptRun(Team)`:
+  analyst → writer ⇄ reviewer). Defaults chosen by Claude (user said "plan based on my inputs"):
+  5 rounds, pass = every score ≥ 8 and no must-fix, stop if no better for 2 rounds, review budget
+  60k/8k per round and 300k per script, skip videos without captions. FacelessOS (paid course,
+  `D:\Youtube\Faceless os\…\FacelessOS Core v4 (May 2026)\skills`) is only read at run time and
+  passed in the agent's instructions — a test proves it never lands in project files, backups or
+  diagnostics. yt-dlp is now an app dependency (`python -m yt_dlp`; `ONEPROD_YTDLP` = stand-in).
 - **ChatGPT only through Codex logins** (user, 2026-10-05: "for chatgpt we can use codex") - no
   OpenAI API-key provider is planned.
 - **Model + effort** (user: "toggle model and effort wherever we are using claude, likewise codex and
@@ -160,12 +174,14 @@ voice/           engine.py, pipeline.py, server.py, make_srt.py, config.py, tune
 | P7 Setup wizard + modules | **built, manual pending** (Part B = real ~9 GB install in a new Windows user) | 2400ae9, 5347019 |
 | P8 Package + updates + support | **built, manual pending** (a friend installs from zero, voices the sample) | d89fc06 |
 | P9 Orchestrator + model/effort toggles | **built, manual pending** (`docs/gates/P9-manual.md`) | see git log |
+| P10 part 1 Script Studio (competitors → FacelessOS script → Opus review loop) | **built, manual pending** (`docs/gates/P10-manual.md`) | see git log |
 | P10 Production engine (quality gates, research/script/animation/edit/packaging workers) | Phase 2 | — |
 | P11 Dev orchestration (dispatch.py, cross-model code review) | Phase 2 | — |
 | P12 Terms check, Google sign-in, learning loop | later | — |
 
 Last gate: `check.bat P9` (see `docs/gates/P9-auto.md`; the 1 skip is the opt-in real-GPU test).
-Version **0.9.0**. The user's habit: "if everything is fine start the next phase" — keep going
+Version **0.10.0** (P10 part 1). Note: P10 part 1 was built before P9's manual sign-off, at the
+user's request ("can you create a plan for this" → plan approved). The user's habit: "if everything is fine start the next phase" — keep going
 after a green gate, but report honestly which manual items they haven't confirmed.
 
 ## 6. Verified facts about the tools (on the studio PC)
@@ -253,7 +269,7 @@ user's voice toward a benchmark — that produced a "different person" once).
   `API_BODIES` (fake Messages API keeps request bodies),
   `tests\p7\conftest.py` local Range-capable download server.
 - Browser: `tools\ui_drive.py` drives the user's installed Chrome headless over DevTools; sections
-  switched on by `UI_DRIVE_ACCOUNTS / SWITCH / VOICE / AGENT / P6 / SETUP / P8 / P9`. Fresh data folders
+  switched on by `UI_DRIVE_ACCOUNTS / SWITCH / VOICE / AGENT / P6 / SETUP / P8 / P9 / P10`. Fresh data folders
   open the setup wizard, so the driver presses "Finish later" first.
 - Opt-in real GPU test: `ONEPROD_GPU_TESTS=1 ONEPROD_REAL_SCRIPT=… ONEPROD_REAL_VOICE=human_ref48.wav`
   `pytest tests\p4\test_voice_real.py` (~7–8 min of GPU — ask first).
@@ -275,6 +291,12 @@ user's voice toward a benchmark — that produced a "different person" once).
 - Sync FastAPI routes run on a worker thread — anything that schedules on the event loop
   (restart, relaunch) must be `async def`.
 - Opening the wizard writes `setup.json`; "first run" must not be "no setup.json".
+- yt-dlp facts (2026-10-05): `--flat-playlist -J <channel>/videos` gives view_count + duration per
+  upload; `--skip-download --write-subs --write-auto-subs --sub-langs "en.*,en" --sub-format vtt`
+  writes `<id>.en.vtt` (manual) or rolling auto captions (`en`/`en-orig`, words wrapped in `<c>` tags,
+  every line repeated - `clean_vtt` drops the repeats); `--print-to-file "%(.{…})j"` gives metadata.
+  A 26-min Veritasium video → ~5,000 clean words, 185 wpm. Bash on this PC can eat a backslash in
+  `"a\\b"` inside heredocs - use raw strings in tests written that way.
 - In `ui_drive.py` JS, wrap snippets that declare `const` in `{ … }` — every `js()` call shares one
   global scope, so a second `const m` is a SyntaxError.
 - The chat bubble has `white-space: pre-wrap`: HTML built with template literals inside it needs

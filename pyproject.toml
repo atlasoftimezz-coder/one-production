@@ -1,6 +1,6 @@
 [project]
 name = "one-production"
-version = "0.9.0"
+version = "0.10.0"
 description = "Local production studio: chat, accounts, usage, handoff, voiceover."
 requires-python = ">=3.12"
 dependencies = [
@@ -11,6 +11,7 @@ dependencies = [
     "httpx",
     "keyring",
     "claude-agent-sdk",      # P5: drives the real Claude Code agent (official SDK)
+    "yt-dlp",                # P10: competitor captions and channel lists (no download of video)
 ]
 
 [project.optional-dependencies]
