@@ -12,7 +12,12 @@ class RenderIn(BaseModel):
     approve: str | None = None          # None (ask) | "once" | "always"
 
 
-def mount(app, editor, approvals, project_check):
+class BuildIn(BaseModel):
+    shots: str
+    edit: str = ''
+
+
+def mount(app, editor, approvals, project_check, animation=None):
     def guarded(pid, fn):
         project_check(pid)
         try:
@@ -28,6 +33,11 @@ def mount(app, editor, approvals, project_check):
             return {'ok': True, 'visuals': len(p['visuals']), 'seconds': round(p['seconds'], 3), 'fps': p['fps'],
                     'size': p['size'], 'fitted_by': p['fitted_by'], 'voiceover': voiceover.name}
         return guarded(pid, run)
+
+    @app.post('/api/projects/{pid}/animation/build')
+    def build(pid: str, body: BuildIn):
+        """Drawings -> frames -> timed edit list. Light CPU (the browser's screenshot), no approval."""
+        return guarded(pid, lambda: animation.build(pid, body.shots, body.edit))
 
     @app.post('/api/projects/{pid}/edit/render')
     def render(pid: str, body: RenderIn):

@@ -43,6 +43,10 @@ files there directly. Besides your usual tools you have studio tools:
   and media files from this project, citing the manual passages you used. You never run Resolve
   yourself and never write Resolve scripts; the owner reviews the plan and runs it on a new project.
   Video editing defaults to ffmpeg; use Resolve only when the owner asks for it.
+- Animation: draw each shot as a self-contained 1920x1080 SVG in this folder (stickman-explainer style:
+  full-bleed scene, bold outlines, big subjects, short labels; no scripts, no outside links, images
+  only as data: URIs), list them in a shots JSON with anchor words from the script, then
+  build_animation renders the frames, times every shot to the voiceover and writes the edit list.
 - Video editing (ffmpeg, the default): write an edit list JSON in this folder (see render_edit) whose
   visuals cover the voiceover, then render_edit (asks the owner first: minutes of CPU) and follow it
   with edit_status. Every render is checked by the video gate automatically.
@@ -63,11 +67,12 @@ class Studio:
     """Studio tools bound to one project. `on_job(job)` lets the run show the voice card."""
 
     def __init__(self, pid: str, store, voice_svc, voice_jobs, on_job: Callable[[dict], None],
-                 tuned: Callable[[str], dict | None] | None = None, knowledge=None, learning=None, resolve=None, gates=None, editor=None):
+                 tuned: Callable[[str], dict | None] | None = None, knowledge=None, learning=None, resolve=None, gates=None, editor=None, animation=None):
         self.knowledge = knowledge
         self.resolve = resolve
         self.gates = gates
         self.editor = editor
+        self.animation = animation
         self.learning = learning
         self.pid, self.store, self.svc, self.jobs, self.on_job = pid, store, voice_svc, voice_jobs, on_job
         self.tuned = tuned or (lambda voice: None)          # settings tune.py found for a voice
