@@ -12,6 +12,75 @@ phase log and the plan, checks the PC, runs the last gate and reports before tou
 
 ---
 
+## Current continuation checkpoint - Codex, 2026-10-05
+
+The owner switched here because Claude usage was exhausted, then requested document RAG
+for the Resolve manual and automatic cross-learning after giving a direction. The owner
+said **"Start"** and later **"continue and update the handoff.md"**. This extension is
+authorized; existing manual phase approvals are still pending. Do not restart from scratch.
+
+### Committed and tested
+
+- `688659c`: revised P10 implementation/gate plan in `docs/P10-knowledge-plan.md`.
+- `fd0c0e6`: `app/knowledge.py`, local SQLite FTS5 library. PDF (pypdf 6.19.0), DOCX,
+  Markdown and TXT; source hashes, physical PDF pages/section citations, scoped documents,
+  background import, cancellation/retry, version filtering and recoverable removal.
+  Eight foundation tests passed.
+- `c95bd65`: **Knowledge and learning** button in the Files sidebar, `web/knowledge.js`,
+  protected `app/knowledge_api.py` routes. Claude and Codex (including teams/Script Studio)
+  get `knowledge_sources`, `knowledge_search`, `knowledge_read`. Agent/API regressions
+  passed; isolated Chrome import/search/citation scenario passed.
+- `450a25c`: `app/learning.py`, `app/learning_api.py`, `app/agent/learning_tools.py`.
+  Explicit directions persist with project/channel/global scopes; exact quotations of
+  current user directions can be remembered automatically. Worker suggestions remain
+  candidates. Corrections supersede older entries; forgetting prevents automatic revival.
+  Active memory is injected into every agent/team call. `record_execution` is the hook
+  for future verified Resolve results; it is NOT wired to an executor yet. Thirty-one
+  focused learning/API/agent/browser tests passed, including correction and forgetting.
+
+### Not complete yet - next actions
+
+1. Implement the constrained Resolve adapter and wire verified execution to learning.
+   The planned first adapter creates a NEW disposable project only, validates version/API
+   support and project-relative media paths, and executes only after an explicit approval.
+   Workers must never supply arbitrary Python to execute. Do not open or modify the owner's
+   real Resolve project while testing. GPU/render operations require separate consent.
+2. Add fake-adapter failure/approval/version tests and verify the UI review/execute path.
+3. Exercise the real large manual through the importer, reporting extraction/index timings
+   and known retrieval questions. Only 17 pages were inspected before implementation;
+   the whole manual has NOT yet been indexed into the owner's app library.
+4. Run `check.bat P10` after integration; update the phase log, manual checklist, changelog
+   and this checkpoint with actual results. No full gate has been run since the new commits.
+5. The OTHER P10 work is still outstanding: per-stage production gates, animation worker,
+   ffmpeg editor/packaging workers and the full-episode viewing gate. P11/P12 not started.
+
+### Sources and implementation details
+
+- Owner's PDF: `C:\Users\Work\Downloads\DaVinci_Resolve_21.1_Reference_Manual.pdf`
+  (183,184,250 bytes; 4,351 pages; 4,611 bookmarks; selectable text in 17 sampled pages).
+  Contents-page leader glyphs need cleaning; figures still require the cited original page.
+- Installed `Resolve.exe` reports **21.0.0.47**, while the PDF is **21.1**. Never assume
+  a 21.1 feature exists in the installed API.
+- Installed API documentation:
+  `C:\ProgramData\Blackmagic Design\DaVinci Resolve\Support\Developer\Scripting\README.txt`
+  and `CHANGELOG.txt` (21.0 Beta, May 2026). The README documents `CreateProject`,
+  `CreateEmptyTimeline`, `ImportMedia`, `AppendToTimeline`, `SetSetting`, `GetSetting`,
+  `AddMarker`, `SaveProject`, `GetVersionString` and `GetProductName`.
+- Knowledge lives under the configured `data_dir/knowledge/`, outside Git. No embedding
+  model, OCR, paid service or GPU is used by the importer. Relevant excerpts are sent only
+  when an owner-selected AI account calls retrieval tools. Manual text is reference data,
+  never permission. This is persistent memory, not model-weight training.
+- `knowledge/context` assigns a channel and target Resolve version. Until a channel is
+  assigned, automatic directions stay project-scoped. Explicit UI directions can be global.
+- The new browser test is `tests/p10/test_ui_knowledge.py`, using the existing Chrome
+  DevTools driver (`UI_DRIVE_KNOWLEDGE=1`). It must drain the test server's stdout in a
+  background thread; otherwise the logging pipe fills and the browser hangs. Fixed.
+- The Codex dynamic-tools assertion in `tests/p5/test_codex_agent.py` was extended to
+  include knowledge and learning tools. Keep it in sync when adding Resolve tools.
+- Latest baseline full gate BEFORE these changes: 322 passed, 0 failed, 1 skipped
+  (opt-in real GPU render). Do not present that as verification of the new extension.
+- All commits are local. Nothing was pushed, and no real account or GPU was used in tests.
+
 ## 1. What it is
 
 A **local Windows app** for a YouTube creator (faceless explainer channels: finance, "every

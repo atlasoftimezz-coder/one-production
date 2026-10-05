@@ -22,3 +22,7 @@ The next phase does not start before that.
 
 P10 knowledge/learning extension: owner authorized implementation on 2026-10-05.
 Plan: `P10-knowledge-plan.md`. Existing manual approvals remain pending.
+
+P10 knowledge checkpoint (2026-10-05): document library and scoped learning committed through
+`450a25c`; 31 focused integration/browser tests passed. Resolve adapter, large-manual import
+and final full regression gate remain pending. See HANDOFF.md continuation checkpoint.
