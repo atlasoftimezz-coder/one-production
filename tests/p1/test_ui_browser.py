@@ -4,6 +4,7 @@ toast placement, reload lock, no JS errors, no garbled text). Screenshots are ke
 test's temp folder for inspection."""
 import subprocess
 import sys
+import threading
 from pathlib import Path
 
 import pytest
@@ -15,6 +16,8 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def test_ui_in_headless_chrome(tmp_path):
     proc, port, token = _start(tmp_path)
+    # drain the server's log: a full pipe blocks the server and the browser waits forever
+    threading.Thread(target=lambda: list(proc.stdout), daemon=True).start()
     try:
         url = f"http://127.0.0.1:{port}/#t={token}"
         r = subprocess.run([sys.executable, "-W", "ignore", str(ROOT / "tools" / "ui_drive.py"),

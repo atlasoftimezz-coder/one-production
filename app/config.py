@@ -56,6 +56,10 @@ class Settings(BaseModel):
     # Agent mode (P5): Claude / API accounts work like Claude Code in the project folder.
     # Off = the plain chat from P2-P4 (cheaper, no file or tool access).
     agent_mode: bool = True
+    # DaVinci Resolve control (P10): needs the paid Resolve Studio, so off until the owner turns it on.
+    # resolve_runner replaces the helper (tests use a stand-in Resolve).
+    resolve_enabled: bool = False
+    resolve_runner: str | None = None
 
     @field_validator("host")
     @classmethod
@@ -98,6 +102,10 @@ def _env_overrides() -> dict:
         out["login_console"] = v.strip().lower() not in ("0", "false", "no", "off")
     if v := os.environ.get("ONEPROD_AGENT_MODE"):
         out["agent_mode"] = v.strip().lower() not in ("0", "false", "no", "off")
+    if v := os.environ.get("ONEPROD_RESOLVE_ENABLED"):
+        out["resolve_enabled"] = v.strip().lower() not in ("0", "false", "no", "off")
+    if v := os.environ.get("ONEPROD_RESOLVE_RUNNER"):
+        out["resolve_runner"] = v
     return out
 
 

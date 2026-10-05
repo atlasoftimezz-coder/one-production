@@ -189,6 +189,28 @@ try:
         check("forgotten direction leaves active memory", wait_for("document.querySelector('#learninglist').innerText.includes('No saved directions')"))
         js("document.querySelector('#knowledgeclose').click()")
 
+    if os.environ.get("UI_DRIVE_RESOLVE") == "1":       # server runs against the stand-in Resolve
+        js("document.querySelector('#resolvebtn').click()")
+        check("resolve panel opens", wait_for("document.querySelector('#resolvemodal').classList.contains('open')"))
+        check("resolve control starts off", js("document.querySelector('#resolveenabled').checked") is False)
+        js("document.querySelector('#resolveenabled').click()")
+        time.sleep(0.4)
+        js("document.querySelector('#resolvecheck').click()")
+        check("probe shows version and open project", wait_for("document.querySelector('#resolvestatus').innerText.includes('21.0.0.47') && document.querySelector('#resolvestatus').innerText.includes('Owner project')", 20))
+        plan = {"title": "UI cut", "operations": [{"op": "import_media", "files": ["voice.mp3"]},
+                                                 {"op": "create_timeline", "name": "Main"},
+                                                 {"op": "append_clips", "files": ["voice.mp3"]}]}
+        js("document.querySelector('#resolveadd').parentElement.open = true; document.querySelector('#resolveplanjson').value = " + json.dumps(json.dumps(plan)) + "; document.querySelector('#resolveadd').requestSubmit()")
+        check("plan listed for review", wait_for("document.querySelector('#resolveplans').innerText.includes('New timeline \"Main\"')", 20))
+        js("document.querySelector('#resolveplans [data-run]').click()")
+        time.sleep(0.5)
+        check("run refused until saved box ticked", js("document.querySelector('#resolveplans').innerText.includes('proposed')"))
+        js("document.querySelector('#resolveplans [data-saved]').click(); document.querySelector('#resolveplans [data-run]').click()")
+        check("run passes and is verified", wait_for("document.querySelector('#resolveplans').innerText.includes('Passed') && document.querySelector('#resolveplans').innerText.includes('verified method')", 30))
+        check("control toggle still shows on", js("document.querySelector('#resolveenabled').checked") is True, str(js("document.querySelector('#resolveenabled').checked")))
+        shot("resolve-plans")
+        js("document.querySelector('#resolveclose').click()")
+
     # accounts (P2) - only when the server runs against the fake CLIs
     if os.environ.get("UI_DRIVE_ACCOUNTS") == "1":
         check("only Demo in picker at start", js("[...document.querySelectorAll('#picker option')].map(o=>o.value).join()") == "demo")

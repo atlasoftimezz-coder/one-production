@@ -2,6 +2,17 @@
 
 What changed in each version, in plain words. "Check for updates" shows the newest section.
 
+## Unreleased - P10 knowledge, learning and Resolve
+- **Knowledge and learning** (Files sidebar): import PDF, Word, Markdown or text manuals; workers
+  search them and cite the PDF page. Directions you give are remembered for the project, channel
+  or all projects; corrections replace old ones and "Forget" stops them being used.
+- **Resolve plans** (Files sidebar): workers can propose a DaVinci Resolve edit (import media, new
+  timeline, append clips, markers, frame rate / resolution). You review it and press Run; it
+  always builds a NEW project in a "One Production (disposable)" folder and never opens or changes
+  your existing projects. Plans are checked against your installed Resolve version first. A run
+  that Resolve confirms becomes a verified method the workers reuse. Needs Resolve Studio; off by
+  default. No rendering.
+
 ## 0.10.0 - 2026-10-05
 - Script Studio (the page button below the message box): paste competitor links in any format
   (or pick a .txt/.csv/.docx/.xlsx list), and One Production reads their YouTube captions, measures
