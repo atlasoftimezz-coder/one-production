@@ -244,14 +244,31 @@ class Editor:
         p = plan(edit, file_of, media.duration(self.ffmpeg(), voiceover))
         return edit, p, voiceover
 
+    def output_path(self, pid: str, name: str) -> Path:
+        """The render's file in the project (sub-folders kept), never overwriting an earlier one."""
+        root = self.store.files_dir(pid)
+        parts = [safe_filename(x) for x in name.replace(chr(92), '/').split('/') if x not in ('', '.', '..')]
+        if not parts:
+            parts = ['video.mp4']
+        if not parts[-1].lower().endswith('.mp4'):
+            parts[-1] += '.mp4'
+        target = root.joinpath(*parts)
+        if root.resolve() not in target.resolve().parents:
+            raise EditError('The output must be inside the project.')
+        target.parent.mkdir(parents=True, exist_ok=True)
+        stem, n = target.stem, 1
+        while target.exists():
+            target = target.with_name(f'{stem} ({n}).mp4')
+            n += 1
+        target.touch()                                   # reserve the name while rendering
+        return target
+
     def start(self, pid: str, edit_name: str) -> dict:
         edit, p, voiceover = self.prepare(pid, edit_name)
         with self.lock:
             if any(j['project'] == pid and j['status'] == 'rendering' for j in self.jobs.values()):
                 raise EditError('A render is already running in this project.')
-            out_name = safe_filename(str(edit.get('output') or Path(edit_name).stem + '.mp4'))
-            if not out_name.lower().endswith('.mp4'):
-                out_name += '.mp4'
+            out_name = self.output_path(pid, str(edit.get('output') or Path(edit_name).stem + '.mp4'))
             job = {'id': secrets.token_hex(6), 'project': pid, 'edit': edit_name, 'status': 'rendering', 'progress': 0.0,
                    'step': 'starting', 'output': '', 'error': '', 'gate': None, 'started': time.time(), 'finished': None,
                    'visuals': len(p['visuals']), 'seconds': p['seconds'], 'fitted_by': p['fitted_by']}
@@ -263,15 +280,18 @@ class Editor:
         pid, work = job['project'], self.data_dir / 'cache' / 'render' / job['id']
         try:
             ff = self.ffmpeg()
-            out = self.store.unique_path(pid, out_name)
+            out = out_name
             render(ff, p, voiceover, work, out, progress=lambda share, step: job.update(progress=round(share, 3), step=step),
                    cancelled=lambda: job['id'] in self.cancel_flags)
-            job.update(output=out.name, step='checking the video')
+            rel = out.relative_to(self.store.files_dir(pid)).as_posix()
+            job.update(output=rel, step='checking the video')
             report = gates.video_gate(ff, out, voiceover)
-            job['gate'] = self.gate_reports.save(pid, report, {'video': out.name, 'voiceover': voiceover.name, 'edit': job['edit']})
+            job['gate'] = self.gate_reports.save(pid, report, {'video': rel, 'voiceover': voiceover.name, 'edit': job['edit']})
             job.update(status='done', step='done' if report['passed'] else 'rendered, but the video gate failed')
         except Exception as exc:                         # noqa: BLE001 - shown to the user
             job.update(status='cancelled' if job['id'] in self.cancel_flags else 'failed', error=str(exc)[:500], step='stopped')
+            if out_name.is_file() and not out_name.stat().st_size:
+                out_name.unlink()                        # the name reserved for a render that never came
         finally:
             job['finished'] = time.time()
             shutil.rmtree(work, ignore_errors=True)

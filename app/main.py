@@ -51,6 +51,7 @@ from .agent.codex_agent import CodexAgent
 from .agent.runs import Runs
 from .agent.team import Team, TeamConfig
 from .agent.scriptflow import ScriptConfig, ScriptRun
+from .agent.episode import EpisodeConfig, EpisodeRun
 from . import competitors, faceless
 from .agent.studio import INSTRUCTIONS as STUDIO_INSTRUCTIONS, Studio
 from .chat import SYSTEM, build_prompt, ndjson, reply_events
@@ -63,6 +64,7 @@ from .providers.demo import Demo
 from .security.guard import GuardMiddleware
 from .security.redact import redact, register_secret
 from .scripts import SUPPORTED as SCRIPT_TYPES, read_script, stats as script_stats
+from .media import duration as media_duration
 from .storage import NotFound, Store
 from .tools import Approvals, TOOLS
 from .usage import RANGES, Ledger, range_start
@@ -137,6 +139,22 @@ class ScriptRunIn(BaseModel):
     notes: str = ""
     links_text: str = ""
     links_file: str | None = None            # a competitor list saved in the project (any format)
+
+
+class EpisodeIn(BaseModel):
+    name: str
+    script: str                              # script file in the project
+    voice: str = ""                          # reference voice for a new voiceover...
+    voice_job: str = ""                      # ...or a finished voiceover to reuse
+    preset: str = "clone_exact"
+    pace_mode: str = "natural"
+    target_wpm: float | None = None
+    size: str = "1920x1080"
+    music: str = ""
+    burn_subtitles: bool = False
+    visual_notes: str = ""
+    approve: str | None = None               # the heavy jobs (GPU voice, CPU render): "once" | "always"
+    config: dict | None = None
 
 
 class ScriptSettingsIn(BaseModel):
@@ -365,6 +383,11 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
     mount_knowledge(app, knowledge, _project, WEB_DIR)
     mount_learning(app, learning, _project)
     mount_resolve(app, resolve, _project, WEB_DIR)
+
+    @app.get("/episode.js")
+    def episode_script():
+        from fastapi.responses import FileResponse
+        return FileResponse(WEB_DIR / "episode.js", media_type="text/javascript")
     mount_gates(app, gates, _project)
     mount_editor(app, editor, approvals, _project, animation, packaging)
 
@@ -1514,6 +1537,112 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
         f = store.project_dir(pid) / "script.json"
         return {"running": False, "script": json.loads(f.read_text(encoding="utf-8")) if f.exists() else None}
 
+    # ---------------------------------------------------------------- Episode run (P10)
+    def episode_deps(pid: str):
+        deps = team_deps(pid)
+
+        def script_stats_of(name):
+            return script_stats(read_script(store.file_path(pid, name)))
+
+        def voice_job_of(jid):
+            job = voice_jobs.get(jid)
+            return job if job and job.get("project") == pid else None
+
+        async def start_voice_job(spec):
+            path = store.file_path(pid, spec["script"])
+            text = read_script(path)
+            await voice_svc.ensure_running()
+            meta = await voice_svc.meta()
+            if spec["voice"] not in meta.get("voices", []):
+                return {"id": "", "status": "failed", "error": f"there is no voice called {spec['voice']}"}
+            tuned = tuner.for_voice(spec["voice"]) or {}
+            vspec = {"voice": spec["voice"], "name": Path(spec["script"]).stem[:80] or "voiceover", "preset": spec.get("preset") or "clone_exact",
+                     "pace_mode": spec.get("pace_mode") or "natural", "target_wpm": spec.get("target_wpm"), "grid_gap": 1.5,
+                     "auto_fix": True, **{k: tuned.get(k) for k in ("exaggeration", "cfg_weight", "temperature")}}
+            job = voice_jobs.start(pid, text, vspec, path.name)
+            store.append_message(pid, "user", f"Voice {path.name} with {spec['voice']} (episode)", tool_request="voiceover",
+                                 job=job["id"], by_agent=True)
+            return job
+
+        async def voice_gate_of(jid):
+            from .gates_api import VoiceCheck
+            return await gates.voice(pid, VoiceCheck(job_id=jid))
+
+        deps.script_stats = script_stats_of
+        deps.voice_job = voice_job_of
+        deps.start_voice = start_voice_job
+        deps.voice_gate = voice_gate_of
+        deps.duration = lambda name: media_duration(gates.ffmpeg(), store.file_path(pid, name))
+        deps.build_animation = lambda shots, edit: animation.build(pid, shots, edit)
+        deps.start_render = lambda edit: editor.start(pid, edit)
+        deps.render_job = lambda jid: editor.get(pid, jid)
+        deps.cancel_render = lambda jid: editor.cancel(pid, jid)
+        deps.package = lambda spec: packaging.build(pid, spec)
+        deps.poll = 2.0
+        return deps
+
+    @app.post("/api/projects/{pid}/episode")
+    async def start_episode(pid: str, body: EpisodeIn):
+        _project(pid)
+        name = body.name.strip()[:80]
+        if not name:
+            raise HTTPException(400, "give the episode a name")
+        try:
+            store.file_path(pid, body.script)
+            if body.music:
+                store.file_path(pid, body.music)
+        except NotFound as e:
+            raise HTTPException(400, f"{e} is not a file in this project")
+        if not body.voice_job and not body.voice:
+            raise HTTPException(400, "choose a voice, or a voiceover you already made")
+        if body.voice_job:
+            job = voice_jobs.get(body.voice_job)
+            if not job or job.get("project") != pid or job.get("status") != "done":
+                raise HTTPException(400, "that voiceover is not a finished one in this project")
+        if not team_accounts():
+            raise HTTPException(400, "the episode run needs at least one signed-in Claude, Codex or API-key account")
+        needs = [n for n in (approvals.check(t, body.approve) for t in (["video_render"] + ([] if body.voice_job else ["voiceover"]))) if n]
+        if needs:
+            from fastapi.responses import JSONResponse
+            return JSONResponse({"needs_approval": needs}, status_code=409)
+        spec = {k: v for k, v in body.model_dump().items() if k not in ("approve", "config")}
+        spec["name"] = name
+        cfg = EpisodeConfig.from_dict({**team_settings(), **(body.config or {})})
+        try:
+            run = runs.start(pid, store.files_dir(pid))
+        except RuntimeError as e:
+            raise HTTPException(409, str(e))
+        ep = EpisodeRun(pid, spec, run, episode_deps(pid), cfg, state_file=store.project_dir(pid) / "episode.json")
+        teams[pid] = ep
+        store.append_message(pid, "user", f"Episode: {name} (script {body.script})", episode=True)
+
+        async def work():
+            snap = await ep.go()
+            if snap["state"] == "done":
+                text = ep.final or "Episode finished."
+            elif snap["state"] == "needs_you":
+                text = f"Episode stopped at {snap['result']['stage']}: {snap['result']['why']}"
+            else:
+                text = "Episode run stopped."
+            store.append_message(pid, "assistant", text, episode={
+                "id": snap["id"], "state": snap["state"], "stages": snap["stages"], "result": snap["result"],
+                "master": snap["master"], "spec": {"name": spec["name"], "script": spec["script"]},
+                "tasks": [{k: t[k] for k in ("id", "title", "status", "pins", "rounds", "tokens", "why", "handoffs")} for t in snap["tasks"]]})
+            runs.finish(run)
+            run.emit({"t": "done"})
+
+        run.task = asyncio.get_running_loop().create_task(work())
+        return StreamingResponse(follow(run), media_type="application/x-ndjson", headers={"Cache-Control": "no-store"})
+
+    @app.get("/api/projects/{pid}/episode")
+    def episode_state(pid: str) -> dict:
+        _project(pid)
+        live = teams.get(pid)
+        if isinstance(live, EpisodeRun) and runs.busy(pid):
+            return {"running": True, "episode": live.snapshot()}
+        f = store.project_dir(pid) / "episode.json"
+        return {"running": False, "episode": json.loads(f.read_text(encoding="utf-8")) if f.exists() else None}
+
     @app.get("/api/projects/{pid}/team")
     def team_state(pid: str) -> dict:
         _project(pid)
@@ -1707,6 +1836,13 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
                              + (f" at {int(body.target_wpm)} wpm" if body.pace_mode == "wpm" else ""),
                              tool_request="voiceover", job=job["id"], **extra)
         return job
+
+    @app.get("/api/projects/{pid}/voicejobs")
+    def project_voice_jobs(pid: str) -> dict:
+        """Finished voiceovers in this project (the episode run can reuse one)."""
+        _project(pid)
+        return {"jobs": [{k: j.get(k) for k in ("id", "name", "voice", "files", "created", "result")}
+                         for j in voice_jobs.for_project(pid) if j.get("status") == "done"]}
 
     @app.get("/api/voicejobs/{jid}")
     def voice_job(jid: str) -> dict:

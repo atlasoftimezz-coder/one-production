@@ -105,56 +105,6 @@ class ScriptRun(Team):
         self.notes.append(text)
         super().notice(text)
 
-    # ------------------------------------------------ one worker turn with limit re-pinning
-    async def run_worker(self, task: Task, prompt: str, note: str, role: str) -> dict:
-        moved = None
-        while True:
-            acc = await self.pick_worker(task, moved)
-            task.status, task.account = "running", acc["id"]
-            if not task.pins or task.pins[-1] != acc["id"]:
-                task.pins.append(acc["id"])
-            self.load[acc["id"]] = self.load.get(acc["id"], 0) + 1
-            await self._changed()
-            model, effort = self.choice(acc, "worker")
-            sub = SubRun(self.run, task.id, self._write_check(task))
-            try:
-                res = await self.deps.call(acc, sub, prompt + self._resume(task), note, model, effort, role)
-            finally:
-                self.load[acc["id"]] -= 1
-            u = res.get("usage")
-            if u:
-                task.tokens += (u.input_tokens or 0) + (u.output_tokens or 0)
-                task.cost_usd += u.cost_usd or 0
-            if self.run.stopped:
-                raise Stopped()
-            err = res.get("error")
-            if err and err.kind in ("limit", "auth"):
-                path = write_task_handoff(self.deps.handoff_dir(), self.goal, task, acc, res.get("text", ""),
-                                          "usage limit" if err.kind == "limit" else "sign-in problem", self.deps.redact)
-                task.handoffs.append(path.name)
-                task.resume = (task.resume + "\n\n" if task.resume else "") + (res.get("text") or "")
-                self.locks.release(task.id)
-                self.mark_limited(acc)
-                moved, task.account, task.status = acc, None, "queued"
-                self.notice(f"{task.title}: {acc.get('label') or acc['id']} hit "
-                            f"{'its usage limit' if err.kind == 'limit' else 'a sign-in problem'} - handoff saved "
-                            f"({path.name}), moving to another account.")
-                await self._changed()
-                continue
-            task.resume = ""
-            task.status = "failed" if err else "done"
-            if err:
-                task.why = f"{err.kind}: {err.message[:200]}"
-            await self._changed()
-            return res
-
-    @staticmethod
-    def _resume(task: Task) -> str:
-        if not task.resume:
-            return ""
-        return ("\n\nAnother account started this and hit its usage limit. Continue from where it stopped - "
-                "check the file first, don't start over. What it had said:\n" + task.resume)
-
     # ------------------------------------------------ prompts
     def _brief_lines(self) -> list[str]:
         b = self.brief

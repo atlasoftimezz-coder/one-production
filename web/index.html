@@ -706,6 +706,7 @@
   <aside id="filecol">
     <div class="sect">Files <span id="fcount"></span></div>
     <button class="newbtn" id="knowledgebtn">Knowledge and learning</button>
+    <button class="newbtn" id="episodebtn">Make an episode</button>
     <button class="newbtn" id="resolvebtn">Resolve plans</button>
     <label class="drop" id="drop">
       <div class="up"><svg class="icon"><use href="#i-up"/></svg></div>
@@ -1179,6 +1180,8 @@ function renderThread(hist, p) {
     if (m.role === "assistant" && m.team) teamSummary(b, m);
     if (m.role === "assistant" && m.script) { const t = renderScript(b, { ...m.script, done: true }, state.current, null); t.el.classList.add("old"); }
     if (m.role === "user" && m.script) b.insertAdjacentHTML("afterbegin", `<small style="display:block;opacity:.7;font-weight:700">SCRIPT STUDIO</small>`);
+    if (m.role === "assistant" && m.episode) { const t = renderEpisode(b, { ...m.episode, done: true }, state.current, null); t.el.classList.add("old"); }
+    if (m.role === "user" && m.episode) b.insertAdjacentHTML("afterbegin", `<small style="display:block;opacity:.7;font-weight:700">EPISODE</small>`);
     if (m.role === "user" && m.team) b.insertAdjacentHTML("afterbegin", `<small style="display:block;opacity:.7;font-weight:700">TEAM GOAL</small>`);
     if (m.role === "assistant") decorate(b, m);
     if (m.role === "assistant" && m.action) addActionCard(b, m.action, m.time, usedActions.has(m.time));
@@ -1306,6 +1309,7 @@ async function consumeReply(request, accountId) {
     if (state.current !== pid) return;              // user moved to another project: the run carries on
     if (ev.t === "team") { begin(); team = renderTeam(bubble, ev.team, pid, team); return; }
     if (ev.t === "script") { begin(); team = renderScript(bubble, ev.script, pid, team); return; }
+    if (ev.t === "episode") { begin(); team = renderEpisode(bubble, ev.episode, pid, team); return; }
     if (ev.w) {                                     // a worker's or the master's own activity
       if (team) teamActivity(team, ev);
       if (ev.t === "ask") { begin(); seg = null; asks[ev.id] = addAskCard(bubble, { ...ev, title: teamWho(team, ev.w) + ev.title }, pid); }
@@ -3075,5 +3079,6 @@ async function bootApp() {
 </script>
 <script src="/knowledge.js"></script>
 <script src="/resolve.js"></script>
+<script src="/episode.js"></script>
 </body>
 </html>
