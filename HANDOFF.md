@@ -295,4 +295,4 @@ user's voice toward a benchmark — that produced a "different person" once).
    the file locks rely on the plan keeping files apart (Claude workers are checked on every write).
    A team does not survive an app restart (its state is saved in `team.json` for reading only).
 8. Voice module keeps the 8 GB VRAM rule (user, 2026-10-05: 4 GB+ "not required for now").
-9. Commits after 18b8e58 are local only - don't push to GitHub until the user asks (2026-10-05).
+9. Commits after bb716e1 (P9 onward) are local only - don't push to GitHub until the user asks (2026-10-05).
