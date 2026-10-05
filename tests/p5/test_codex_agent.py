@@ -31,7 +31,7 @@ def test_codex_runs_in_the_project_with_studio_tools_and_isolated_home(agent):
     assert run["cwd"] == str(agent.files)
     start = sent(agent, "thread/start")[-1]["params"]
     assert start["sandbox"] == "workspace-write" and start["approvalPolicy"] == "untrusted"
-    assert {t["name"] for t in start["dynamicTools"]} == {"list_voices", "script_stats", "make_voiceover", "voiceover_status", "knowledge_sources", "knowledge_search", "knowledge_read", "learning_recall", "remember_direction", "propose_lesson", "resolve_status", "resolve_propose_plan"}
+    assert {t["name"] for t in start["dynamicTools"]} == {"list_voices", "script_stats", "make_voiceover", "voiceover_status", "knowledge_sources", "knowledge_search", "knowledge_read", "learning_recall", "remember_direction", "propose_lesson", "resolve_status", "resolve_propose_plan", "quality_gate"}
     assert "ep1.md" in start["developerInstructions"] and "apply_patch" in start["developerInstructions"]
     assert "".join(e.get("v", "") for e in ev if e["t"] == "text") == "Hello from Codex."
     saved = agent.get(f"/api/projects/{agent.pid}/chat").json()[-1]

@@ -73,6 +73,8 @@ more-itertools==11.1.0
     # via
     #   jaraco-classes
     #   jaraco-functools
+numpy==2.5.3
+    # via one-production (pyproject.toml)
 opentelemetry-api==1.45.0
     # via
     #   fastapi
@@ -90,7 +92,7 @@ pydantic-core==2.46.5
 pyjwt==2.15.1
     # via mcp
 pypdf==6.19.0
-    # via one-production
+    # via one-production (pyproject.toml)
 python-dotenv==1.2.4
     # via uvicorn
 python-multipart==0.0.32
@@ -150,3 +152,5 @@ watchfiles==1.3.0
     # via uvicorn
 websockets==17.2
     # via uvicorn
+yt-dlp==2026.8.19
+    # via one-production (pyproject.toml)

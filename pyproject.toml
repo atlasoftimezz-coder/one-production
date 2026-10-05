@@ -13,6 +13,7 @@ dependencies = [
     "claude-agent-sdk",      # P5: drives the real Claude Code agent (official SDK)
     "pypdf==6.19.0",          # P10: local PDF text and page citations, no OCR/models
     "yt-dlp",                # P10: competitor captions and channel lists (no download of video)
+    "numpy",                 # P10: voice gate pitch measurement (autocorrelation, CPU)
 ]
 
 [project.optional-dependencies]

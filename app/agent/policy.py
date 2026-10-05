@@ -20,7 +20,8 @@ WRITES = {"Write", "Edit", "MultiEdit", "NotebookEdit"}
 SHELL = {"Bash", "PowerShell", "BashOutput", "KillShell", "KillBash", "REPL"}
 WEB = {"WebFetch", "WebSearch"}
 HARMLESS = {"TodoWrite", "Task", "Agent", "ExitPlanMode", "EnterPlanMode", "AskUserQuestion", "ToolSearch"}
-STUDIO_LOOK = {"list_voices", "script_stats", "voiceover_status", "knowledge_sources", "knowledge_search", "knowledge_read", "learning_recall"}
+STUDIO_LOOK = {"list_voices", "script_stats", "voiceover_status", "knowledge_sources", "knowledge_search", "knowledge_read", "learning_recall",
+               "quality_gate"}
 STUDIO_MEMORY = {"remember_direction", "propose_lesson"}
 STUDIO_PLAN = {"resolve_status", "resolve_propose_plan"}   # look / save a plan; only the owner executes
 STUDIO_GATED = {"make_voiceover"}
