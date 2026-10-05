@@ -39,17 +39,24 @@ def test_settings(studio):
     s = studio.get("/api/script/settings").json()
     assert s["settings"]["rounds"] == 5 and s["settings"]["pass_score"] == 8 and s["settings"]["stall"] == 2
     assert s["settings"]["master_model"] == "opus" and s["settings"]["worker_model"] == "sonnet"
-    assert not s["facelessos"]["ok"] and "true_crime" in s["formats"] and "anti_slop" in s["rubric"]
+    assert s["facelessos"]["ok"] and s["facelessos"]["source"] == "bundled"          # ships with the app
+    assert "faceless-scripts-os-master.md" in s["facelessos"]["files"]
+    assert "true_crime" in s["formats"] and "anti_slop" in s["rubric"]
     assert studio.patch("/api/script/settings", json={"facelessos_dir": str(studio.fos / "nothing")}).status_code == 400
     r = studio.patch("/api/script/settings", json={"facelessos_dir": f'"{studio.fos}"', "rounds": 7}).json()
     assert r["facelessos"]["ok"] and r["facelessos"]["skills_dir"].endswith("skills") and r["settings"]["rounds"] == 7
+    assert r["facelessos"]["source"] == "own"                                          # the user's folder wins
+    back = studio.patch("/api/script/settings", json={"facelessos_dir": ""}).json()
+    assert back["facelessos"]["source"] == "bundled" and back["settings"]["facelessos_dir"] is None
     assert studio.patch("/api/script/settings", json={"pass_score": 11}).status_code == 400
     assert studio.patch("/api/script/settings", json={"worker_effort": "ultra"}).status_code == 400
 
 
-def test_needs_folder_links_and_an_account(studio):
+def test_needs_facelessos_links_and_an_account(studio, monkeypatch, tmp_path):
+    from app import faceless
+    monkeypatch.setattr(faceless, "BUNDLED", tmp_path / "no-bundle")                  # a build without the copy
     r = studio.post(f"/api/projects/{studio.pid}/script", json={"topic": "x", "links_text": LINKS})
-    assert r.status_code == 400 and "FacelessOS folder" in r.json()["detail"]
+    assert r.status_code == 400 and "FacelessOS" in r.json()["detail"]
     studio.patch("/api/script/settings", json={"facelessos_dir": str(studio.fos)})
     r = studio.post(f"/api/projects/{studio.pid}/script", json={"topic": "x", "links_text": "no links here"})
     assert r.status_code == 400 and "no YouTube links" in r.json()["detail"]

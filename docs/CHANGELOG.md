@@ -9,7 +9,8 @@ What changed in each version, in plain words. "Check for updates" shows the newe
   (Sonnet) then writes the script with your FacelessOS system, and Opus reviews it with a
   nine-point score card - rewrite and review again until every score is 8+, or it keeps the best
   version after 5 rounds / no progress.
-- Your FacelessOS files are read from your own folder each time; they're never copied anywhere.
+- FacelessOS (v4, May 2026) comes with One Production and is used by default; set a folder in Script
+  settings to use a newer version instead.
 - Files in sub-folders (scripts/, competitors/) now show in Files and can be downloaded and voiced.
 
 ## 0.9.0 - 2026-10-05

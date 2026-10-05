@@ -124,7 +124,7 @@ def test_facelessos_folder_and_skills(tmp_path):
     assert "authenticity-audit-skill.md" in r and "true-crime-skill.md" not in r
     text = F.load(skills, "reviewer")
     assert "===== FacelessOS: authenticity-audit-skill.md" in text and "SKILLTEXT-7f3a" in text
-    assert F.status(str(tmp_path / "Faceless os"))["ok"] and not F.status(None)["ok"]
+    assert F.status(str(tmp_path / "Faceless os"))["source"] == "own"
 
 
 def test_files_in_sub_folders_are_listed_and_safe(tmp_path):
@@ -144,3 +144,17 @@ def test_files_in_sub_folders_are_listed_and_safe(tmp_path):
     for bad in ("../../outside.txt", "scripts/../../x", "", "scripts"):
         with pytest.raises(NotFound):
             st.file_path(pid, bad)
+
+
+def test_facelessos_ships_with_the_app_and_a_users_folder_wins(tmp_path):
+    bundled = F.find(F.BUNDLED)
+    assert bundled and (bundled / F.MASTER).is_file()
+    names = {p.name for p in bundled.glob("*.md")}
+    assert {n for r in F.ROLES.values() for n in r} <= names and {n for v in F.BY_FORMAT.values() for n in v} <= names
+    assert F.resolve(None) == bundled and F.status(None)["source"] == "bundled"
+    own = fake_facelessos(tmp_path / "newer")
+    assert F.resolve(str(tmp_path / "newer")) == own and F.status(str(tmp_path / "newer"))["source"] == "own"
+    gone = F.status(str(tmp_path / "missing"))
+    assert gone["ok"] and gone["source"] == "bundled" and "using the copy" in gone["why"]
+    import tools.build_package as B
+    assert "facelessos" in B.SHIP                                                        # in the friends' zip

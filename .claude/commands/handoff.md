@@ -16,7 +16,7 @@ writing any code:
    to the original studio PC. Find out what exists here: `git log --oneline -5`, `git status`,
    whether `.venv` exists (if not: run `setup_dev.ps1`), which Python/uv/Claude Code/Codex/Chrome/
    NVIDIA GPU are installed. Don't assume the voice app, voices or settings from the handoff are here.
-4. Run the gate of the last built phase (`check.bat P8`) and report the result. On a new PC some
+4. Run the gate of the last built phase (`check.bat P10`) and report the result. On a new PC some
    checks may legitimately skip (no Chrome, no NVIDIA) - say which and why.
 5. Then give the person a short summary in plain words:
    - where the project stands (phases done, pending manual checks)

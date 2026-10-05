@@ -909,8 +909,8 @@
       <p>The page button below the message box writes a script from your competitors' style: paste their links (any format, or
          pick a list file), and it reads their YouTube captions, writes a style guide, writes the script with your
          <b>FacelessOS</b> system and has Opus score it on nine points. It rewrites until every score reaches 8 — or keeps the
-         best version after 5 rounds and lets you decide. Every version stays in <b>scripts/</b>. Set your FacelessOS folder once
-         under Settings in that window; the files are only read from there, never copied.</p>
+         best version after 5 rounds and lets you decide. Every version stays in <b>scripts/</b>. FacelessOS comes built in; to use a
+         newer version, set its folder under Settings in that window.</p>
       <h4>Voiceovers</h4>
       <p>The microphone next to a script (or just asking in the chat) clones your reference voice, reads every section back to check
          nothing was misread, masters to −14 LUFS and adds an mp3, a wav and subtitles to the project.
@@ -1551,6 +1551,12 @@ function renderScript(bubble, d, pid, prev) {
   return t;
 }
 
+function fosLine(f) {
+  if (!f.ok) return f.why;
+  if (f.why) return f.why;
+  return f.source === "own" ? `✓ your FacelessOS folder · ${f.files.length} files`
+                            : `✓ built-in FacelessOS · ${f.files.length} files — put a folder here to use a newer version`;
+}
 async function openScript() {
   if (!state.current) return toast("Open a project first", true);
   let c;
@@ -1569,9 +1575,9 @@ async function openScript() {
       <textarea class="full" id="s_links" placeholder="https://www.youtube.com/@channel&#10;https://youtu.be/…"></textarea>
       <label>…or a list file</label><select id="s_file">${opt([["", "(none)"], ...lists.map(f => [f.name, f.name])], "")}</select>
     </div>
-    <details class="sset" ${fos.ok ? "" : "open"}><summary>Settings ${fos.ok ? "" : "— add your FacelessOS folder first"}</summary><div class="sform">
-      <label>FacelessOS folder</label><div><input id="s_fos" placeholder="e.g. D:\\Youtube\\Faceless os" value="${esc(s.facelessos_dir || "")}">
-        <div class="${fos.ok ? "fosok" : "fosbad"}" id="s_fosst">${fos.ok ? `✓ ${fos.files.length} FacelessOS files found` : esc(fos.why)}</div></div>
+    <details class="sset" ${fos.ok ? "" : "open"}><summary>Settings ${fos.ok ? `<small class="fosok">· FacelessOS: ${fos.source === "own" ? "your folder" : "built in"}</small>` : "— FacelessOS files missing"}</summary><div class="sform">
+      <label>FacelessOS folder</label><div><input id="s_fos" placeholder="empty = the FacelessOS that comes with One Production" value="${esc(s.facelessos_dir || "")}">
+        <div class="${fos.ok && !fos.why ? "fosok" : "fosbad"}" id="s_fosst">${fosLine(fos)}</div></div>
       <label>Review rounds at most</label><input id="s_rounds" type="number" min="1" max="20" value="${s.rounds}">
       <label>Pass mark (each score)</label><input id="s_pass" type="number" min="1" max="10" value="${s.pass_score}">
       <label>Stop if no better for</label><input id="s_stall" type="number" min="1" max="20" value="${s.stall}">
@@ -1579,16 +1585,17 @@ async function openScript() {
       <label>Reviewer</label><div style="display:flex;gap:8px"><select id="s_mm">${opt(models, s.master_model)}</select><select id="s_me">${opt(efforts, s.master_effort || "auto")}</select></div>
       <label>Writer</label><div style="display:flex;gap:8px"><select id="s_wm">${opt(models, s.worker_model)}</select><select id="s_we">${opt(efforts, s.worker_effort || "auto")}</select></div>
       <span></span><div><button class="btn" id="s_save">Save settings</button></div></div>
-      <p class="tnote">Your FacelessOS files are read from that folder each time — never copied into projects, backups or the package.
-        Captions come free from YouTube; videos without captions are skipped and listed.</p></details>
+      <p class="tnote">FacelessOS comes with One Production; a folder you set here (e.g. a newer version) is used instead. Its files are
+        only read when a script is written — never copied into projects or backups. Captions come free from YouTube; videos
+        without captions are skipped and listed.</p></details>
     <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px"><button class="btn primary" id="s_go">Write the script</button></div>`;
   const saveSettings = async () => {
     const body = { facelessos_dir: $("#s_fos").value.trim(), rounds: Number($("#s_rounds").value), pass_score: Number($("#s_pass").value),
                    stall: Number($("#s_stall").value), per_channel: Number($("#s_perch").value), master_model: $("#s_mm").value,
                    master_effort: $("#s_me").value, worker_model: $("#s_wm").value, worker_effort: $("#s_we").value };
     const r = await (await api("/api/script/settings", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })).json();
-    $("#s_fosst").className = r.facelessos.ok ? "fosok" : "fosbad";
-    $("#s_fosst").textContent = r.facelessos.ok ? `✓ ${r.facelessos.files.length} FacelessOS files found` : r.facelessos.why;
+    $("#s_fosst").className = r.facelessos.ok && !r.facelessos.why ? "fosok" : "fosbad";
+    $("#s_fosst").textContent = fosLine(r.facelessos);
     return r;
   };
   $("#s_save").onclick = async () => { try { await saveSettings(); toast("Script settings saved"); } catch (e) { toast(e.message, true); } };

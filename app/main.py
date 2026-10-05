@@ -1414,9 +1414,9 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
         if not topic:
             raise HTTPException(400, "what is the video about?")
         s = script_settings()
-        skills_dir = faceless.find(s["facelessos_dir"])
+        skills_dir = faceless.resolve(s["facelessos_dir"])
         if not skills_dir:
-            raise HTTPException(400, "Script Studio needs your FacelessOS folder - set it in Script settings")
+            raise HTTPException(400, "Script Studio needs FacelessOS files - set the folder in Script settings")
         text = body.links_text or ""
         if body.links_file:
             try:

@@ -1,13 +1,15 @@
 """FacelessOS skills for Script Studio (P10).
 
-FacelessOS is a paid scriptwriting course the user owns (a folder of Markdown "skills"). It is read
-from the user's own folder at run time and handed to the writer / reviewer as instructions. It is
-never copied into the repo, the package, project files, backups or diagnostics.
+FacelessOS is a scriptwriting system (a folder of Markdown "skills"). A copy ships with One Production
+in `facelessos/` (the owner's decision, 2026-10-05: "I can handle the licence") and is used by default;
+a folder the user picks (e.g. a newer version) wins. The files are handed to the writer / reviewer as
+instructions at run time - never copied into project files, backups or diagnostics.
 """
 from __future__ import annotations
 
 from pathlib import Path
 
+BUNDLED = Path(__file__).resolve().parent.parent / "facelessos"     # ships with the app
 MASTER = "faceless-scripts-os-master.md"
 FORMATS = {
     "documentary": "Documentary", "listicle": "Listicle", "expose": "Exposé", "true_crime": "True crime",
@@ -71,10 +73,19 @@ def load(folder: Path, role: str, fmt: str | None = None) -> str:
     return "".join(parts)
 
 
+def resolve(folder: str | None) -> Path | None:
+    """The user's own folder when set and valid, otherwise the copy that ships with the app."""
+    return find(folder) or find(BUNDLED)
+
+
 def status(folder: str | None) -> dict:
-    d = find(folder)
+    own = find(folder)
+    d = own or find(BUNDLED)
     if not d:
-        return {"ok": False, "folder": folder or None,
-                "why": "pick the folder where your FacelessOS files are" if not folder
-                else "no FacelessOS files there (looking for faceless-scripts-os-master.md)"}
-    return {"ok": True, "folder": folder, "skills_dir": str(d), "files": sorted(p.name for p in d.glob("*.md"))}
+        return {"ok": False, "folder": folder or None, "source": None,
+                "why": "no FacelessOS files found - pick the folder where they are"}
+    out = {"ok": True, "folder": folder, "skills_dir": str(d), "source": "own" if own else "bundled",
+           "files": sorted(p.name for p in d.glob("*.md"))}
+    if folder and not own:
+        out["why"] = "your folder has no FacelessOS files - using the copy that comes with One Production"
+    return out

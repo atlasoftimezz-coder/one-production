@@ -610,9 +610,11 @@ try:
         js("loadFiles()")
         js("document.querySelector('#scriptbtn').click()")
         check("New script dialog opens", wait_for("document.querySelector('#scriptmodal').classList.contains('open') && !!document.querySelector('#s_topic')", 8))
-        check("asks for the FacelessOS folder first", "pick the folder" in (js("document.querySelector('#s_fosst').innerText") or ""))
+        check("FacelessOS built in by default", "built-in FacelessOS" in (js("document.querySelector('#s_fosst').textContent") or ""),
+              js("document.querySelector('#s_fosst').innerText"))
+        js("document.querySelector('.sset').open = true")
         js("document.querySelector('#s_fos').value=%s; document.querySelector('#s_save').click()" % json.dumps(os.environ["UI_FOS"]))
-        check("FacelessOS folder found", wait_for("document.querySelector('#s_fosst').innerText.includes('FacelessOS files found')", 8),
+        check("own FacelessOS folder used instead", wait_for("document.querySelector('#s_fosst').innerText.includes('your FacelessOS folder')", 8),
               js("document.querySelector('#s_fosst').innerText"))
         js("""document.querySelector('#s_topic').value='The Lost City';
               document.querySelector('#s_fmt').value='true_crime';

@@ -5,9 +5,9 @@ Step 4 uses your real accounts: a style guide, a script and 1–5 Opus reviews. 
 files go with every call (~25–35k tokens each), so expect a run to use a good part of a 5-hour
 window on one Claude login.
 
-- [ ] **1. Folder.** Open a project, click the page button (left of the microphone) → **New script** →
-  **Settings**: paste `D:\Youtube\Faceless os` and press **Save settings**. It says
-  "✓ … FacelessOS files found" (it picks the newest v4 `skills` folder by itself).
+- [ ] **1. FacelessOS built in.** Open a project, click the page button (left of the microphone) →
+  **New script** → **Settings** says "✓ built-in FacelessOS · 16 files". To try a newer version: paste
+  its folder and **Save settings** → "✓ your FacelessOS folder"; empty the box to go back.
 - [ ] **2. Competitor list in any format.** Paste a messy list (a channel link, two video links, a
   non-YouTube link), or upload a `.txt` / `.csv` / `.docx` / `.xlsx` list to the project and pick
   it under "…or a list file".

@@ -147,10 +147,12 @@ voice/           engine.py, pipeline.py, server.py, make_srt.py, config.py, tune
   folder, skills per role/format, the 9-line RUBRIC), `app/agent/scriptflow.py` (`ScriptRun(Team)`:
   analyst → writer ⇄ reviewer). Defaults chosen by Claude (user said "plan based on my inputs"):
   5 rounds, pass = every score ≥ 8 and no must-fix, stop if no better for 2 rounds, review budget
-  60k/8k per round and 300k per script, skip videos without captions. FacelessOS (paid course,
-  `D:\Youtube\Faceless os\…\FacelessOS Core v4 (May 2026)\skills`) is only read at run time and
-  passed in the agent's instructions — a test proves it never lands in project files, backups or
-  diagnostics. yt-dlp is now an app dependency (`python -m yt_dlp`; `ONEPROD_YTDLP` = stand-in).
+  60k/8k per round and 300k per script, skip videos without captions. FacelessOS v4 skills (16 .md, from
+  `D:\Youtube\Faceless os\…\FacelessOS Core v4 (May 2026)\skills`) are **bundled in `facelessos/`
+  and shipped in the package** — the owner's decision, 2026-10-05: "I can handle the licence do what i
+  said" (Claude had flagged that it's paid course material). A folder set in Script settings wins
+  (newer version); empty = bundled. Passed only in the agent's instructions — a test proves it never
+  lands in project files, backups or diagnostics. yt-dlp is now an app dependency (`python -m yt_dlp`; `ONEPROD_YTDLP` = stand-in).
 - **ChatGPT only through Codex logins** (user, 2026-10-05: "for chatgpt we can use codex") - no
   OpenAI API-key provider is planned.
 - **Model + effort** (user: "toggle model and effort wherever we are using claude, likewise codex and
@@ -174,12 +176,14 @@ voice/           engine.py, pipeline.py, server.py, make_srt.py, config.py, tune
 | P7 Setup wizard + modules | **built, manual pending** (Part B = real ~9 GB install in a new Windows user) | 2400ae9, 5347019 |
 | P8 Package + updates + support | **built, manual pending** (a friend installs from zero, voices the sample) | d89fc06 |
 | P9 Orchestrator + model/effort toggles | **built, manual pending** (`docs/gates/P9-manual.md`) | see git log |
-| P10 part 1 Script Studio (competitors → FacelessOS script → Opus review loop) | **built, manual pending** (`docs/gates/P10-manual.md`) | see git log |
-| P10 Production engine (quality gates, research/script/animation/edit/packaging workers) | Phase 2 | — |
+| P10 part 1 Script Studio (competitors → FacelessOS script → Opus review loop; FacelessOS bundled) | **built, manual pending** (`docs/gates/P10-manual.md`) | 2964239 + FacelessOS-bundle commit |
+| P10 rest: quality gates per stage, animation / video-editor / packaging workers, ffmpeg editor, Resolve/Storyblocks behind licence flags | **next to build** | — |
 | P11 Dev orchestration (dispatch.py, cross-model code review) | Phase 2 | — |
 | P12 Terms check, Google sign-in, learning loop | later | — |
 
-Last gate: `check.bat P9` (see `docs/gates/P9-auto.md`; the 1 skip is the opt-in real-GPU test).
+Last gate: `check.bat P10` (see `docs/gates/P10-auto.md`; the 1 skip is the opt-in real-GPU test).
+Remaining to build: **P10 rest, P11, P12** (2½ phases). Manual checks waiting on the user: P7 Part B,
+P8 friend test, P9 team mode, P10 part 1 Script Studio.
 Version **0.10.0** (P10 part 1). Note: P10 part 1 was built before P9's manual sign-off, at the
 user's request ("can you create a plan for this" → plan approved). The user's habit: "if everything is fine start the next phase" — keep going
 after a green gate, but report honestly which manual items they haven't confirmed.
@@ -311,8 +315,10 @@ user's voice toward a benchmark — that produced a "different person" once).
 3. Decide whether to hide the four unnamed voices (`2f8d1479.wav`, `647376c1.wav`, `845106da.wav`,
    `b4ed042b.wav`) from the picker.
 4. Free space on C: (≈11 GB free).
-5. P9 manual check (`docs/gates/P9-manual.md`, uses real accounts - a team run costs a few
-   messages' worth). Next build phase after sign-off: **P10 production engine**.
+5. Manual checks of P9 (`docs/gates/P9-manual.md`) and P10 part 1 (`docs/gates/P10-manual.md`) - both
+   use real accounts. The real AI loop of Script Studio (style guide → script → Opus reviews) has
+   only run with stand-ins so far; competitor captions were checked for real (free).
+   Next build: **P10 rest** (plan block P10 in `docs/PLAN.txt`), then P11, P12.
 6. Known limits: Word scripts need Heading styles; moving the data folder later is manual;
    Claude Code/Codex aren't auto-installed; the setup wizard's big downloads are only proven with
    stand-ins until Part B is done.
@@ -321,3 +327,8 @@ user's voice toward a benchmark — that produced a "different person" once).
    A team does not survive an app restart (its state is saved in `team.json` for reading only).
 8. Voice module keeps the 8 GB VRAM rule (user, 2026-10-05: 4 GB+ "not required for now").
 9. Commits after bb716e1 (P9 onward) are local only - don't push to GitHub until the user asks (2026-10-05).
+   A friend continuing from GitHub therefore sees the project as of P8 until the user pushes.
+10. FacelessOS is bundled in the package by the owner's decision (licence is theirs to handle).
+11. Team mode: the user sets "workers at once" (any number ≥ 1, warning above 3) and may write the
+    parts themselves (Parts…); Script Studio defaults (5 rounds, pass 8, stall 2) were Claude's
+    choice - the user may want to tune them after the first real runs.
