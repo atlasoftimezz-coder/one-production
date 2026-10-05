@@ -25,6 +25,7 @@ from . import handoff
 from .accounts import DEFAULT_SWITCH, DEFAULT_WARN, PROVIDERS, SAME_SERVICE_SWITCHING, SUBSCRIPTIONS, \
     AccountError, Accounts
 from . import actions, system
+from . import models as M
 from . import diagnostics
 from .config import save_setting, settings_file
 from .migrate import migrate
@@ -37,6 +38,7 @@ from .profile import Profile, ProfileError, Throttled
 from .agent.claude_agent import ClaudeAgent
 from .agent.codex_agent import CodexAgent
 from .agent.runs import Runs
+from .agent.team import Team, TeamConfig
 from .agent.studio import INSTRUCTIONS as STUDIO_INSTRUCTIONS, Studio
 from .chat import SYSTEM, build_prompt, ndjson, reply_events
 from .config import Settings
@@ -51,6 +53,7 @@ from .scripts import SUPPORTED as SCRIPT_TYPES, read_script, stats as script_sta
 from .storage import NotFound, Store
 from .tools import Approvals, TOOLS
 from .usage import RANGES, Ledger, range_start
+from .accounts import CAP_FIELDS, switch_allowed
 from .version import __version__
 from .voice import VoiceTuner, VoiceError, VoiceJobs, VoiceService
 
@@ -93,9 +96,25 @@ class AccountPatch(BaseModel):
     label: str | None = None
     enabled: bool | None = None
     model: str | None = None
+    effort: str | None = None                  # "auto" = the client's default
     warn_pct: int | None = None
     switch_pct: int | None = None
     budget_tokens_5h: int | None = -1          # -1 = leave unchanged, null = clear
+    caps: dict | None = None                   # {cap_task_tokens, cap_day_tokens, cap_day_usd}; null value clears
+
+
+class TeamIn(BaseModel):
+    goal: str
+    config: dict | None = None                 # overrides of the saved team settings for this run
+
+
+class TeamSettingsIn(BaseModel):
+    master_account: str | None = None
+    master_model: str | None = None
+    master_effort: str | None = None
+    worker_model: str | None = None
+    worker_effort: str | None = None
+    max_workers: int | None = None
 
 
 class OrderIn(BaseModel):
@@ -327,6 +346,21 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
             return round(100 * used / budget, 1), "estimated"
         return None, "none"
 
+    def spend_today(acc: dict) -> dict:
+        tok, usd = ledger.spent_since(acc["id"], range_start("today"))
+        return {"tokens": tok, "cost_usd": round(usd, 4)}
+
+    def over_cap(acc: dict) -> str | None:
+        """Why this account may not take more work today (R10 daily caps), or None."""
+        if not (acc.get("cap_day_tokens") or acc.get("cap_day_usd")):
+            return None
+        t = spend_today(acc)
+        if acc.get("cap_day_tokens") and t["tokens"] >= acc["cap_day_tokens"]:
+            return f"daily cap of {acc['cap_day_tokens']:,} tokens reached"
+        if acc.get("cap_day_usd") and t["cost_usd"] >= acc["cap_day_usd"]:
+            return f"daily cap of ${acc['cap_day_usd']:.2f} reached"
+        return None
+
     def eligible(from_acc: dict) -> list[dict]:
         """Every other account, each with whether it can take over and why not."""
         out = []
@@ -339,8 +373,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
                 why = "turned off"
             elif a["status"] != "ok":
                 why = a.get("reason") or "not signed in"
-            elif (not SAME_SERVICE_SWITCHING and a["provider"] in SUBSCRIPTIONS
-                  and a["provider"] == from_acc["provider"]):
+            elif not switch_allowed(from_acc, a):
                 why = ("switching between two accounts of the same service is off until the terms "
                        "check (plan R8)")
             elif pct is not None and pct >= a.get("switch_pct", DEFAULT_SWITCH):
@@ -402,7 +435,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
             parts, usage, error = [], None, None
             try:
                 async for line, ev in reply_events(provider, acc, prompt, acc.get("model"),
-                                                   on_ratelimit, on_auth):
+                                                   on_ratelimit, on_auth, effort_of(acc)):
                     if isinstance(ev, Text):
                         parts.append(ev.text)
                     elif isinstance(ev, Usage):
@@ -577,6 +610,22 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
                          stdin=None if login_console else subprocess.DEVNULL)
         return {"started": True}
 
+    @app.get("/api/accounts/{acc_id}/models")
+    async def account_models(acc_id: str, refresh: bool = False) -> dict:
+        """Model + effort choices for the pickers. Codex lists its own (cached; refresh asks it)."""
+        if acc_id == "demo":
+            return {**M.choices("demo"), "model": None, "effort": None}
+        acc = _account(acc_id)
+        note = None
+        if acc["provider"] == "codex" and (refresh or acc.get("codex_models") is None):
+            try:
+                raw = await codex_agent.list_models(acc, settings.data_dir / "cache" / "run")
+                acc = accounts.set_codex_models(acc_id, M.codex_models(raw))
+            except Exception as e:                   # noqa: BLE001 - keep the last list, say why
+                note = f"could not ask Codex for its models: {str(e)[:120] or e.__class__.__name__}"
+        return {**M.choices(acc["provider"], acc.get("codex_models")), "model": acc.get("model"),
+                "effort": acc.get("effort"), "note": note}
+
     @app.patch("/api/accounts/{acc_id}")
     def patch_account(acc_id: str, body: AccountPatch) -> dict:
         if acc_id == "demo":
@@ -589,8 +638,12 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
                 accounts.set_enabled(acc_id, body.enabled)
             if body.model is not None:
                 accounts.set_model(acc_id, body.model)
+            if body.effort is not None:
+                accounts.set_effort(acc_id, body.effort)
             if body.warn_pct is not None or body.switch_pct is not None or body.budget_tokens_5h != -1:
                 accounts.set_limits(acc_id, body.warn_pct, body.switch_pct, body.budget_tokens_5h)
+            if body.caps is not None:
+                accounts.set_caps(acc_id, body.caps)
         except AccountError as e:
             raise HTTPException(400, str(e))
         return _public(accounts.get(acc_id))
@@ -617,9 +670,10 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
                           "in_tok": row.get("in_tok") or 0, "out_tok": row.get("out_tok") or 0,
                           "cost_usd": row.get("cost_usd"), "last_used": row.get("last_used"),
                           "errors": row.get("errors") or 0, "usage_pct": pct, "usage_kind": kind,
-                          "accuracy": ledger.estimate_accuracy(a["id"]) if kind == "estimated" else None})
+                          "accuracy": ledger.estimate_accuracy(a["id"]) if kind == "estimated" else None,
+                          "caps": {k: a.get(k) for k in CAP_FIELDS}, "today": spend_today(a)})
         return {"range": range, "since": s["since"], "cards": cards, "totals": s["totals"],
-                "by_project": s["by_project"], "by_model": s["by_model"],
+                "by_project": s["by_project"], "by_model": s["by_model"], "by_role": s["by_role"],
                 "same_service_switching": SAME_SERVICE_SWITCHING}
 
     async def _refresh_one(a: dict) -> None:
@@ -1045,6 +1099,9 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
             return bool(resolve("codex", settings.codex_cmd)) or codex_transport is not None
         return False
 
+    def effort_of(acc: dict) -> str | None:
+        return M.effort_for(acc["provider"], acc.get("model"), acc.get("effort"), acc.get("codex_models"))
+
     def agent_for(acc: dict):
         return claude_agent if acc["provider"] in ("claude", "anthropic_api") else codex_agent
 
@@ -1068,7 +1125,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
             res = {"error": None, "text": "", "steps": [], "usage": None, "windows": None, "session_id": sid}
             try:
                 res = await agent_for(acc).run(run, runs, acc, prompt, sid, instructions, studio,
-                                               acc.get("model"), voice_gate)
+                                               acc.get("model"), voice_gate, effort=effort_of(acc))
             except asyncio.CancelledError:
                 res["error"] = Fail("fatal", "Stopped.")
             except Exception as e:                       # noqa: BLE001
@@ -1093,7 +1150,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
             save_agent_session(pid, acc["id"], res.get("session_id"))
             ledger.record_call(account=acc["id"], provider=acc["provider"], project=pid, usage=usage,
                                outcome="error" if err else "ok", err_kind=err.kind if err else None,
-                               windows=res["windows"])
+                               windows=res["windows"], role="agent")
             for ev in after_reply(pid, acc, err):
                 run.emit(ev)
             runs.finish(run)
@@ -1143,6 +1200,148 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
     def agent_stop(pid: str) -> dict:
         _project(pid)
         return {"stopped": runs.stop(pid)}
+
+    # ---------------------------------------------------------------- team mode (P9: R4, R10)
+    team_file = settings.data_dir / "team_settings.json"
+    teams: dict[str, Team] = {}
+
+    def team_settings() -> dict:
+        try:
+            saved = json.loads(team_file.read_text(encoding="utf-8")) if team_file.exists() else {}
+        except ValueError:
+            saved = {}
+        base = {k: getattr(TeamConfig(), k) for k in TeamConfig.__dataclass_fields__}
+        return {**base, **{k: v for k, v in saved.items() if k in base}}
+
+    @app.get("/api/team/settings")
+    def get_team_settings() -> dict:
+        return {"settings": team_settings(), "models": M.choices("claude")["models"], "efforts": M.EFFORTS}
+
+    @app.patch("/api/team/settings")
+    def patch_team_settings(body: TeamSettingsIn) -> dict:
+        cur = team_settings()
+        given = body.model_dump(exclude_unset=True)
+        for role in ("master", "worker"):
+            if f"{role}_effort" in given and given[f"{role}_effort"] in ("", "auto"):
+                given[f"{role}_effort"] = None
+            model = given.get(f"{role}_model", cur[f"{role}_model"])
+            effort = given.get(f"{role}_effort", cur[f"{role}_effort"])
+            try:
+                M.check("claude", model, effort)
+            except ValueError as e:
+                raise HTTPException(400, f"{role}: {e}")
+        if "max_workers" in given and not 1 <= int(given["max_workers"] or 0) <= 3:
+            raise HTTPException(400, "workers at once must be 1, 2 or 3")
+        if given.get("master_account"):
+            _account(given["master_account"])
+        cur.update(given)
+        team_file.write_text(json.dumps(cur, indent=1), encoding="utf-8")
+        return get_team_settings()
+
+    def team_accounts() -> list[dict]:
+        """Accounts a team may use right now: on, signed in, agent-capable, below their switch level."""
+        out = []
+        for a in accounts.list():
+            if not a["enabled"] or a["status"] != "ok" or a["provider"] not in AGENT_PROVIDERS or not agent_ready(a):
+                continue
+            pct, _ = usage_pct(a)
+            if pct is not None and pct >= a.get("switch_pct", DEFAULT_SWITCH):
+                continue
+            out.append(a)
+        return out
+
+    def team_deps(pid: str):
+        from types import SimpleNamespace
+
+        async def call(acc, sub, prompt, note, model, effort, role):
+            files, voices, presets, jobs = await studio_state(pid)
+            instructions = (STUDIO_INSTRUCTIONS + "\n\n" + actions.context(files, voices, presets, jobs)
+                            + "\n\n" + note)
+            studio = Studio(pid, store, voice_svc, voice_jobs, tuned=tuner.for_voice,
+                            on_job=lambda job: sub.emit({"t": "voicejob", "id": job["id"], "source": job["source"],
+                                                         "voice": job["voice"]}))
+            eff = M.effort_for(acc["provider"], model, effort, acc.get("codex_models"))
+            try:
+                res = await agent_for(acc).run(sub, runs, acc, prompt, None, instructions, studio, model,
+                                               voice_gate, effort=eff)
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:                       # noqa: BLE001
+                log.exception("team call failed")
+                res = {"error": Fail("fatal", f"internal error: {e.__class__.__name__}"), "text": "",
+                       "usage": None, "windows": None, "steps": []}
+            err = res.get("error")
+            if res.get("windows") and acc["provider"] in ("claude", "codex"):
+                accounts.record_rate_limit(acc["id"], res["windows"], "allowed")
+            if err and err.kind == "auth":
+                accounts.mark_auth_error(acc["id"], err.message)
+            if err and err.kind == "limit":
+                pct, kind = usage_pct(accounts.get(acc["id"]))
+                ledger.record_limit_hit(acc["id"], err.message, pct if kind == "estimated" else
+                                        (100.0 if kind == "exact" else None))
+            ledger.record_call(account=acc["id"], provider=acc["provider"], project=pid, usage=res.get("usage"),
+                               outcome="error" if err else "ok", err_kind=err.kind if err else None,
+                               windows=res.get("windows"), role=role)
+            return res
+
+        return SimpleNamespace(
+            accounts=team_accounts, now=time.time, call=call,
+            resets_at=lambda a: resets_of(accounts.get(a["id"])),
+            over_cap=lambda a: over_cap(accounts.get(a["id"])),
+            task_cap=lambda a: accounts.get(a["id"]).get("cap_task_tokens"),
+            switch_allowed=switch_allowed, usage_pct=lambda a: usage_pct(a)[0],
+            handoff_dir=lambda: store.project_dir(pid) / "handoffs", redact=redact)
+
+    @app.post("/api/projects/{pid}/team")
+    async def start_team(pid: str, body: TeamIn) -> StreamingResponse:
+        _project(pid)
+        goal = body.goal.strip()
+        if not goal:
+            raise HTTPException(400, "tell the team what to do")
+        if not team_accounts():
+            raise HTTPException(400, "team mode needs at least one signed-in Claude, Codex or API-key account "
+                                     "that is below its switch level")
+        cfg = TeamConfig.from_dict({**team_settings(), **(body.config or {})})
+        try:
+            run = runs.start(pid, store.files_dir(pid))
+        except RuntimeError as e:
+            raise HTTPException(409, str(e))
+        team = Team(pid, goal, run, team_deps(pid), cfg, state_file=store.project_dir(pid) / "team.json")
+        teams[pid] = team
+        store.append_message(pid, "user", goal, team=True)
+
+        async def work():
+            snap = await team.go()
+            text = team.final or ("Team stopped." if snap["state"] == "stopped" else "")
+            store.append_message(pid, "assistant", text, team={
+                "id": snap["id"], "state": snap["state"], "master": snap["master"],
+                "master_tokens": snap["master_tokens"],
+                "tasks": [{k: t[k] for k in ("id", "title", "status", "account", "pins", "rounds", "tokens",
+                                             "why", "handoffs")} for t in snap["tasks"]]})
+            runs.finish(run)
+            run.emit({"t": "done"})
+
+        run.task = asyncio.get_running_loop().create_task(work())
+        return StreamingResponse(follow(run), media_type="application/x-ndjson", headers={"Cache-Control": "no-store"})
+
+    @app.get("/api/projects/{pid}/team")
+    def team_state(pid: str) -> dict:
+        _project(pid)
+        live = teams.get(pid)
+        if live and runs.busy(pid):
+            return {"running": True, "team": live.snapshot()}
+        f = store.project_dir(pid) / "team.json"
+        last = json.loads(f.read_text(encoding="utf-8")) if f.exists() else None
+        return {"running": False, "team": last}
+
+    @app.post("/api/projects/{pid}/team/resume")
+    def team_resume(pid: str) -> dict:
+        _project(pid)
+        live = teams.get(pid)
+        if not live or not runs.busy(pid):
+            raise HTTPException(404, "no team is working in this project")
+        live.resume()
+        return {"ok": True}
 
     # ---------------------------------------------------------------- handoff + switching (R3)
     @app.get("/api/projects/{pid}/handoffs")

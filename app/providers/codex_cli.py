@@ -110,7 +110,8 @@ class CodexCLI:
         exe = self._exe()
         return [exe, "login"] if exe else None
 
-    async def stream(self, account: dict, prompt: str, model: str | None) -> AsyncIterator[Event]:
+    async def stream(self, account: dict, prompt: str, model: str | None,
+                     effort: str | None = None) -> AsyncIterator[Event]:
         exe = self._exe()
         if not exe:
             yield Fail("fatal", "Codex CLI is not installed on this PC")
@@ -118,6 +119,8 @@ class CodexCLI:
         argv = [exe, *ARGS[:-1]]
         if model and model.replace("-", "").replace(".", "").isalnum():
             argv += ["--model", model]
+        if effort and effort.isalnum():
+            argv += ["-c", f'model_reasoning_effort="{effort}"']
         argv.append(ARGS[-1])
         finished = False
         async with aclosing(run_lines(argv, prompt, self.env(account), self.work_dir,

@@ -55,6 +55,9 @@ def fake_cmds(tmp_path):
     return d
 
 
+API_BODIES: list[dict] = []          # every Messages request body (tests check model / effort)
+
+
 def api_handler(request: httpx.Request) -> httpx.Response:
     key = request.headers.get("x-api-key", "")
     if not key.startswith("sk-ant-api03-GOOD"):
@@ -66,6 +69,7 @@ def api_handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(429, json={"type": "error", "error": {"type": "rate_limit_error",
                                                                      "message": "rate limited"}})
     body = json.loads(request.content)
+    API_BODIES.append(body)
     events = [
         {"type": "message_start", "message": {"usage": {"input_tokens": 21, "output_tokens": 1}}},
         *({"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": w + " "}}

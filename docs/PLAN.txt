@@ -453,6 +453,10 @@ P9  ORCHESTRATOR                                                       [Phase 2]
           third review round escalates instead of looping; spend cap pauses.
   MANUAL: [ ] give the master a 3-part task -> watch workers, read the final review
           [ ] the cost shown is acceptable to you
+  ADDED (user, 2026-10-05): model + effort toggles wherever a model is called - Claude
+          (CLI chat + Agent SDK), Anthropic API (output_config.effort) and Codex (models and
+          efforts from app-server model/list). Master default Opus 5.5 / high, workers
+          Sonnet 5.5 / medium; Codex workers keep the account's own choice.
 
 P10  PRODUCTION ENGINE (quality gates + visuals + edit)                 [Phase 2]
   Build : numeric gates per stage, research/script/animation/video-editor/packaging workers,

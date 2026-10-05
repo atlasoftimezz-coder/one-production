@@ -14,7 +14,8 @@ class Demo:
     async def status(self, account: dict) -> dict:
         return {"ok": True, "method": "built-in"}
 
-    async def stream(self, account: dict, prompt: str, model: str | None) -> AsyncIterator[Event]:
+    async def stream(self, account: dict, prompt: str, model: str | None,
+                     effort: str | None = None) -> AsyncIterator[Event]:
         last = prompt.strip().rsplit("User:", 1)[-1].split("Assistant:", 1)[0].strip()
         text = (f"(Demo reply - connect a Claude, Codex or API-key account in Accounts for real "
                 f"answers.) You said: {last}" if last else "(Demo reply) You sent an empty message.")

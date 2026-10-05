@@ -60,7 +60,7 @@ class ClaudeAgent:
         return {"CLAUDE_CONFIG_DIR": account["profile_dir"], **ISOLATION}
 
     def options(self, run: Run, runs: Runs, account: dict, studio: Studio, session_id: str | None,
-                instructions: str, model: str | None, gate) -> Any:
+                instructions: str, model: str | None, gate, effort: str | None = None) -> Any:
         sdk = _sdk()
         tools = {t.name: t for t in studio.tools()}
 
@@ -74,7 +74,12 @@ class ClaudeAgent:
         server = sdk.create_sdk_mcp_server("studio", tools=sdk_tools)
 
         async def pre_tool(data: dict, tool_use_id: str | None, context: Any) -> dict:
-            verdict, reason = policy.decide(data.get("tool_name", ""), data.get("tool_input") or {}, run.root)
+            name, inp = data.get("tool_name", ""), data.get("tool_input") or {}
+            locked = getattr(run, "lock_check", None) and run.lock_check(name, inp)   # team mode: file locks
+            if locked:
+                return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
+                                               "permissionDecisionReason": locked}}
+            verdict, reason = policy.decide(name, inp, run.root)
             decision = "allow" if verdict == "allow" else "ask"
             return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": decision,
                                            "permissionDecisionReason": reason}}
@@ -92,12 +97,13 @@ class ClaudeAgent:
             permission_mode="default", can_use_tool=can_use_tool,
             hooks={"PreToolUse": [sdk.HookMatcher(matcher=None, hooks=[pre_tool])]},
             include_partial_messages=True, resume=session_id, model=model or None,
-            extra_args={"disable-slash-commands": None})
+            effort=effort or None, extra_args={"disable-slash-commands": None})
         opts._studio_tools = {f"mcp__studio__{t.name}": t for t in sdk_tools}   # test seam: fake client calls these
         return opts
 
     async def run(self, run: Run, runs: Runs, account: dict, prompt: str, session_id: str | None,
-                  instructions: str, studio: Studio, model: str | None, gate) -> dict:
+                  instructions: str, studio: Studio, model: str | None, gate,
+                  effort: str | None = None) -> dict:
         """Drive one turn. Streams events into run.queue; returns the outcome for the caller."""
         sdk = _sdk()
         out: dict[str, Any] = {"session_id": session_id, "text": "", "usage": None, "windows": None,
@@ -105,7 +111,7 @@ class ClaudeAgent:
         if not claude_exe(self.command):
             out["error"] = Fail("fatal", "Claude Code is not installed")
             return out
-        opts = self.options(run, runs, account, studio, session_id, instructions, model, gate)
+        opts = self.options(run, runs, account, studio, session_id, instructions, model, gate, effort)
         client = (self.client_factory or sdk.ClaudeSDKClient)(options=opts)
         steps: dict[str, dict] = {}
         texts: list[str] = []

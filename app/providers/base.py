@@ -53,7 +53,8 @@ Event = Text | Usage | RateLimit | Fail
 class Provider(Protocol):
     name: str
 
-    def stream(self, account: dict, prompt: str, model: str | None) -> AsyncIterator[Event]: ...
+    def stream(self, account: dict, prompt: str, model: str | None,
+               effort: str | None = None) -> AsyncIterator[Event]: ...
 
 
 # ---------------------------------------------------------------- classification
@@ -96,7 +97,7 @@ def _backoffs() -> list[float]:
 
 
 async def run_with_retries(provider: Provider, account: dict, prompt: str,
-                           model: str | None) -> AsyncIterator[Event]:
+                           model: str | None, effort: str | None = None) -> AsyncIterator[Event]:
     """Retry transient failures only while nothing has been streamed yet. Once text has
     arrived the prompt is never re-sent (that would bill it twice); the failure is passed
     on marked interrupted so the caller can keep the partial reply."""
@@ -107,7 +108,8 @@ async def run_with_retries(provider: Provider, account: dict, prompt: str,
         retry = False
         # aclosing: a stream we stop reading early (retry or failure) is closed now, so its
         # CLI process is cleaned up immediately instead of whenever garbage collection runs.
-        async with aclosing(provider.stream(account, prompt, model)) as events:
+        extra = {"effort": effort} if effort else {}
+        async with aclosing(provider.stream(account, prompt, model, **extra)) as events:
             async for ev in events:
                 if isinstance(ev, Text):
                     got_text = True

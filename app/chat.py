@@ -42,9 +42,10 @@ def ndjson(obj: dict) -> bytes:
     return (json.dumps(obj, ensure_ascii=False) + "\n").encode("utf-8")
 
 
-async def reply_events(provider, account: dict, prompt: str, model: str | None, on_ratelimit, on_auth):
+async def reply_events(provider, account: dict, prompt: str, model: str | None, on_ratelimit, on_auth,
+                       effort: str | None = None):
     """Yield (ndjson_bytes, event) pairs; side effects (rate-limit snapshot, auth marking) via callbacks."""
-    async for ev in run_with_retries(provider, account, prompt, model):
+    async for ev in run_with_retries(provider, account, prompt, model, effort):
         if isinstance(ev, Text):
             yield ndjson({"t": "text", "v": ev.text}), ev
         elif isinstance(ev, Usage):

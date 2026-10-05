@@ -178,6 +178,9 @@ def codex(args, home: Path):
 
 if __name__ == "__main__":
     tool, rest = sys.argv[1], sys.argv[2:]
+    if os.environ.get("FAKE_ARGS"):                  # tests read back the exact command line
+        with open(os.environ["FAKE_ARGS"], "a", encoding="utf-8") as f:
+            f.write(json.dumps(rest) + "\n")
     if tool == "claude":
         sys.exit(claude(rest, Path(os.environ["CLAUDE_CONFIG_DIR"])))
     sys.exit(codex(rest, Path(os.environ["CODEX_HOME"])))

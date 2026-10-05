@@ -489,6 +489,78 @@ try:
             "document.querySelectorAll('.bubble .step.ok').length>=1 && document.querySelectorAll('.bubble .step.bad').length>=1", 8))
         shot("24-agent-history")
 
+    # model + effort pickers, team mode, spend caps (P9)
+    if os.environ.get("UI_DRIVE_P9") == "1":
+        go = lambda name: js("[...document.querySelectorAll('#projects li[data-id]')].find(l=>l.innerText.includes('%s')).click()" % name)
+        js("""(async()=>{
+          const j = {method:'POST', headers:{'Content-Type':'application/json'}};
+          const a = await (await api('/api/accounts', {...j, body: JSON.stringify({provider:'claude'})})).json();
+          await api(`/api/accounts/${a.id}/login`, {method:'POST'});
+          for (let i = 0; i < 60; i++) {
+            const c = await (await api(`/api/accounts/${a.id}/check`, {method:'POST'})).json();
+            if (c.status === 'ok') break;
+            await new Promise(r => setTimeout(r, 100));
+          }
+          await api('/api/projects', {...j, body: JSON.stringify({name:'Team test'})});
+          window._teamAcc = a.id; await loadProjects();
+        })()""")
+        check("team account signed in", wait_for("!!window._teamAcc", 15))
+        acc_id = js("window._teamAcc")
+        go("Team test")
+        wait_for("!document.querySelector('#input').disabled", 8)
+        js(f"loadAccounts().then(()=>{{const p=document.querySelector('#picker'); p.value='{acc_id}'; p.dispatchEvent(new Event('change'))}})")
+        check("model + effort pickers shown for a Claude account", wait_for(
+            "getComputedStyle(document.querySelector('#mpick')).display!=='none' && document.querySelector('#modelpick').options.length===4", 8))
+        labels = js("[...document.querySelectorAll('#modelpick option')].map(o=>o.text).join('|')") or ""
+        check("models: Opus 5.5, Sonnet 5.5, Haiku 4.5, Fable 5.1", all(m in labels for m in ("Opus 5.5", "Sonnet 5.5", "Haiku 4.5", "Fable 5.1")), labels)
+        efforts = js("[...document.querySelectorAll('#effortpick option')].map(o=>o.value).join(',')")
+        check("efforts: auto, low..max", efforts == "auto,low,medium,high,xhigh,max", efforts)
+        js("{const m=document.querySelector('#modelpick'); m.value='opus'; m.dispatchEvent(new Event('change'))}")
+        time.sleep(0.5)
+        js("{const e=document.querySelector('#effortpick'); e.value='xhigh'; e.dispatchEvent(new Event('change'))}")
+        check("choice saved on the account", wait_for(
+            f"api('/api/accounts/{acc_id}/models').then(r=>r.json()).then(c=>c.model==='opus'&&c.effort==='xhigh')", 8))
+        js("{const m=document.querySelector('#modelpick'); m.value='haiku'; m.dispatchEvent(new Event('change'))}")
+        check("Haiku has no effort setting", wait_for("document.querySelector('#effortpick').disabled", 5))
+        shot("40-model-effort")
+
+        js("document.querySelector('#teambtn').click()")
+        check("team toggle on, settings chip shows Opus -> Sonnet", wait_for(
+            "document.querySelector('#teambtn').classList.contains('on') && document.querySelector('#teamchip').innerText.includes('opus·high → sonnet·medium ×3')", 6),
+            js("document.querySelector('#teamchip').innerText"))
+        js("document.querySelector('#teamchip').click()")
+        check("team settings open", wait_for("document.querySelector('#teammodal').classList.contains('open') && !!document.querySelector('#twe')", 6))
+        shot("41-team-settings")
+        js("document.querySelector('#twe').value='low'; document.querySelector('#tsave').click()")
+        check("team settings saved", wait_for("document.querySelector('#teamchip').innerText.includes('sonnet·low')", 6),
+              js("document.querySelector('#teamchip').innerText"))
+
+        js("document.querySelector('#input').value='Plan episode 2'; document.querySelector('#composer').requestSubmit()")
+        check("team panel appears", wait_for("!!document.querySelector('.bubble .teampanel .trow')", 10))
+        check("worker row shows it working", wait_for(
+            "[...document.querySelectorAll('.teampanel .tst')].some(s=>s.classList.contains('running')||s.classList.contains('review'))", 10))
+        shot("42-team-working")
+        check("task ends done after the master's review", wait_for(
+            "[...document.querySelectorAll('.teampanel .tst')].some(s=>s.classList.contains('done'))", 15))
+        check("final review shown", wait_for("[...document.querySelectorAll('.bubble .seg.final')].some(s=>s.innerText.includes('Final review'))", 15))
+        wait_for("!document.querySelector('#stop').classList.contains('on')", 10)
+        check("worker's file appears in Files", wait_for("document.querySelector('#files').innerText.includes('notes.md')", 8))
+        shot("43-team-done")
+        go("Ghost Towns"); time.sleep(0.4); go("Team test")
+        check("team run kept in history", wait_for(
+            "!!document.querySelector('.bubble .teampanel') && document.querySelector('#messages').innerText.includes('TEAM GOAL')", 8))
+        js("document.querySelector('#teambtn').click()")
+
+        js("openUsage()")
+        check("usage page shows spend caps", wait_for("!!document.querySelector('#ucards input[data-cap=cap_day_tokens]')", 8))
+        js("{const i=document.querySelector('#ucards input[data-cap=cap_day_tokens]'); i.value='50000'; i.dispatchEvent(new Event('change'))}")
+        check("daily cap saved", wait_for(
+            f"api('/api/usage?range=today').then(r=>r.json()).then(u=>u.cards.find(c=>c.id==='{acc_id}').caps.cap_day_tokens===50000)", 8))
+        check("usage by role shows master and worker", wait_for(
+            "document.querySelector('#byrole').innerText.includes('Team master') && document.querySelector('#byrole').innerText.includes('Team worker')", 8))
+        shot("44-usage-caps")
+        js("closeUsage()")
+
     # backups, system scan, profile + PIN (P6)
     if os.environ.get("UI_DRIVE_P6") == "1":
         go = lambda name: js("[...document.querySelectorAll('#projects li[data-id]')].find(l=>l.innerText.includes('%s')).click()" % name)

@@ -18,10 +18,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import AsyncIterator
 
+from ..models import EFFORTS
 from .base import Event, Fail, RateLimit, Text, Usage, classify_status, classify_text
 from .cli import resolve, run_capture, run_lines
 
-MODELS = {"opus": "opus", "sonnet": "sonnet", "haiku": "haiku"}
+MODELS = {"opus": "opus", "sonnet": "sonnet", "haiku": "haiku", "fable": "fable"}
 USAGE_ARGS = ["-p", "/usage", "--output-format", "json", "--tools", "", "--no-session-persistence",
               "--strict-mcp-config"]
 _SESSION = re.compile(r"Current session:\s*([\d.]+)%\s*used(?:\s*·\s*resets\s+([^\n(]+))?", re.I)
@@ -112,7 +113,8 @@ class ClaudeCLI:
         exe = self._exe()
         return [exe, "auth", "login"] if exe else None
 
-    async def stream(self, account: dict, prompt: str, model: str | None) -> AsyncIterator[Event]:
+    async def stream(self, account: dict, prompt: str, model: str | None,
+                     effort: str | None = None) -> AsyncIterator[Event]:
         exe = self._exe()
         if not exe:
             yield Fail("fatal", "Claude Code is not installed on this PC")
@@ -120,6 +122,8 @@ class ClaudeCLI:
         argv = [exe, *ARGS]
         if model in MODELS:
             argv += ["--model", MODELS[model]]
+        if effort in EFFORTS:
+            argv += ["--effort", effort]
         got_result = False
         async with aclosing(run_lines(argv, prompt, self.env(account), self.work_dir,
                                       self.timeout)) as lines:

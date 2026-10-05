@@ -100,8 +100,49 @@ class CodexAgent:
         self.command = command
         self.transport_factory = transport_factory or StdioTransport
 
+    async def list_models(self, account: dict, cwd: Path, timeout: float = 30) -> list[dict]:
+        """The models (and their efforts) this Codex login offers - `model/list`, no turn, no cost."""
+        exe = resolve("codex", self.command)
+        if not exe:
+            raise RuntimeError("Codex is not installed")
+        cwd.mkdir(parents=True, exist_ok=True)
+        t = self.transport_factory([exe, "app-server"], {"CODEX_HOME": account["profile_dir"]}, cwd)
+
+        async def ask(rid: int, method: str, params: dict) -> dict:
+            await t.send({"id": rid, "method": method, "params": params})
+            while True:
+                msg = await t.recv()
+                if msg is None:
+                    raise RuntimeError("Codex stopped")
+                if msg.get("id") == rid and "method" not in msg:
+                    if "error" in msg:
+                        raise RuntimeError(str((msg["error"] or {}).get("message") or msg["error"]))
+                    return msg.get("result") or {}
+
+        async def go() -> list[dict]:
+            await t.start()
+            await ask(1, "initialize", {"clientInfo": {"name": "one-production", "title": "One Production",
+                                                       "version": __version__},
+                                        "capabilities": {"experimentalApi": True}})
+            await t.send({"method": "initialized"})
+            found, cursor, rid = [], None, 1
+            for _ in range(10):                      # pages
+                rid += 1
+                res = await ask(rid, "model/list", {"cursor": cursor} if cursor else {})
+                found += res.get("data") or []
+                cursor = res.get("nextCursor")
+                if not cursor:
+                    break
+            return found
+
+        try:
+            return await asyncio.wait_for(go(), timeout)
+        finally:
+            await t.close()
+
     async def run(self, run: Run, runs: Runs, account: dict, prompt: str, session_id: str | None,
-                  instructions: str, studio: Studio, model: str | None, gate) -> dict:
+                  instructions: str, studio: Studio, model: str | None, gate,
+                  effort: str | None = None) -> dict:
         out: dict[str, Any] = {"session_id": session_id, "text": "", "usage": None, "windows": None,
                                "error": None, "steps": []}
         exe = resolve("codex", self.command)
@@ -268,8 +309,12 @@ class CodexAgent:
             state["thread"] = ((res.get("thread") or {}).get("id")) or state["thread"]
             usage.model = res.get("model") or usage.model
             out["session_id"] = state["thread"]
-            turn = await request("turn/start", {"threadId": state["thread"],
-                                                "input": [{"type": "text", "text": prompt, "text_elements": []}]})
+            ts = {"threadId": state["thread"], "input": [{"type": "text", "text": prompt, "text_elements": []}]}
+            if model:
+                ts["model"] = model
+            if effort:
+                ts["effort"] = effort            # a ReasoningEffort the model advertises (model/list)
+            turn = await request("turn/start", ts)
             state["turn"] = (turn.get("turn") or {}).get("id")
             await finished.wait()
         except asyncio.CancelledError:

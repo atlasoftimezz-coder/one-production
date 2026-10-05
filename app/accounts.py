@@ -15,10 +15,12 @@ from pathlib import Path
 
 import keyring
 
+from . import models as M
+
 PROVIDERS = {
-    "claude": {"label": "Claude", "needs_login": True, "models": ["sonnet", "opus", "haiku"]},
+    "claude": {"label": "Claude", "needs_login": True, "models": ["sonnet", "opus", "haiku", "fable"]},
     "codex": {"label": "Codex (ChatGPT)", "needs_login": True, "models": []},
-    "anthropic_api": {"label": "Anthropic API key", "needs_login": False, "models": ["sonnet", "opus", "haiku"]},
+    "anthropic_api": {"label": "Anthropic API key", "needs_login": False, "models": ["sonnet", "opus", "haiku", "fable"]},
 }
 KEYRING_SERVICE = "OneProduction"
 DEFAULT_WARN, DEFAULT_SWITCH = 70, 85
@@ -27,6 +29,18 @@ SUBSCRIPTIONS = {"claude", "codex"}
 # limit stays off until the terms check is done. Switching to a different service, or to a
 # pay-per-use API key, is ordinary use and is allowed.
 SAME_SERVICE_SWITCHING = False
+
+
+def switch_allowed(from_acc: dict, to_acc: dict) -> bool:
+    """May work move from one account to the other after a limit? (D7: not between two
+    accounts of the same subscription service until the terms check.)"""
+    if to_acc["id"] == from_acc["id"]:
+        return False
+    return SAME_SERVICE_SWITCHING or not (to_acc["provider"] in SUBSCRIPTIONS
+                                          and to_acc["provider"] == from_acc["provider"])
+
+
+CAP_FIELDS = ("cap_task_tokens", "cap_day_tokens", "cap_day_usd")
 
 
 class AccountError(ValueError):
@@ -85,7 +99,7 @@ class Accounts:
         acc_id = f"{provider.replace('_', '-')}-{secrets.token_hex(3)}"
         acc = {"id": acc_id, "provider": provider, "label": (label or "").strip()[:60],
                "email": None, "plan": None, "model": model or (PROVIDERS[provider]["models"] or [None])[0],
-               "enabled": True, "created": time.time(), "status": "unchecked", "reason": None,
+               "effort": None, "enabled": True, "created": time.time(), "status": "unchecked", "reason": None,
                "rate_limit": None, "profile_dir": None, "key_hint": None,
                "warn_pct": DEFAULT_WARN, "switch_pct": DEFAULT_SWITCH, "budget_tokens_5h": None}
         if PROVIDERS[provider]["needs_login"]:
@@ -125,10 +139,27 @@ class Accounts:
 
     def set_model(self, acc_id: str, model: str | None) -> dict:
         acc = self.get(acc_id)
-        allowed = PROVIDERS[acc["provider"]]["models"]
-        if allowed and model not in allowed:
+        model = model or None                       # "" = the client's default (Codex)
+        if acc["provider"] != "codex" and model is None:
             raise AccountError("unknown model")
+        try:
+            M.check(acc["provider"], model, None)
+        except ValueError as e:
+            raise AccountError(str(e))
         return self._update(acc_id, model=model)
+
+    def set_effort(self, acc_id: str, effort: str | None) -> dict:
+        """None / "auto" = the client's own default."""
+        acc = self.get(acc_id)
+        effort = None if effort in (None, "", "auto") else effort
+        try:
+            M.check(acc["provider"], None, effort)
+        except ValueError as e:
+            raise AccountError(str(e))
+        return self._update(acc_id, effort=effort)
+
+    def set_codex_models(self, acc_id: str, models: list[dict]) -> dict:
+        return self._update(acc_id, codex_models=models, codex_models_at=time.time())
 
     def set_limits(self, acc_id: str, warn_pct=None, switch_pct=None, budget_tokens_5h=-1) -> dict:
         acc = self.get(acc_id)
@@ -141,6 +172,21 @@ class Accounts:
             if budget_tokens_5h is not None and int(budget_tokens_5h) <= 0:
                 raise AccountError("the token budget must be a positive number")
             changes["budget_tokens_5h"] = None if budget_tokens_5h is None else int(budget_tokens_5h)
+        return self._update(acc_id, **changes)
+
+    def set_caps(self, acc_id: str, caps: dict) -> dict:
+        """Spend caps (R10). A missing key leaves that cap alone; null clears it."""
+        self.get(acc_id)
+        changes = {}
+        for k in CAP_FIELDS:
+            if k not in caps:
+                continue
+            v = caps[k]
+            if v is not None:
+                v = float(v) if k == "cap_day_usd" else int(v)
+                if v <= 0:
+                    raise AccountError("a spend cap must be a positive number (or empty for no cap)")
+            changes[k] = v
         return self._update(acc_id, **changes)
 
     def reorder(self, ids: list[str]) -> list[dict]:

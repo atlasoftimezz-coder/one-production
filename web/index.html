@@ -154,12 +154,13 @@
 
   /* composer */
   .composer { padding: 12px clamp(16px, 5vw, 64px) 20px; }
-  .box { max-width: 820px; margin: 0 auto; display: flex; align-items: flex-end; gap: 8px; padding: 8px;
+  .box { max-width: 820px; margin: 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 5px; padding: 8px;
          background: var(--panel); border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow);
          transition: border-color .14s; }
   .box:focus-within { border-color: var(--accent); }
-  .box textarea { flex: 1; border: 0; outline: none; background: none; resize: none; padding: 8px 6px;
+  .box textarea { order: -1; flex: 1 1 100%; border: 0; outline: none; background: none; resize: none; padding: 8px 6px;
                   max-height: 180px; min-height: 24px; }
+  .box #switchbtn { margin-right: auto; }          /* message on top; controls below, Stop/Send on the right */
   .send { width: 38px; height: 38px; border-radius: 12px; background: var(--grad); color: #fff;
           display: grid; place-items: center; flex: none; transition: opacity .14s; }
   .send:disabled { opacity: .35; cursor: not-allowed; }
@@ -348,6 +349,33 @@
   .picker select { border: 0; background: none; outline: none; font-size: 12px; font-weight: 600;
                    color: var(--ink); max-width: 180px; text-overflow: ellipsis; cursor: pointer; }
   .picker select option { background: var(--panel); color: var(--ink); }
+  .picker.mp select { max-width: 100px; }
+  .picker.mp .sep { color: var(--faint); }
+  .iconbtn.on { color: #fff; background: var(--grad); }
+  .teamchip { flex: none; font-size: 11.5px; padding: 4px 9px; border-radius: 9px; background: var(--panel2);
+              color: var(--dim); white-space: nowrap; cursor: pointer; border: 1px solid transparent; }
+  .teamchip:hover { border-color: var(--accent); color: var(--ink); }
+  .teampanel { white-space: normal; border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; margin: 4px 0 10px;
+               background: var(--panel2); font-size: 13px; }
+  .teampanel .th { display: flex; align-items: center; gap: 8px; font-weight: 700; margin-bottom: 6px; }
+  .teampanel .th small { font-weight: 500; color: var(--dim); }
+  .trow { display: grid; grid-template-columns: 92px 1fr; gap: 2px 10px; padding: 6px 0; border-top: 1px solid var(--line); }
+  .trow:first-of-type { border-top: 0; }
+  .trow .tt { font-weight: 600; }
+  .trow .ta { grid-column: 2; color: var(--dim); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .trow .tw { grid-column: 2; color: var(--warn); font-size: 12px; }
+  .tst { font-size: 10.5px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; padding: 2px 7px;
+         border-radius: 7px; background: var(--panel); color: var(--faint); justify-self: start; align-self: start; }
+  .tst.running, .tst.starting { color: var(--accent); } .tst.review { color: var(--violet); }
+  .tst.done { color: var(--ok); } .tst.paused { color: var(--warn); }
+  .tst.needs_you, .tst.failed { color: var(--bad); }
+  .tpause { display: flex; gap: 10px; align-items: center; padding: 8px 10px; border-radius: 10px; margin: 6px 0;
+            background: color-mix(in srgb, var(--warn) 14%, transparent); color: var(--ink); font-size: 12.5px; }
+  .tnote { color: var(--dim); font-size: 12px; padding: 2px 0; }
+  .tfoot { color: var(--faint); font-size: 11.5px; margin-top: 6px; }
+  .tform { display: grid; grid-template-columns: 150px 1fr; gap: 10px 14px; align-items: center; font-size: 13px; }
+  .tform select, .tform input { padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line);
+                                background: var(--panel); color: var(--ink); }
   .pdot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--faint); }
   .pdot.ok { background: var(--ok); } .pdot.error { background: var(--bad); }
 
@@ -447,7 +475,7 @@
   .usets input.wide { width: 100px; }
   .uord { display: flex; flex-direction: column; gap: 4px; }
   .uwarn { color: var(--warn); font-size: 12px; margin-top: 4px; }
-  .ugrid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .ugrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
   @media (max-width: 760px) { .ugrid { grid-template-columns: 1fr; } }
   .utable { width: 100%; border-collapse: collapse; font-size: 12.5px; }
   .utable th, .utable td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
@@ -574,6 +602,7 @@
   <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></symbol>
   <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
   <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></symbol>
+  <symbol id="i-team" viewBox="0 0 24 24"><circle cx="12" cy="7" r="3"/><circle cx="5" cy="15" r="2.5"/><circle cx="19" cy="15" r="2.5"/><path d="M12 10v4M10 13l-3.3 1.2M14 13l3.3 1.2M8 21h8"/></symbol>
   <symbol id="i-swap" viewBox="0 0 24 24"><path d="M7 4L3 8l4 4M3 8h14M17 20l4-4-4-4M21 16H7"/></symbol>
   <symbol id="i-uparr" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></symbol>
   <symbol id="i-dnarr" viewBox="0 0 24 24"><path d="M12 5v14M5 12l7 7 7-7"/></symbol>
@@ -630,13 +659,18 @@
         <button type="button" class="iconbtn" id="attach" title="Attach files"><svg class="icon"><use href="#i-clip"/></svg></button>
         <label class="picker" title="Which account answers"><i class="pdot" id="pickdot"></i>
           <select id="picker"></select></label>
+        <label class="picker mp" id="mpick" title="Model and effort (how hard it thinks) for this account" style="display:none">
+          <select id="modelpick" aria-label="Model"></select><span class="sep">·</span>
+          <select id="effortpick" aria-label="Effort"></select></label>
+        <button type="button" class="iconbtn" id="teambtn" title="Team mode: a master (Opus) splits the goal and reviews, workers (Sonnet) do the parts in parallel"><svg class="icon"><use href="#i-team"/></svg></button>
+        <span class="teamchip" id="teamchip" style="display:none" title="Team settings"></span>
         <button type="button" class="iconbtn" id="micbtn" title="Make a voiceover from a script"><svg class="icon"><use href="#i-mic"/></svg></button>
         <button type="button" class="iconbtn" id="switchbtn" title="Switch account… (saves a handoff and lets another account carry on)"><svg class="icon"><use href="#i-swap"/></svg></button>
         <textarea id="input" rows="1" placeholder="Pick or create a project to start…" disabled></textarea>
         <button class="send" id="stop" type="button" title="Stop the agent" aria-label="Stop"><svg class="icon"><use href="#i-x"/></svg></button>
         <button class="send" id="send" disabled title="Send"><svg class="icon"><use href="#i-send"/></svg></button>
       </form>
-      <div class="hint">Enter to send · Shift+Enter for a new line · pick which account answers on the left</div>
+      <div class="hint">Enter to send · Shift+Enter for a new line · pick the account, model and effort below the message</div>
     </div>
   </main>
 
@@ -708,6 +742,7 @@
       <div class="ugrid">
         <div><div class="sect" style="padding:14px 0 6px">By project</div><table class="utable" id="byproject"></table></div>
         <div><div class="sect" style="padding:14px 0 6px">By model</div><table class="utable" id="bymodel"></table></div>
+        <div><div class="sect" style="padding:14px 0 6px">By role</div><table class="utable" id="byrole"></table></div>
       </div>
       <div class="sect" style="padding:14px 0 6px">Switches</div><table class="utable" id="switchlog"></table>
       <div class="sect" style="padding:14px 0 6px">Limit hits</div><table class="utable" id="hitlog"></table>
@@ -773,6 +808,17 @@
   </div>
 </div>
 
+<div class="scrim" id="teammodal">
+  <div class="modal" role="dialog" aria-label="Team settings">
+    <div class="mhead">
+      <div class="mark"><svg viewBox="0 0 24 24"><use href="#i-team"/></svg></div>
+      <div style="flex:1"><h3>Team mode</h3><p>The master plans and reviews; workers do the parts. Saved for every project.</p></div>
+      <button class="iconbtn" id="teamclose" title="Close"><svg class="icon"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="mbody" id="teambody"></div>
+  </div>
+</div>
+
 <div class="scrim" id="guidemodal">
   <div class="modal wide" role="dialog" aria-label="Guide">
     <div class="mhead">
@@ -789,6 +835,16 @@
       <p>With a Claude or Codex login (or an API key plus Claude Code) the chat works like Claude Code: it reads and edits the files
          <b>inside the project</b> on its own. Anything else — running a command, touching files elsewhere, the internet,
          using the graphics card — shows a yellow card first: <b>Allow once</b>, <b>Allow this session</b> or <b>Deny</b>. The ✕ button stops it.</p>
+      <h4>Model and effort</h4>
+      <p>Below the message box, next to the account: which <b>model</b> answers (Opus, Sonnet, Haiku, Fable — or Codex's own list)
+         and its <b>effort</b>, how hard it thinks. Higher effort is better on hard work but slower and uses more of the limit;
+         <b>auto</b> lets the service decide.</p>
+      <h4>Team mode</h4>
+      <p>The people button turns the chat into a team: a <b>master</b> (Opus) splits your goal into parts, up to three <b>workers</b>
+         (Sonnet) do them at the same time, and the master checks each part and writes a final review. Two workers never write
+         the same file. If a worker's account hits its limit it saves a handoff and carries on with another account; if none is
+         left the team pauses — press <b>Resume</b> when one is free. A part that still isn't right after two reviews comes back to
+         you. Spend caps per account (Usage page) pause the team before it spends more than you allow.</p>
       <h4>Voiceovers</h4>
       <p>The microphone next to a script (or just asking in the chat) clones your reference voice, reads every section back to check
          nothing was misread, masters to −14 LUFS and adds an mp3, a wav and subtitles to the project.
@@ -976,7 +1032,7 @@ async function openProject(id) {
   document.querySelectorAll("#projects li").forEach(li => li.classList.toggle("active", li.dataset.id === id));
   $("#crumb").innerHTML = p ? `<span>/</span><b>${esc(p.name)}</b>` : "";
   $("#input").disabled = true; $("#send").disabled = true;
-  $("#input").placeholder = "Message " + (p ? p.name : "") + "…";
+  $("#input").placeholder = state.team ? TEAM_HINT : "Message " + (p ? p.name : "") + "…";
   const hist = await (await api(`/api/projects/${id}/chat`)).json();
   if (seq !== state.loadSeq) return;
   renderThread(hist, p);
@@ -1052,6 +1108,8 @@ function renderThread(hist, p) {
       });
       b.appendChild(seg);
     }
+    if (m.role === "assistant" && m.team) teamSummary(b, m);
+    if (m.role === "user" && m.team) b.insertAdjacentHTML("afterbegin", `<small style="display:block;opacity:.7;font-weight:700">TEAM GOAL</small>`);
     if (m.role === "assistant") decorate(b, m);
     if (m.role === "assistant" && m.action) addActionCard(b, m.action, m.time, usedActions.has(m.time));
     // a voiceover still running when the user left: bring its live card back
@@ -1132,6 +1190,12 @@ $("#composer").onsubmit = async e => {
   if (!text.trim() || !state.current || state.busy === state.current) return;
   $("#input").value = ""; grow();
   addMsg("user", text);
+  if (state.team) {
+    const pid = state.current;
+    await consumeReply(() => api(`/api/projects/${pid}/team`, { method: "POST", headers: { "Content-Type": "application/json" },
+                                                                body: JSON.stringify({ goal: text }) }), null);
+    return;
+  }
   const accountId = $("#picker").value || "demo";
   await streamReply(`/api/projects/${state.current}/chat`, { message: text, account_id: accountId }, accountId);
 };
@@ -1167,8 +1231,19 @@ async function consumeReply(request, accountId) {
     raw += v;
     seg.textContent = raw.split("```action")[0].replace(/^\n+/, "").trimEnd();
   };
+  let team = null;
   const handle = ev => {
     if (state.current !== pid) return;              // user moved to another project: the run carries on
+    if (ev.t === "team") { begin(); team = renderTeam(bubble, ev.team, pid, team); return; }
+    if (ev.w) {                                     // a worker's or the master's own activity
+      if (team) teamActivity(team, ev);
+      if (ev.t === "ask") { begin(); seg = null; asks[ev.id] = addAskCard(bubble, { ...ev, title: teamWho(team, ev.w) + ev.title }, pid); }
+      else if (ev.t === "asked") { if (asks[ev.id]) settleAsk(asks[ev.id], ev.answer); }
+      else if (ev.t === "voicejob") { addMsg("user", `Voice ${ev.source} with ${ev.voice}`); addVoiceCard(ev.id);
+                                      thread().appendChild(bubble.closest(".row")); }
+      return;
+    }
+    if (ev.t === "team_note") { if (team) teamNote(team, ev.text); return; }
     if (ev.t === "text") text(ev.v);
     else if (ev.t === "action") { begin(); bubble.querySelectorAll(".seg").forEach((e, i, all) => { if (i === all.length - 1) e.textContent = ev.text; }); proposal = ev; }
     else if (ev.t === "step") {
@@ -1227,6 +1302,130 @@ async function consumeReply(request, accountId) {
   if (state.consumer && state.consumer.pid === pid) state.consumer = null;
   if (state.current === pid) { $("#send").disabled = false; $("#stop").classList.remove("on"); $("#input").focus(); }
 }
+
+// ---------- team mode (P9)
+const TEAM_STATUS = { queued: "waiting", starting: "starting", running: "working", review: "in review", done: "done",
+                      paused: "paused", needs_you: "needs you", failed: "failed", stopped: "stopped" };
+const accShort = id => { const a = state.accounts.find(x => x.id === id); return a ? `${PROV[a.provider].short} · ${accName(a)}` : (id || "—"); };
+function teamWho(team, w) {
+  if (w === "master") return "Master: ";
+  const t = team && team.data && team.data.tasks.find(x => x.id === w);
+  return t ? `${t.title}: ` : "";
+}
+function renderTeam(bubble, data, pid, prev) {
+  const t = prev || { el: document.createElement("div"), act: {}, notes: [] };
+  if (!prev) { t.el.className = "teampanel"; bubble.prepend(t.el); }
+  t.data = data;
+  const states = { planning: "the master is planning…", running: "working", paused: "paused", reviewing: "final review…",
+                   done: "finished", stopped: "stopped" };
+  const tok = data.tasks.reduce((n, x) => n + x.tokens + x.review_in + x.review_out, 0) + data.master_tokens.in + data.master_tokens.out;
+  t.el.innerHTML = `<div class="th">Team <small>${esc(states[data.state] || data.state)} · master ${esc(accShort(data.master))}
+      · ${esc(data.config.master_model)}/${esc(data.config.master_effort || "auto")} → workers ${esc(data.config.worker_model)}/${esc(data.config.worker_effort || "auto")}</small></div>
+    ${data.state === "paused" ? `<div class="tpause"><span style="flex:1">${esc(data.paused_why)}${data.resets_at ? " · next reset " + esc(fmtReset(data.resets_at)) : ""}</span>
+      <button class="btn" data-resume>Resume</button></div>` : ""}
+    ${data.tasks.map(x => `<div class="trow" data-t="${x.id}"><span class="tst ${x.status}">${TEAM_STATUS[x.status] || x.status}</span>
+      <span class="tt">${esc(x.title)}${x.files.length ? ` <small style="color:var(--faint);font-weight:500">${esc(x.files.join(", "))}</small>` : ""}</span>
+      <span class="ta">${esc([x.pins.map(accShort).join(" → "), x.rounds ? `review ${x.rounds}` : "", x.tokens ? num(x.tokens) + " tokens" : ""].filter(Boolean).join(" · "))}${
+        t.act[x.id] ? " · " + esc(t.act[x.id]) : ""}</span>
+      ${x.why ? `<span class="tw">${esc(x.why)}</span>` : ""}
+      ${x.handoffs.map(h => `<span class="ta"><button class="linkbtn" data-ho="${esc(h)}">handoff ${esc(h)}</button></span>`).join("")}</div>`).join("")}
+    ${t.notes.slice(-4).map(n => `<div class="tnote">${esc(n)}</div>`).join("")}
+    <div class="tfoot">${num(tok)} tokens ${["done", "stopped"].includes(data.state) ? "in all" : "so far"}${
+      t.act.master && !["done", "stopped"].includes(data.state) ? " · master: " + esc(t.act.master) : ""}</div>`;
+  const r = t.el.querySelector("[data-resume]");
+  if (r) r.onclick = async () => { r.disabled = true; try { await api(`/api/projects/${pid}/team/resume`, { method: "POST" }); } catch (e) { toast(e.message, true); } };
+  t.el.querySelectorAll("[data-ho]").forEach(b => b.onclick = () => showHandoff(b.dataset.ho));
+  if (data.final) {
+    let f = bubble.querySelector(".seg.final");
+    if (!f) { f = document.createElement("div"); f.className = "seg final"; bubble.appendChild(f); }
+    f.textContent = data.final;
+  }
+  return t;
+}
+function teamActivity(t, ev) {
+  let line = null;
+  if (ev.t === "step") line = `${ev.title} ${ev.detail || ""}`.trim();
+  else if (ev.t === "text" && ev.w !== "master")    // the master's text is JSON plans and verdicts
+    line = ((t.act[ev.w] || "") + ev.v).replace(/\s+/g, " ").slice(-120);
+  else if (ev.t === "team_note") line = ev.text;
+  if (line == null) return;
+  t.act[ev.w] = line;
+  const row = t.el.querySelector(`[data-t="${ev.w}"] .ta`);
+  if (row && t.data) renderTeamRowAct(t, ev.w);
+  else if (ev.w === "master") { const f = t.el.querySelector(".tfoot"); if (f) f.textContent = f.textContent.split(" · master:")[0] + " · master: " + line; }
+}
+function renderTeamRowAct(t, id) {
+  const x = t.data.tasks.find(k => k.id === id), el = t.el.querySelector(`[data-t="${id}"] .ta`);
+  if (!x || !el) return;
+  el.textContent = [x.pins.map(accShort).join(" → "), x.rounds ? `review ${x.rounds}` : "",
+                    x.tokens ? num(x.tokens) + " tokens" : "", t.act[id]].filter(Boolean).join(" · ");
+}
+function teamNote(t, text) {
+  t.notes.push(text);
+  const n = document.createElement("div"); n.className = "tnote"; n.textContent = text;
+  t.el.insertBefore(n, t.el.querySelector(".tfoot"));
+}
+function teamSummary(bubble, m) {            // a finished team run, from the chat history
+  const el = document.createElement("div"); el.className = "teampanel";
+  el.innerHTML = `<div class="th">Team <small>${esc(m.team.state)} · master ${esc(accShort(m.team.master))}</small></div>` +
+    m.team.tasks.map(x => `<div class="trow"><span class="tst ${x.status}">${TEAM_STATUS[x.status] || x.status}</span>
+      <span class="tt">${esc(x.title)}</span><span class="ta">${esc([x.pins.map(accShort).join(" → "),
+        x.rounds ? `review ${x.rounds}` : "", x.tokens ? num(x.tokens) + " tokens" : ""].filter(Boolean).join(" · "))}</span>
+      ${x.why ? `<span class="tw">${esc(x.why)}</span>` : ""}
+      ${(x.handoffs || []).map(h => `<span class="ta"><button class="linkbtn" data-ho="${esc(h)}">handoff ${esc(h)}</button></span>`).join("")}</div>`).join("");
+  el.querySelectorAll("[data-ho]").forEach(b => b.onclick = () => showHandoff(b.dataset.ho));
+  bubble.prepend(el);
+}
+
+state.team = false;
+const TEAM_HINT = "Give the team a goal — the master splits it, workers do the parts, the master reviews…";
+async function teamSettings() {
+  try { state.teamcfg = await (await api("/api/team/settings")).json(); } catch { return; }
+  const s = state.teamcfg.settings;
+  $("#teamchip").textContent = `${s.master_model}·${s.master_effort || "auto"} → ${s.worker_model}·${s.worker_effort || "auto"} ×${s.max_workers}`;
+}
+function setTeam(on) {
+  state.team = on;
+  $("#teambtn").classList.toggle("on", on);
+  $("#teamchip").style.display = on ? "" : "none";
+  $("#mpick").style.opacity = on ? ".45" : "";
+  $("#mpick").title = on ? "In team mode the team settings choose the models (Codex workers keep these)" : "Model and effort (how hard it thinks) for this account";
+  const cur = state.projects.find(x => x.id === state.current);
+  if (state.current) $("#input").placeholder = on ? TEAM_HINT : "Message " + (cur ? cur.name : "") + "…";
+  if (on) teamSettings();
+}
+$("#teambtn").onclick = () => setTeam(!state.team);
+$("#teamchip").onclick = openTeam;
+async function openTeam() {
+  await teamSettings();
+  const c = state.teamcfg, s = c.settings;
+  const opt = (list, v) => list.map(([val, label]) => `<option value="${esc(val)}" ${val === (v ?? "") ? "selected" : ""}>${esc(label)}</option>`).join("");
+  const models = c.models.map(m => [m.id, m.label]);
+  const efforts = [["auto", "auto"], ...c.efforts.map(e => [e, e])];
+  const masters = [["", "first Claude account (automatic)"], ...state.accounts.filter(a => a.id !== "demo" && a.enabled)
+                   .map(a => [a.id, `${PROV[a.provider].short} · ${accName(a)}`])];
+  $("#teambody").innerHTML = `<div class="tform">
+      <label>Master model</label><select id="tmm">${opt(models, s.master_model)}</select>
+      <label>Master effort</label><select id="tme">${opt(efforts, s.master_effort || "auto")}</select>
+      <label>Worker model</label><select id="twm">${opt(models, s.worker_model)}</select>
+      <label>Worker effort</label><select id="twe">${opt(efforts, s.worker_effort || "auto")}</select>
+      <label>Workers at once</label><select id="tmw">${opt([["1", "1"], ["2", "2"], ["3", "3"]], String(s.max_workers))}</select>
+      <label>Master account</label><select id="tma">${opt(masters, s.master_account || "")}</select></div>
+    <p class="tnote" style="margin-top:14px">Codex accounts that work in the team use their own model and effort (set them next to the
+      account picker). Reviews stop after ${s.review_rounds} rounds or ${num(s.stage_budget)} tokens per task and ask you instead.
+      Spend caps per account are on the Usage page.</p>
+    <div style="display:flex;justify-content:flex-end;margin-top:12px"><button class="btn primary" id="tsave">Save</button></div>`;
+  $("#tsave").onclick = async () => {
+    const body = { master_model: $("#tmm").value, master_effort: $("#tme").value, worker_model: $("#twm").value,
+                   worker_effort: $("#twe").value, max_workers: Number($("#tmw").value), master_account: $("#tma").value || null };
+    try {
+      await api("/api/team/settings", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      toast("Team settings saved"); $("#teammodal").classList.remove("open"); teamSettings();
+    } catch (e) { toast(e.message, true); }
+  };
+  $("#teammodal").classList.add("open");
+}
+$("#teamclose").onclick = () => $("#teammodal").classList.remove("open");
 
 const ASK_BUTTONS = {
   normal: [["deny", "Deny", "btn"], ["session", "Allow this session", "btn"], ["once", "Allow once", "btn primary"]],
@@ -1406,6 +1605,7 @@ function renderPicker() {
   if (best) sel.value = best.id;
   const cur = state.accounts.find(a => a.id === sel.value);
   $("#pickdot").className = "pdot " + (cur ? cur.status : "");
+  if (state.choices[sel.value]) renderChoices(sel.value); else loadChoices(sel.value);
   const real = state.accounts.filter(a => a.id !== "demo");
   const bad = real.filter(a => a.enabled && a.status === "error").length;
   const badge = $("#accbadge");
@@ -1414,6 +1614,48 @@ function renderPicker() {
   badge.className = "badge" + (bad ? " bad" : "");
 }
 $("#picker").onchange = () => { state.userPicked = true; renderPicker(); };
+
+// ---------- model + effort for the chosen account (Claude, API key, Codex)
+const EFFORT_NAMES = { low: "low effort", medium: "medium effort", high: "high effort", xhigh: "extra-high effort",
+                       max: "max effort", ultra: "ultra effort", minimal: "minimal effort", none: "no thinking" };
+state.choices = {};
+async function loadChoices(id, refresh) {
+  if (!id || id === "demo") { $("#mpick").style.display = "none"; return; }
+  try {
+    if (refresh || !state.choices[id])
+      state.choices[id] = await (await api(`/api/accounts/${id}/models${refresh ? "?refresh=true" : ""}`)).json();
+  } catch { $("#mpick").style.display = "none"; return; }
+  if ($("#picker").value === id) renderChoices(id);
+}
+function renderChoices(id) {
+  const c = state.choices[id];
+  if (!c || !c.models.length) { $("#mpick").style.display = "none"; return; }
+  $("#mpick").style.display = "";
+  const ms = $("#modelpick"), es = $("#effortpick");
+  ms.innerHTML = c.models.map(m => `<option value="${esc(m.id || "")}">${esc(m.label)}</option>`).join("");
+  ms.value = c.model || "";
+  if (ms.selectedIndex < 0) ms.selectedIndex = 0;
+  const m = c.models[ms.selectedIndex] || c.models[0];
+  const efforts = m.efforts || [];
+  es.innerHTML = `<option value="auto">auto effort</option>` +
+    efforts.map(e => `<option value="${esc(e)}">${esc(EFFORT_NAMES[e] || e + " effort")}</option>`).join("");
+  es.value = c.effort && efforts.includes(c.effort) ? c.effort : "auto";
+  es.disabled = !efforts.length;
+  es.title = efforts.length ? "How hard the model thinks: higher = better on hard work, slower, uses more of the limit"
+                            : "This model has no effort setting";
+}
+async function saveChoice(field, value) {
+  const id = $("#picker").value, c = state.choices[id];
+  if (!c) return;
+  try {
+    await api(`/api/accounts/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" },
+                                      body: JSON.stringify({ [field]: value }) });
+    c[field] = value === "auto" || value === "" ? null : value;
+  } catch (e) { toast(e.message, true); }
+  renderChoices(id);
+}
+$("#modelpick").onchange = () => saveChoice("model", $("#modelpick").value);
+$("#effortpick").onchange = () => saveChoice("effort", $("#effortpick").value);
 
 function meterHTML(rl) {
   if (!rl || !rl.windows) return "";
@@ -1895,6 +2137,11 @@ async function loadUsage() {
           switch at <input type="number" min="2" max="100" value="${c.switch_pct}" data-k="switch_pct">%
           ${c.usage_kind !== "exact" ? `· 5-hour budget <input class="wide" type="number" min="1" placeholder="tokens"
                value="${c.budget_tokens_5h || ""}" data-k="budget_tokens_5h"> tokens` : ""}</div>
+        <div class="usets" title="Team mode and agents stop and ask when a cap is reached (empty = no cap)">spend caps:
+          per task <input class="wide" type="number" min="1" placeholder="tokens" value="${(c.caps || {}).cap_task_tokens || ""}" data-cap="cap_task_tokens"> tokens
+          · per day <input class="wide" type="number" min="1" placeholder="tokens" value="${(c.caps || {}).cap_day_tokens || ""}" data-cap="cap_day_tokens"> tokens
+          / $<input type="number" min="0.01" step="0.01" placeholder="—" value="${(c.caps || {}).cap_day_usd || ""}" data-cap="cap_day_usd">
+          <span>· today ${num((c.today || {}).tokens || 0)} tokens${(c.today || {}).cost_usd ? ", " + money(c.today.cost_usd) : ""}</span></div>
       </div>
       <div class="uord">
         <button class="iconbtn" data-move="-1" ${i === 0 ? "disabled" : ""} title="Use earlier"><svg class="icon"><use href="#i-uparr"/></svg></button>
@@ -1910,6 +2157,15 @@ async function loadUsage() {
       await api(`/api/accounts/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ [k]: v }) });
       toast("Saved"); await loadUsage(); await loadAccounts();
+    } catch (err) { toast(err.message, true); loadUsage(); }
+  });
+  $("#ucards").querySelectorAll("input[data-cap]").forEach(inp => inp.onchange = async () => {
+    const id = inp.closest(".ucard").dataset.id, k = inp.dataset.cap;
+    const v = inp.value.trim() === "" ? null : Number(inp.value);
+    try {
+      await api(`/api/accounts/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ caps: { [k]: v } }) });
+      toast("Saved"); await loadUsage();
     } catch (err) { toast(err.message, true); loadUsage(); }
   });
   $("#ucards").querySelectorAll("button[data-move]").forEach(b => b.onclick = async () => {
@@ -1931,6 +2187,9 @@ async function loadUsage() {
         u.by_project.map(r => [esc(projName(r.project)), num(r.requests), num(r.tokens), money(r.cost_usd)]), "Nothing yet");
   table("#bymodel", [["Model"], ["Replies", "num"], ["Tokens", "num"], ["Cost", "num"]],
         u.by_model.map(r => [esc(r.model || "—"), num(r.requests), num(r.tokens), money(r.cost_usd)]), "Nothing yet");
+  const ROLE = { chat: "Chat", agent: "Agent", master: "Team master", worker: "Team worker" };
+  table("#byrole", [["Role"], ["Replies", "num"], ["Tokens", "num"], ["Cost", "num"]],
+        (u.by_role || []).map(r => [esc(ROLE[r.role] || r.role), num(r.requests), num(r.tokens), money(r.cost_usd)]), "Nothing yet");
   table("#switchlog", [["When"], ["Project"], ["From"], ["To"], ["Why"], ["Usage", "num"], ["Handoff"]],
         sw.slice(0, 12).map(s => [when(s.ts), esc(projName(s.project)), esc(accLabel(s.from_acc)), esc(accLabel(s.to_acc)),
           esc(s.trigger), s.usage_at_switch == null ? "—" : Math.round(s.usage_at_switch) + "%", esc(s.handoff || "")]),

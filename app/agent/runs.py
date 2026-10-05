@@ -68,6 +68,9 @@ class Runs:
 
     async def permit(self, run: Run, tool: str, tool_input: dict, *, gate=None) -> tuple[bool, str]:
         """Apply the policy; ask the user when needed. Returns (allowed, message for the agent)."""
+        locked = getattr(run, "lock_check", None) and run.lock_check(tool, tool_input)   # team mode
+        if locked:
+            return False, locked
         verdict, reason = policy.decide(tool, tool_input, run.root)
         if verdict == "allow":
             return True, ""

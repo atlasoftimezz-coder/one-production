@@ -8,15 +8,12 @@ from typing import AsyncIterator
 
 import httpx
 
+from ..models import API_IDS
 from .base import Event, Fail, Text, Usage, classify_status
 
 DEFAULT_BASE = "https://api.anthropic.com"
 VERSION = "2023-06-01"
-MODELS = {
-    "opus": "claude-opus-5-5",
-    "sonnet": "claude-sonnet-5-5",
-    "haiku": "claude-haiku-4-5-20251001",
-}
+MODELS = API_IDS                    # opus / sonnet / haiku / fable -> API model id
 
 
 class AnthropicAPI:
@@ -57,13 +54,17 @@ class AnthropicAPI:
             res.update(method="API key")
         return res
 
-    async def stream(self, account: dict, prompt: str, model: str | None) -> AsyncIterator[Event]:
+    async def stream(self, account: dict, prompt: str, model: str | None,
+                     effort: str | None = None) -> AsyncIterator[Event]:
         key = self.get_key(account)
         if not key:
             yield Fail("auth", "no API key stored for this account")
             return
-        body = {"model": MODELS.get(model or "sonnet", MODELS["sonnet"]), "max_tokens": 4096,
+        # current models think adaptively by default; effort sets how deep (output_config.effort)
+        body = {"model": MODELS.get(model or "sonnet", MODELS["sonnet"]), "max_tokens": 16000,
                 "stream": True, "messages": [{"role": "user", "content": prompt}]}
+        if effort:
+            body["output_config"] = {"effort": effort}
         usage = Usage(model=body["model"])
         try:
             async with self._client() as c:

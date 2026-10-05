@@ -123,12 +123,15 @@ class FakeAgent:
         self.prompt = prompt
         self.s.seen.append({"prompt": prompt, "cwd": self.o.cwd, "env": dict(self.o.env), "resume": self.o.resume,
                             "setting_sources": self.o.setting_sources, "system": self.o.system_prompt,
-                            "cli": self.o.cli_path, "mcp": list(self.o.mcp_servers)})
+                            "cli": self.o.cli_path, "mcp": list(self.o.mcp_servers),
+                            "model": self.o.model, "effort": self.o.effort})
 
     async def _tool(self, n, name, args):
         hook = self.o.hooks["PreToolUse"][0].hooks[0]
         out = await hook({"tool_name": name, "tool_input": args}, f"t{n}", None)
         decision = out["hookSpecificOutput"]["permissionDecision"]
+        if decision == "deny":                       # like Claude Code: the tool never runs
+            return out["hookSpecificOutput"]["permissionDecisionReason"], True
         if decision == "ask":
             res = await self.o.can_use_tool(name, args, None)
             if type(res).__name__ == "PermissionResultDeny":
@@ -310,6 +313,14 @@ class FakeCodex:
             elif m in ("thread/start", "thread/resume"):
                 tid = p.get("threadId") or "th-1"
                 await self.outbox.put({"id": rid, "result": {"thread": {"id": tid}, "model": "gpt-fake"}})
+            elif m == "model/list":
+                await self.outbox.put({"id": rid, "result": {"data": self.st.get("models", [
+                    {"id": "gpt-fast", "displayName": "GPT Fast", "isDefault": True, "hidden": False,
+                     "defaultReasoningEffort": "low",
+                     "supportedReasoningEfforts": [{"reasoningEffort": "low", "description": ""},
+                                                   {"reasoningEffort": "ultra", "description": ""}]},
+                    {"id": "gpt-secret", "displayName": "Hidden", "hidden": True,
+                     "supportedReasoningEfforts": []}]), "nextCursor": None}})
             elif m == "turn/start":
                 await self.outbox.put({"id": rid, "result": {"turn": {"id": "tu-1"}}})
                 turn_task = asyncio.get_running_loop().create_task(self._turn())

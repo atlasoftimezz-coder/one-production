@@ -2,6 +2,18 @@
 
 What changed in each version, in plain words. "Check for updates" shows the newest section.
 
+## 0.9.0 - 2026-10-05
+- Team mode (the people button next to the account): give a goal; a master (Opus 5.5) splits it
+  into parts, up to 3 workers (Sonnet 5.5) do them at the same time, and the master reviews each
+  part and writes a final review. Two workers never write the same file; voiceovers wait their turn.
+- A worker that hits a usage limit saves a handoff and carries on on another account (never from
+  one Claude login to another); with no account left the team pauses until one resets.
+- Reviews stop after 2 rounds or their token budget and ask you instead of looping.
+- Pick the model and the effort (how hard it thinks) for each account, right below the message box:
+  Claude (Opus, Sonnet, Haiku, Fable), API keys, and Codex (its own list).
+- Spend caps per account on the Usage page (tokens per task, tokens or dollars per day), plus
+  usage by role (chat, agent, team master, team worker).
+
 ## 0.8.0 - 2026-10-04
 - One Production now comes as one zip with its own Python: extract it anywhere and double-click
   "One Production". No admin rights, nothing to install first.

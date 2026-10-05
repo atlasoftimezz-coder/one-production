@@ -51,6 +51,9 @@ class Ledger:
         self._lock = threading.Lock()
         with self._conn() as c:
             c.executescript(SCHEMA)
+            cols = {r[1] for r in c.execute("PRAGMA table_info(calls)")}
+            if "role" not in cols:                     # P9: chat / agent / master / worker
+                c.execute("ALTER TABLE calls ADD COLUMN role TEXT")
 
     def _conn(self) -> sqlite3.Connection:
         c = sqlite3.connect(self.path, timeout=10)
@@ -60,18 +63,18 @@ class Ledger:
     # ---------------------------------------------------------------- writes
     def record_call(self, *, account: str, provider: str, project: str | None, usage=None,
                     outcome: str = "ok", err_kind: str | None = None, windows: dict | None = None,
-                    ts: float | None = None) -> None:
+                    ts: float | None = None, role: str | None = None) -> None:
         w = windows or {}
         u5 = (w.get("five_hour") or {}).get("utilization")
         u7 = (w.get("seven_day") or {}).get("utilization")
         with self._lock, self._conn() as c:
             c.execute("INSERT INTO calls (ts, account, provider, project, model, in_tok, out_tok, cache_read,"
-                      " cache_write, cost_usd, outcome, err_kind, util_5h, util_7d) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                      " cache_write, cost_usd, outcome, err_kind, util_5h, util_7d, role) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                       (ts or time.time(), account, provider, project,
                        getattr(usage, "model", None), getattr(usage, "input_tokens", 0) or 0,
                        getattr(usage, "output_tokens", 0) or 0, getattr(usage, "cache_read_tokens", 0) or 0,
                        getattr(usage, "cache_write_tokens", 0) or 0, getattr(usage, "cost_usd", None),
-                       outcome, err_kind, u5, u7))
+                       outcome, err_kind, u5, u7, role))
 
     def record_switch(self, *, project: str, from_acc: str, to_acc: str | None, trigger: str,
                       usage_at_switch: float | None, handoff: str | None) -> None:
@@ -92,6 +95,13 @@ class Ledger:
                           (account, since)).fetchone()
         return int(r[0])
 
+    def spent_since(self, account: str, since: float) -> tuple[int, float]:
+        """(tokens, dollars) - dollars only where the client reports a cost."""
+        with self._conn() as c:
+            r = c.execute("SELECT COALESCE(SUM(in_tok + out_tok), 0), COALESCE(SUM(cost_usd), 0) FROM calls"
+                          " WHERE account=? AND ts>=?", (account, since)).fetchone()
+        return int(r[0]), float(r[1])
+
     def summary(self, range_name: str) -> dict:
         since = range_start(range_name)
         with self._conn() as c:
@@ -105,11 +115,14 @@ class Ledger:
             by_model = [dict(r) for r in c.execute(
                 "SELECT COALESCE(model, provider) AS model, COUNT(*) AS requests, SUM(in_tok + out_tok) AS tokens,"
                 " SUM(cost_usd) AS cost_usd FROM calls WHERE ts>=? GROUP BY 1 ORDER BY tokens DESC", (since,))]
+            by_role = [dict(r) for r in c.execute(
+                "SELECT COALESCE(role, 'chat') AS role, COUNT(*) AS requests, SUM(in_tok + out_tok) AS tokens,"
+                " SUM(cost_usd) AS cost_usd FROM calls WHERE ts>=? GROUP BY 1 ORDER BY tokens DESC", (since,))]
             totals = dict(c.execute(
                 "SELECT COUNT(*) AS requests, COALESCE(SUM(in_tok),0) AS in_tok, COALESCE(SUM(out_tok),0) AS out_tok,"
                 " SUM(cost_usd) AS cost_usd FROM calls WHERE ts>=?", (since,)).fetchone())
         return {"range": range_name, "since": since, "accounts": per_acc, "by_project": by_project,
-                "by_model": by_model, "totals": totals}
+                "by_model": by_model, "by_role": by_role, "totals": totals}
 
     def switches(self, limit: int = 50) -> list[dict]:
         with self._conn() as c:
