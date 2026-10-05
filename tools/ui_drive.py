@@ -180,7 +180,13 @@ try:
         js("document.querySelector('#knowledgequery').value='ripple'; document.querySelector('#knowledgesearch').requestSubmit()")
         check("retrieval displays a cited passage", wait_for("document.querySelector('#knowledgeresults').innerText.includes('section 1') && document.querySelector('#knowledgeresults').innerText.includes('downstream clips')"))
         check("source opening uses protected fetch", js("document.querySelector('#knowledgeresults [data-source]') !== null"))
+        js("document.querySelector('#learningtitle').value='Transitions'; document.querySelector('#learningtext').value='Use restrained transitions.'; document.querySelector('#learningform').requestSubmit()")
+        check("direction saved in channel memory", wait_for("document.querySelector('#learninglist').innerText.includes('Use restrained transitions.')"))
+        js("document.querySelector('#learninglist [data-correct]').click(); document.querySelector('#learningtext').value='Keep transitions subtle.'; document.querySelector('#learningform').requestSubmit()")
+        check("correction replaces active direction", wait_for("document.querySelector('#learninglist').innerText.includes('Keep transitions subtle.') && !document.querySelector('#learninglist').innerText.includes('Use restrained transitions.')"))
         shot("knowledge-library")
+        js("document.querySelector('#learninglist [data-learning-action=forget]').click()")
+        check("forgotten direction leaves active memory", wait_for("document.querySelector('#learninglist').innerText.includes('No saved directions')"))
         js("document.querySelector('#knowledgeclose').click()")
 
     # accounts (P2) - only when the server runs against the fake CLIs

@@ -102,3 +102,32 @@ async function openKnowledgeSource(id, page=1) {
 }
 
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeKnowledge(); });
+
+let correctingLesson = '';
+async function refreshLearning() {
+  const data = await (await api('/api/projects/' + encodeURIComponent(knowledgeProject) + '/learning')).json();
+  const lessons = data.lessons.filter(l => ['active','candidate'].includes(l.state));
+  $('#learningpanel').innerHTML = `<h3>Directions and learned methods</h3><p>Explicit directions are reused automatically. Worker suggestions wait here for review; verified methods include evidence. Current chat instructions take precedence.</p>
+    <form id="learningform" style="display:grid;gap:8px"><label>Title <input id="learningtitle" maxlength="100" required></label><label>Direction <textarea id="learningtext" maxlength="3000" required placeholder="e.g. Use restrained transitions and keep captions clear of faces."></textarea></label><label>Remember for <select id="learningscope"><option value="project">This project</option><option value="channel">This channel</option><option value="global">All projects</option></select></label><button class="btn" id="learningsave">Remember direction</button></form>
+    <div id="learninglist">${lessons.map(l => `<article style="border-top:1px solid var(--line);padding:12px 0"><strong>${esc(l.title)}</strong><p>${esc(l.state)} · ${esc(l.scope)} · ${esc(l.kind)}</p><p style="white-space:pre-wrap">${esc(l.text)}</p><details><summary>Evidence</summary><pre style="white-space:pre-wrap">${esc(JSON.stringify(l.evidence,null,2))}</pre></details>${l.state === 'candidate' ? '<button class="btn" data-lesson="' + l.id + '" data-learning-action="approve">Use as my guidance</button>' : '<button class="btn" data-correct="' + l.id + '">Correct</button>'} <button class="btn" data-lesson="${l.id}" data-learning-action="forget">Forget</button></article>`).join('') || '<p>No saved directions yet.</p>'}</div>`;
+  correctingLesson = '';
+  $('#learningscope').value = data.default_scope;
+  $('#learningform').onsubmit = async e => {
+    e.preventDefault();
+    try {
+      await api('/api/projects/' + encodeURIComponent(knowledgeProject) + '/learning', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:$('#learningtitle').value,text:$('#learningtext').value,scope:$('#learningscope').value,supersedes:correctingLesson})});
+      await refreshLearning(); toast('Direction remembered');
+    } catch (error) { toast(error.message,true); }
+  };
+  $('#learninglist').querySelectorAll('[data-learning-action]').forEach(b => b.onclick = async () => {
+    try { await api('/api/projects/' + encodeURIComponent(knowledgeProject) + '/learning/' + b.dataset.lesson + '/' + b.dataset.learningAction,{method:'POST'}); await refreshLearning(); }
+    catch (e) { toast(e.message,true); }
+  });
+  $('#learninglist').querySelectorAll('[data-correct]').forEach(b => b.onclick = () => {
+    const old = lessons.find(l => l.id === b.dataset.correct);
+    correctingLesson = old.id;
+    $('#learningtitle').value = old.title; $('#learningtext').value = old.text;
+    $('#learningscope').value = old.scope; $('#learningscope').disabled = true;
+    $('#learningsave').textContent = 'Save correction'; $('#learningtext').focus();
+  });
+}

@@ -20,7 +20,8 @@ WRITES = {"Write", "Edit", "MultiEdit", "NotebookEdit"}
 SHELL = {"Bash", "PowerShell", "BashOutput", "KillShell", "KillBash", "REPL"}
 WEB = {"WebFetch", "WebSearch"}
 HARMLESS = {"TodoWrite", "Task", "Agent", "ExitPlanMode", "EnterPlanMode", "AskUserQuestion", "ToolSearch"}
-STUDIO_LOOK = {"list_voices", "script_stats", "voiceover_status", "knowledge_sources", "knowledge_search", "knowledge_read"}
+STUDIO_LOOK = {"list_voices", "script_stats", "voiceover_status", "knowledge_sources", "knowledge_search", "knowledge_read", "learning_recall"}
+STUDIO_MEMORY = {"remember_direction", "propose_lesson"}
 STUDIO_GATED = {"make_voiceover"}
 PATH_KEYS = ("file_path", "path", "notebook_path", "directory", "cwd")
 
@@ -29,7 +30,7 @@ def studio_name(tool: str) -> str | None:
     """'mcp__studio__make_voiceover' (Claude) or 'make_voiceover' (Codex dynamic tool) -> name."""
     if tool.startswith("mcp__studio__"):
         return tool[len("mcp__studio__"):]
-    return tool if tool in STUDIO_LOOK | STUDIO_GATED else None
+    return tool if tool in STUDIO_LOOK | STUDIO_GATED | STUDIO_MEMORY else None
 
 
 def inside(path: str | None, root: Path) -> bool:
@@ -59,6 +60,8 @@ def decide(tool: str, tool_input: dict, root: Path) -> tuple[str, str]:
     s = studio_name(tool)
     if s in STUDIO_LOOK:
         return "allow", "looks only"
+    if s in STUDIO_MEMORY:
+        return "allow", "records an explicit direction or an unverified candidate"
     if s in STUDIO_GATED:
         return "gate", "uses the GPU"
     if tool in HARMLESS:
