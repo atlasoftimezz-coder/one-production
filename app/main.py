@@ -31,6 +31,7 @@ from .gates_api import Gates, mount as mount_gates
 from .editor import Editor
 from .editor_api import mount as mount_editor
 from .animation import Animation
+from .packaging import Packaging
 from . import handoff
 from .accounts import DEFAULT_SWITCH, DEFAULT_WARN, PROVIDERS, SAME_SERVICE_SWITCHING, SUBSCRIPTIONS, \
     AccountError, Accounts
@@ -265,6 +266,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
     gates = Gates(store, settings.data_dir, voice_svc, voice_jobs)
     editor = Editor(store, settings.data_dir, gates)
     animation = Animation(store, settings.data_dir)
+    packaging = Packaging(store, settings.data_dir, gates)
     runs = Runs()
     backups = Backups(settings.data_dir, store, redact)
     profile = Profile(settings.data_dir)
@@ -364,7 +366,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
     mount_learning(app, learning, _project)
     mount_resolve(app, resolve, _project, WEB_DIR)
     mount_gates(app, gates, _project)
-    mount_editor(app, editor, approvals, _project, animation)
+    mount_editor(app, editor, approvals, _project, animation, packaging)
 
     def _account(acc_id: str) -> dict:
         if acc_id == "demo":
@@ -1176,7 +1178,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
         # a fresh session (new project, or another account taking over) gets the recent chat
         prompt = message if sid else build_prompt(store.history(pid), message).replace(SYSTEM + "\n\n", "", 1)
         store.append_message(pid, "user", message)
-        studio = Studio(pid, store, voice_svc, voice_jobs, tuned=tuner.for_voice, knowledge=knowledge, learning=learning, resolve=resolve, gates=gates, editor=editor, animation=animation,
+        studio = Studio(pid, store, voice_svc, voice_jobs, tuned=tuner.for_voice, knowledge=knowledge, learning=learning, resolve=resolve, gates=gates, editor=editor, animation=animation, packaging=packaging,
                         on_job=lambda job: run.emit({"t": "voicejob", "id": job["id"], "source": job["source"],
                                                      "voice": job["voice"]}))
 
@@ -1316,7 +1318,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
             files, voices, presets, jobs = await studio_state(pid)
             instructions = (STUDIO_INSTRUCTIONS + "\n\n" + actions.context(files, voices, presets, jobs)
                             + "\n\n" + note + "\n\n" + learning.instructions(pid, prompt))
-            studio = Studio(pid, store, voice_svc, voice_jobs, tuned=tuner.for_voice, knowledge=knowledge, learning=learning, resolve=resolve, gates=gates, editor=editor, animation=animation,
+            studio = Studio(pid, store, voice_svc, voice_jobs, tuned=tuner.for_voice, knowledge=knowledge, learning=learning, resolve=resolve, gates=gates, editor=editor, animation=animation, packaging=packaging,
                             on_job=lambda job: sub.emit({"t": "voicejob", "id": job["id"], "source": job["source"],
                                                          "voice": job["voice"]}))
             eff = M.effort_for(acc["provider"], model, effort, acc.get("codex_models"))

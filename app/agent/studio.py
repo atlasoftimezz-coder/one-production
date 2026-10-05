@@ -50,6 +50,9 @@ files there directly. Besides your usual tools you have studio tools:
 - Video editing (ffmpeg, the default): write an edit list JSON in this folder (see render_edit) whose
   visuals cover the voiceover, then render_edit (asks the owner first: minutes of CPU) and follow it
   with edit_status. Every render is checked by the video gate automatically.
+- Packaging: write package JSON (title, 3-5 title_options, description, tags, video, subtitles,
+  script, thumbnail_svg drawn 1280x720) and call package_episode; it adds chapters from the script's
+  headings timed to the voice and bundles everything under episode/<name>/ with the package gate.
 - quality_gate measures a finished stage (voice, video, package) against fixed limits. A stage is
   done only when its gate passes; report the failed numbers instead of calling it done.
 Be direct and practical. Plain text, no markdown tables."""
@@ -67,12 +70,13 @@ class Studio:
     """Studio tools bound to one project. `on_job(job)` lets the run show the voice card."""
 
     def __init__(self, pid: str, store, voice_svc, voice_jobs, on_job: Callable[[dict], None],
-                 tuned: Callable[[str], dict | None] | None = None, knowledge=None, learning=None, resolve=None, gates=None, editor=None, animation=None):
+                 tuned: Callable[[str], dict | None] | None = None, knowledge=None, learning=None, resolve=None, gates=None, editor=None, animation=None, packaging=None):
         self.knowledge = knowledge
         self.resolve = resolve
         self.gates = gates
         self.editor = editor
         self.animation = animation
+        self.packaging = packaging
         self.learning = learning
         self.pid, self.store, self.svc, self.jobs, self.on_job = pid, store, voice_svc, voice_jobs, on_job
         self.tuned = tuned or (lambda voice: None)          # settings tune.py found for a voice

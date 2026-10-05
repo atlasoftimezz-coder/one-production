@@ -17,7 +17,11 @@ class BuildIn(BaseModel):
     edit: str = ''
 
 
-def mount(app, editor, approvals, project_check, animation=None):
+class PackageIn(BaseModel):
+    spec: str
+
+
+def mount(app, editor, approvals, project_check, animation=None, packaging=None):
     def guarded(pid, fn):
         project_check(pid)
         try:
@@ -38,6 +42,11 @@ def mount(app, editor, approvals, project_check, animation=None):
     def build(pid: str, body: BuildIn):
         """Drawings -> frames -> timed edit list. Light CPU (the browser's screenshot), no approval."""
         return guarded(pid, lambda: animation.build(pid, body.shots, body.edit))
+
+    @app.post('/api/projects/{pid}/package')
+    def package(pid: str, body: PackageIn):
+        """Bundle video, subtitles, thumbnail and metadata under episode/<name>/ and run the package gate."""
+        return guarded(pid, lambda: packaging.build(pid, body.spec))
 
     @app.post('/api/projects/{pid}/edit/render')
     def render(pid: str, body: RenderIn):

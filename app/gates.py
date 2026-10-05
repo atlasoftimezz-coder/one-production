@@ -135,25 +135,9 @@ def package_gate(meta: dict, *, video_seconds: float | None = None, thumbnail: P
                     len(description), f'<= {DESCRIPTION_MAX} characters, no < or >'),
               check('tags length', len(','.join(tags)) <= TAGS_MAX, len(','.join(tags)), f'<= {TAGS_MAX} characters')]
     chapters = meta.get('chapters') or []
-    try:
-        times = [parse_stamp(c['time']) for c in chapters]
-        problems = []
-        if len(times) < CHAPTERS_MIN:
-            problems.append(f'{len(times)} chapters, YouTube needs {CHAPTERS_MIN}')
-        if times and times[0] != 0:
-            problems.append('the first chapter must start at 0:00')
-        ends = times[1:] + ([video_seconds] if video_seconds else [])
-        short = [chapters[i]['title'] for i, (a, b) in enumerate(zip(times, ends)) if b - a < CHAPTER_SECONDS]
-        if short:
-            problems.append(f'shorter than {CHAPTER_SECONDS} s: {", ".join(map(str, short[:3]))}')
-        if any(b <= a for a, b in zip(times, times[1:])):
-            problems.append('chapters out of order')
-        if video_seconds and times and times[-1] >= video_seconds:
-            problems.append('a chapter starts after the video ends')
-        checks.append(check('chapters', not problems, len(times), f'>= {CHAPTERS_MIN}, from 0:00, each >= {CHAPTER_SECONDS} s',
-                            '; '.join(problems)))
-    except (KeyError, ValueError, TypeError):
-        checks.append(check('chapters', False, None, 'm:ss times', 'a chapter time is not m:ss or h:mm:ss'))
+    checks.append(chapter_check(chapters, video_seconds) if chapters else
+                  check('chapters', None, 0, f'>= {CHAPTERS_MIN}, from 0:00, each >= {CHAPTER_SECONDS} s', 'no chapters',
+                        required=False))                 # chapters are optional on YouTube; checked when present
     if thumbnail:
         size, dims = Path(thumbnail).stat().st_size, png_size(Path(thumbnail))
         checks.append(check('thumbnail', dims == THUMB_SIZE and size <= THUMB_BYTES, f'{dims[0]}x{dims[1]}, {size // 1024} KB' if dims else 'unreadable',
@@ -161,6 +145,27 @@ def package_gate(meta: dict, *, video_seconds: float | None = None, thumbnail: P
     else:
         checks.append(check('thumbnail', None, None, '1280x720, <= 2 MB', 'no thumbnail yet', required=False))
     return verdict('package', checks)
+
+
+def chapter_check(chapters: list[dict], video_seconds: float | None) -> dict:
+    try:
+        times = [parse_stamp(c['time']) for c in chapters]
+    except (KeyError, ValueError, TypeError):
+        return check('chapters', False, None, 'm:ss times', 'a chapter time is not m:ss or h:mm:ss')
+    problems = []
+    if len(times) < CHAPTERS_MIN:
+        problems.append(f'{len(times)} chapters, YouTube needs {CHAPTERS_MIN}')
+    if times[0] != 0:
+        problems.append('the first chapter must start at 0:00')
+    ends = times[1:] + ([video_seconds] if video_seconds else [])
+    short = [chapters[i]['title'] for i, (a, b) in enumerate(zip(times, ends)) if b - a < CHAPTER_SECONDS]
+    if short:
+        problems.append(f'shorter than {CHAPTER_SECONDS} s: {", ".join(map(str, short[:3]))}')
+    if any(b <= a for a, b in zip(times, times[1:])):
+        problems.append('chapters out of order')
+    if video_seconds and times[-1] >= video_seconds:
+        problems.append('a chapter starts after the video ends')
+    return check('chapters', not problems, len(times), f'>= {CHAPTERS_MIN}, from 0:00, each >= {CHAPTER_SECONDS} s', '; '.join(problems))
 
 
 def png_size(path: Path) -> tuple[int, int] | None:

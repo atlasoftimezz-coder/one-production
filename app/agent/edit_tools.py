@@ -48,7 +48,21 @@ def tools(studio):
         except (EditError, MediaError) as exc:
             return json.dumps({'error': str(exc)})
 
-    return [Tool('build_animation', 'Render the SVG drawings listed in a shots JSON to frames, time each shot to the voiceover '
+    async def package(args):
+        try:
+            return json.dumps(await asyncio.to_thread(studio.packaging.build, pid, str(args.get('spec') or '')))
+        except (EditError, MediaError) as exc:
+            return json.dumps({'error': str(exc)})
+
+    extra = [Tool('package_episode', 'Bundle the finished video for upload under episode/<name>/: video, subtitles, thumbnail '
+                  '(thumbnail_svg drawn at 1280x720, rendered here), metadata.json, description.txt with chapters, title options; '
+                  'then the package gate. Package JSON: {"name", "video", "subtitles", "script", "title", "title_options": [...], '
+                  '"description", "tags": [...], "thumbnail_svg" | "thumbnail", "chapters" (optional: otherwise from the script '
+                  'headings, timed to the voice)}.',
+                  {'type': 'object', 'properties': {'spec': {'type': 'string', 'description': 'package JSON file in this project'}},
+                   'required': ['spec']}, package)] if studio.packaging else []
+
+    return extra + [Tool('build_animation', 'Render the SVG drawings listed in a shots JSON to frames, time each shot to the voiceover '
                  '(first shot at 0, the others when their anchor words are spoken, found in the subtitles in order) and write '
                  'the edit list for render_edit. Shots JSON: {"voiceover": "vo.wav", "subtitles": "vo.srt", "size": "1920x1080", '
                  '"fps": 30, "output": "episode.mp4", "burn_subtitles": false, "music": {...}, "shots": [{"svg": "art/s01.svg", '

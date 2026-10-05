@@ -107,6 +107,7 @@ def test_package_gate_follows_youtube_limits(tmp_path):
     assert 'shorter than 10 s' in gates.package_gate(late, video_seconds=400)['summary']
     assert gates.package_gate(dict(meta, chapters=[{'time': 'soon', 'title': 'x'}]))['passed'] is False
     assert gates.package_gate(meta)['passed']                                    # thumbnail optional until packaging
+    assert gates.package_gate(dict(meta, chapters=[]))['passed']                  # chapters are optional, checked when present
 
 
 def test_routes_save_reports_and_agent_tool(client, kit, tmp_path):
@@ -119,7 +120,8 @@ def test_routes_save_reports_and_agent_tool(client, kit, tmp_path):
     assert saved.status_code == 200 and json.loads(saved.content)['source'] == {'audio': 'vo.wav'}
     v = client.post(f'/api/projects/{pid}/gates/video', json={'video': 'route.mp4', 'voiceover': 'vo.wav'}).json()
     assert v['passed'], v['summary']
-    p = client.post(f'/api/projects/{pid}/gates/package', json={'meta': {'title': 'T', 'chapters': []}, 'video': 'route.mp4'}).json()
+    p = client.post(f'/api/projects/{pid}/gates/package', json={'meta': {'title': 'T', 'chapters': [{'time': '0:00', 'title': 'A'}]},
+                                                                'video': 'route.mp4'}).json()
     assert not p['passed'] and 'chapters' in p['summary']
     assert [x['stage'] for x in client.get(f'/api/projects/{pid}/gates').json()['reports']] == ['package', 'video', 'voice']
     assert client.post(f'/api/projects/{pid}/gates/video', json={'video': '../../x.mp4', 'voiceover': 'vo.wav'}).status_code == 400

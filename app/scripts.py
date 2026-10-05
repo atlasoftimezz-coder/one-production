@@ -95,7 +95,7 @@ def sections(text: str) -> list[dict]:
                          if not l.strip().startswith((">", "|")) and not _METALINE.match(l))
         body = re.sub(r"\*\[[^\]]*\]\*", "", body).replace("—", " - ").strip()
         if body:
-            out.append({"title": s["title"], "words": len(body.split())})
+            out.append({"title": s["title"], "words": len(body.split()), "body": body})
     return out
 
 
