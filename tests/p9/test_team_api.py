@@ -33,8 +33,9 @@ def test_team_settings_defaults_and_validation(agent):
     assert r.status_code == 200
     assert r.json()["settings"]["worker_model"] == "haiku" and r.json()["settings"]["worker_effort"] is None
     assert agent.patch("/api/team/settings", json={"master_effort": "ultra"}).status_code == 400
-    assert agent.patch("/api/team/settings", json={"max_workers": 5}).status_code == 400
+    assert agent.patch("/api/team/settings", json={"max_workers": 8}).json()["settings"]["max_workers"] == 8
     assert agent.patch("/api/team/settings", json={"max_workers": 0}).status_code == 400
+    assert agent.patch("/api/team/settings", json={"max_workers": "abc"}).status_code == 422
     assert agent.patch("/api/team/settings", json={"master_account": "nope"}).status_code == 404
 
 
@@ -166,3 +167,23 @@ def test_codex_can_be_a_worker_with_its_own_choice(agent):
     assert sent[0]["params"]["model"] == "gpt-fast"
     assert "hit its usage limit" in sent[0]["params"]["input"][0]["text"]
     assert "half way" in sent[0]["params"]["input"][0]["text"]
+
+
+def test_team_with_the_users_own_parts(agent):
+    claude_account(agent)
+    agent.script.turns = [                                       # no planning turn
+        [("tool", "Write", {"file_path": "hook.md", "content": "hooks"}), ("text", "Wrote hook.md")],
+        [("text", '{"verdict": "pass"}')],
+        [("text", "Final review: hook.md is good.")],
+    ]
+    r = agent.pool.submit(lambda: agent.post(f"/api/projects/{agent.pid}/team", json={
+        "goal": "", "tasks": [{"title": "Hooks", "brief": "Write hook.md", "files": ["hook.md"]},
+                              {"title": "", "brief": "", "files": []}]}))
+    ev = lines(r)
+    final = [e for e in ev if e["t"] == "team"][-1]["team"]
+    assert final["planned_by"] == "user" and [t["title"] for t in final["tasks"]] == ["Hooks"]
+    assert final["tasks"][0]["status"] == "done" and (agent.files / "hook.md").exists()
+    assert "Write hook.md" in agent.script.seen[0]["prompt"]           # first call is the worker, not a plan
+    hist = agent.get(f"/api/projects/{agent.pid}/chat").json()
+    assert hist[-2]["text"] == "Do the parts listed below.\n1. Hooks"
+    assert agent.post(f"/api/projects/{agent.pid}/team", json={"goal": " ", "tasks": []}).status_code == 400

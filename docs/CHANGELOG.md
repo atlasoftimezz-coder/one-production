@@ -8,6 +8,8 @@ What changed in each version, in plain words. "Check for updates" shows the newe
   part and writes a final review. Two workers never write the same file; voiceovers wait their turn.
 - A worker that hits a usage limit saves a handoff and carries on on another account (never from
   one Claude login to another); with no account left the team pauses until one resets.
+- Write the parts yourself (Parts… in team mode): each part goes to one worker and the master only
+  reviews. You choose how many workers run at once (3 by default; above 3 it warns about limits).
 - Reviews stop after 2 rounds or their token budget and ask you instead of looping.
 - Pick the model and the effort (how hard it thinks) for each account, right below the message box:
   Claude (Opus, Sonnet, Haiku, Fable), API keys, and Codex (its own list).

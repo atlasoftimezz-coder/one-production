@@ -549,6 +549,34 @@ try:
         go("Ghost Towns"); time.sleep(0.4); go("Team test")
         check("team run kept in history", wait_for(
             "!!document.querySelector('.bubble .teampanel') && document.querySelector('#messages').innerText.includes('TEAM GOAL')", 8))
+        # your own parts + more workers than 3
+        js("document.querySelector('#teambody').innerHTML=''; document.querySelector('#teamchip').click()")
+        wait_for("!!document.querySelector('#tmw')", 6)
+        js("{const i=document.querySelector('#tmw'); i.value='5'; i.dispatchEvent(new Event('input'))}")
+        check("more than 3 workers shows a warning", "5 workers at once" in (js("document.querySelector('#tmwwarn').innerText") or ""))
+        shot("45-team-five")
+        js("document.querySelector('#tsave').click()")
+        check("5 workers saved", wait_for("document.querySelector('#teamchip').innerText.includes('×5')", 6),
+              js("document.querySelector('#teamchip').innerText"))
+        js("document.querySelector('#partsbtn').click()")
+        check("parts dialog opens with 3 empty parts", wait_for(
+            "document.querySelector('#partsmodal').classList.contains('open') && document.querySelectorAll('#prows .prow').length===3", 6))
+        js("""{const rows=document.querySelectorAll('#prows .prow');
+              const set=(r,f,v)=>{const e=r.querySelector(`[data-f=${f}]`); e.value=v; e.dispatchEvent(new Event('input'))};
+              set(rows[0],'title','Hooks'); set(rows[0],'brief','Write hooks.md'); set(rows[0],'files','hooks.md');
+              set(rows[1],'title','Titles'); set(rows[1],'brief','Write titles.md'); set(rows[1],'files','HOOKS.md');
+              rows[2].querySelector('button').click();}""")
+        check("same file in two parts is pointed out", "take turns" in (js("document.querySelector('#pwarn').innerText") or ""))
+        js("{const r=document.querySelectorAll('#prows .prow')[1].querySelector('[data-f=files]'); r.value='titles.md'; r.dispatchEvent(new Event('input'))}")
+        check("parts counted", "2 parts" in (js("document.querySelector('#pinfo').innerText") or ""))
+        shot("46-parts")
+        js("document.querySelector('#pstart').click()")
+        check("team runs your parts", wait_for(
+            "[...document.querySelectorAll('.bubble .teampanel')].pop().innerText.includes('your parts')", 10))
+        check("both parts done", wait_for(
+            "[...document.querySelectorAll('.bubble .teampanel')].pop().querySelectorAll('.tst.done').length===2", 20))
+        wait_for("!document.querySelector('#stop').classList.contains('on')", 10)
+        shot("47-parts-done")
         js("document.querySelector('#teambtn').click()")
 
         js("openUsage()")

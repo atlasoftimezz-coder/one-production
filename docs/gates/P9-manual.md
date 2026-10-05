@@ -23,6 +23,11 @@ a team run costs a few times a normal message (a plan, each part, a review per p
   5 titles - all about why debt feels like a trap."* Watch: the master plans, three rows
   appear and work at the same time (WORKING), each goes IN REVIEW, then DONE, and a final review
   is written under the panel. The three files appear in Files.
+- [ ] **5b. Your own parts.** Press **Parts…** (next to the chip), write two parts yourself (title, what to do,
+  file name), press **Start team**. The panel says "your parts", there is no planning step, both
+  parts run and are reviewed. Name the same file in two parts: the dialog warns they'll take turns.
+- [ ] **5c. More workers.** In the chip set "Workers at once" to 4: a yellow warning explains it uses
+  limits 4× as fast; save — the chip shows ×4.
 - [ ] **6. Approvals still work.** If a worker wants to run a command, the card says which task
   asks ("hook ideas: Run command") — Allow / Deny behave as before. Stop (red X) ends the whole team.
 - [ ] **7. Cost.** Open Usage: "By role" shows Team master and Team worker separately. Is the cost

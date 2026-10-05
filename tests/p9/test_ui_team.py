@@ -43,6 +43,8 @@ def test_team_flow_in_headless_chrome(tmp_path, monkeypatch):
          ("text", "Wrote notes.md")],                                                           # worker
         [("text", '{"verdict": "pass", "notes": ""}')],                                          # master reviews
         [("text", "Final review: notes.md is ready.")],                                          # final word
+        # the user's own two parts run side by side, so every turn says the same: 2 workers, 2 reviews, final
+        *[[("text", '{"verdict": "pass"}')] for _ in range(5)],
     ]
     settings = Settings(data_dir=tmp_path / "data", claude_cmd=str(bin_ / "claude.cmd"), codex_cmd=str(bin_ / "codex.cmd"),
                         login_console=False, anthropic_base_url="https://api.test", log_level="warning")

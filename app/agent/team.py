@@ -35,10 +35,9 @@ from typing import Any
 from . import policy
 
 TERMINAL = {"done", "needs_you", "failed", "stopped"}
-MAX_WORKERS = 3                      # hard ceiling, whatever the settings or a request say
 SPAWN_TOOLS = {"Task", "Agent"}      # Claude Code's own sub-agents: not allowed inside a team
 NO_SPAWN = ("team members don't start their own sub-agents - do the work yourself "
-            "(the team already runs up to 3 workers)")
+            "(the team already runs its own workers)")
 CLAUDE_FAMILY = ("claude", "anthropic_api")
 
 
@@ -237,13 +236,15 @@ def write_task_handoff(folder: Path, goal: str, task: Task, acc: dict, partial: 
 # ---------------------------------------------------------------- the team
 
 class Team:
-    def __init__(self, pid: str, goal: str, run, deps, config: TeamConfig, state_file: Path | None = None):
+    def __init__(self, pid: str, goal: str, run, deps, config: TeamConfig, state_file: Path | None = None,
+                 tasks: list[dict] | None = None):
         self.pid, self.goal, self.run, self.deps, self.cfg = pid, goal, run, deps, config
         self.id = secrets.token_hex(4)
         self.tasks: list[Task] = []
         self.locks = Locks(run.root)
         self.gpu = asyncio.Semaphore(1)
-        config.max_workers = max(1, min(MAX_WORKERS, int(config.max_workers or 1)))
+        config.max_workers = max(1, int(config.max_workers or 1))      # the user's number, no ceiling
+        self.own_plan = [t for t in (tasks or []) if isinstance(t, dict)]   # parts the user wrote
         self.slots = asyncio.Semaphore(config.max_workers)
         self.changed = asyncio.Condition()
         self.wake = asyncio.Event()
@@ -255,6 +256,7 @@ class Team:
         self.master_acc: dict | None = None
         self.master_tokens = {"in": 0, "out": 0}
         self.final = ""
+        self.planned_by = "user" if self.own_plan else "master"
         self.state_file = state_file
         self.started = time.time()
 
@@ -262,7 +264,7 @@ class Team:
     def snapshot(self) -> dict:
         return {"id": self.id, "goal": self.goal, "state": self.state, "paused_why": self.paused_why,
                 "resets_at": self.resets_at, "master": (self.master_acc or {}).get("id"),
-                "config": asdict(self.cfg), "tasks": [t.public() for t in self.tasks],
+                "config": asdict(self.cfg), "tasks": [t.public() for t in self.tasks], "planned_by": self.planned_by,
                 "locks": dict(self.locks.owner), "master_tokens": self.master_tokens, "final": self.final,
                 "started": self.started}
 
@@ -418,7 +420,11 @@ class Team:
     # ------------------------------------------------ the flow
     async def go(self) -> dict:
         try:
-            await self.plan()
+            if self.own_plan:
+                self._add_tasks(self.own_plan)            # the user's parts: no planning call
+                await self._changed()
+            else:
+                await self.plan()
             self.state = "running"
             await self._changed()
             jobs = [asyncio.get_running_loop().create_task(self.lifecycle(t)) for t in self.tasks]
@@ -455,12 +461,17 @@ class Team:
         raw = [t for t in d.get("tasks") or [] if isinstance(t, dict)][: self.cfg.max_tasks]
         if not raw:
             raw = [{"title": "Do the goal", "brief": self.goal, "files": []}]
+        self._add_tasks(raw)
+        await self._changed()
+
+    def _add_tasks(self, raw: list[dict]) -> None:
+        """Parts from the master's plan or written by the user; files outside the project are dropped."""
         for n, t in enumerate(raw, 1):
-            files = [str(f) for f in t.get("files") or [] if isinstance(f, str) and policy.inside(f, self.run.root)]
-            self.tasks.append(Task(id=f"t{n}", title=str(t.get("title") or f"Task {n}")[:80],
+            files = [str(f).strip() for f in t.get("files") or []
+                     if isinstance(f, str) and f.strip() and policy.inside(f.strip(), self.run.root)]
+            self.tasks.append(Task(id=f"t{n}", title=str(t.get("title") or f"Part {n}")[:80],
                                    brief=str(t.get("brief") or t.get("title") or self.goal),
                                    files=files, gpu=bool(t.get("gpu"))))
-        await self._changed()
 
     ACTIVE = ("starting", "running", "review")
 

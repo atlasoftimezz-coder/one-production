@@ -103,9 +103,17 @@ class AccountPatch(BaseModel):
     caps: dict | None = None                   # {cap_task_tokens, cap_day_tokens, cap_day_usd}; null value clears
 
 
+class PartIn(BaseModel):
+    title: str = ""
+    brief: str = ""
+    files: list[str] = []
+    gpu: bool = False
+
+
 class TeamIn(BaseModel):
-    goal: str
+    goal: str = ""
     config: dict | None = None                 # overrides of the saved team settings for this run
+    tasks: list[PartIn] | None = None          # the user's own parts: the master then only reviews
 
 
 class TeamSettingsIn(BaseModel):
@@ -1230,8 +1238,8 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
                 M.check("claude", model, effort)
             except ValueError as e:
                 raise HTTPException(400, f"{role}: {e}")
-        if "max_workers" in given and not 1 <= int(given["max_workers"] or 0) <= 3:
-            raise HTTPException(400, "workers at once must be 1, 2 or 3")
+        if "max_workers" in given and (given["max_workers"] is None or int(given["max_workers"]) < 1):
+            raise HTTPException(400, "workers at once must be 1 or more")
         if given.get("master_account"):
             _account(given["master_account"])
         cur.update(given)
@@ -1295,7 +1303,8 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
     @app.post("/api/projects/{pid}/team")
     async def start_team(pid: str, body: TeamIn) -> StreamingResponse:
         _project(pid)
-        goal = body.goal.strip()
+        parts = [p.model_dump() for p in body.tasks or [] if p.title.strip() or p.brief.strip()]
+        goal = body.goal.strip() or ("Do the parts listed below." if parts else "")
         if not goal:
             raise HTTPException(400, "tell the team what to do")
         if not team_accounts():
@@ -1306,9 +1315,11 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
             run = runs.start(pid, store.files_dir(pid))
         except RuntimeError as e:
             raise HTTPException(409, str(e))
-        team = Team(pid, goal, run, team_deps(pid), cfg, state_file=store.project_dir(pid) / "team.json")
+        team = Team(pid, goal, run, team_deps(pid), cfg, state_file=store.project_dir(pid) / "team.json",
+                    tasks=parts or None)
         teams[pid] = team
-        store.append_message(pid, "user", goal, team=True)
+        said = goal + ("".join(f"\n{n}. {p['title'] or p['brief'][:60]}" for n, p in enumerate(parts, 1)))
+        store.append_message(pid, "user", said, team=True)
 
         async def work():
             snap = await team.go()

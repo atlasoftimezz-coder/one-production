@@ -122,11 +122,12 @@ def task(title, *files, gpu=False):
     return {"title": title, "brief": f"do {title}" + (" voiceover" if gpu else ""), "files": list(files), "gpu": gpu}
 
 
-def make(tmp_path, deps, **cfg):
+def make(tmp_path, deps, tasks=None, **cfg):
     root = tmp_path / "files"
     root.mkdir(exist_ok=True)
     run = Run("p1", root)
-    team = Team("p1", "Make episode 1", run, deps, TeamConfig(**{"poll": 0.05, **cfg}), state_file=tmp_path / "team.json")
+    team = Team("p1", "Make episode 1", run, deps, TeamConfig(**{"poll": 0.05, **cfg}), state_file=tmp_path / "team.json",
+                tasks=tasks)
     return team, run
 
 
@@ -428,12 +429,31 @@ def test_master_moves_when_its_account_hits_a_limit(tmp_path):
     assert snap["master"] == "codex-a" and snap["tasks"][0]["status"] == "done"
 
 
-def test_never_more_than_three_workers_whatever_the_settings_say(tmp_path):
+def test_the_users_number_of_workers_is_the_limit(tmp_path):
     deps = Deps(tmp_path, [acc("claude-a", "claude", 0), acc("codex-a", "codex", 1)],
-                [task(f"Part {n}", f"p{n}.md") for n in range(6)])
-    team, _ = make(tmp_path, deps, max_workers=10)
+                [task(f"Part {n}", f"p{n}.md") for n in range(8)])
+    team, _ = make(tmp_path, deps, max_workers=6)
     snap = go(team)
-    assert snap["config"]["max_workers"] == 3 and deps.peak == 3
+    assert snap["config"]["max_workers"] == 6 and deps.peak == 6     # no hidden ceiling
+    assert all(t["status"] == "done" for t in snap["tasks"])
+    team, _ = make(tmp_path, Deps(tmp_path, [acc("claude-a", "claude", 0)], [task("A", "a.md")]), max_workers=0)
+    assert team.cfg.max_workers == 1                                # never zero
+
+
+def test_parts_written_by_the_user_skip_the_planning_call(tmp_path):
+    deps = Deps(tmp_path, [acc("claude-a", "claude", 0), acc("codex-a", "codex", 1)], [])
+    mine = [{"title": "Hook ideas", "brief": "Three hooks", "files": ["hook.md"]},
+            {"title": "", "brief": "Five titles about debt", "files": [" titles.md ", "C:/Windows/x.txt", ""]},
+            {"title": "Voice it", "brief": "voiceover of hook.md", "files": [], "gpu": True}]
+    team, run = make(tmp_path, deps, tasks=mine)
+    snap = go(team)
+    assert not any("Split this into" in c[4] for c in deps.calls)          # the master didn't plan
+    assert snap["planned_by"] == "user"
+    assert [(t["title"], t["files"], t["gpu"]) for t in snap["tasks"]] == [
+        ("Hook ideas", ["hook.md"], False), ("Part 2", ["titles.md"], False), ("Voice it", [], True)]
+    assert all(t["status"] == "done" for t in snap["tasks"])
+    assert sum(1 for c in deps.calls if "Review this finished task" in c[4]) == 3   # the master still reviews
+    assert snap["final"].startswith("Final review")
 
 
 def test_team_members_cannot_start_their_own_sub_agents(tmp_path):
