@@ -34,6 +34,7 @@ def test_team_settings_defaults_and_validation(agent):
     assert r.json()["settings"]["worker_model"] == "haiku" and r.json()["settings"]["worker_effort"] is None
     assert agent.patch("/api/team/settings", json={"master_effort": "ultra"}).status_code == 400
     assert agent.patch("/api/team/settings", json={"max_workers": 5}).status_code == 400
+    assert agent.patch("/api/team/settings", json={"max_workers": 0}).status_code == 400
     assert agent.patch("/api/team/settings", json={"master_account": "nope"}).status_code == 404
 
 

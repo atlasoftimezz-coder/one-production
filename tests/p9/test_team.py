@@ -426,3 +426,26 @@ def test_master_moves_when_its_account_hits_a_limit(tmp_path):
     deps.call = call
     snap = go(make(tmp_path, deps)[0])
     assert snap["master"] == "codex-a" and snap["tasks"][0]["status"] == "done"
+
+
+def test_never_more_than_three_workers_whatever_the_settings_say(tmp_path):
+    deps = Deps(tmp_path, [acc("claude-a", "claude", 0), acc("codex-a", "codex", 1)],
+                [task(f"Part {n}", f"p{n}.md") for n in range(6)])
+    team, _ = make(tmp_path, deps, max_workers=10)
+    snap = go(team)
+    assert snap["config"]["max_workers"] == 3 and deps.peak == 3
+
+
+def test_team_members_cannot_start_their_own_sub_agents(tmp_path):
+    deps = Deps(tmp_path, [acc("claude-a", "claude", 0)], [task("A", "a.md")])
+    seen = []
+    orig = deps.call
+
+    async def call(a, sub, prompt, note, model, effort, role):
+        seen.extend((role, sub.lock_check(t, {})) for t in ("Task", "Agent"))
+        return await orig(a, sub, prompt, note, model, effort, role)
+
+    deps.call = call
+    go(make(tmp_path, deps)[0])
+    assert {r for r, _ in seen} == {"master", "worker"}
+    assert all(why and "sub-agents" in why for _, why in seen)

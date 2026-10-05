@@ -35,6 +35,10 @@ from typing import Any
 from . import policy
 
 TERMINAL = {"done", "needs_you", "failed", "stopped"}
+MAX_WORKERS = 3                      # hard ceiling, whatever the settings or a request say
+SPAWN_TOOLS = {"Task", "Agent"}      # Claude Code's own sub-agents: not allowed inside a team
+NO_SPAWN = ("team members don't start their own sub-agents - do the work yourself "
+            "(the team already runs up to 3 workers)")
 CLAUDE_FAMILY = ("claude", "anthropic_api")
 
 
@@ -239,7 +243,8 @@ class Team:
         self.tasks: list[Task] = []
         self.locks = Locks(run.root)
         self.gpu = asyncio.Semaphore(1)
-        self.slots = asyncio.Semaphore(max(1, config.max_workers))
+        config.max_workers = max(1, min(MAX_WORKERS, int(config.max_workers or 1)))
+        self.slots = asyncio.Semaphore(config.max_workers)
         self.changed = asyncio.Condition()
         self.wake = asyncio.Event()
         self.state = "planning"       # planning running paused reviewing done stopped
@@ -390,12 +395,16 @@ class Team:
         return (claude or cands or [None])[0]
 
     def _master_write(self, tool: str, tool_input: dict) -> str | None:
+        if tool in SPAWN_TOOLS:
+            return NO_SPAWN
         if tool in policy.WRITES:
             return "the master reviews only - it does not edit files"
         return None
 
     def _write_check(self, task: Task):
         def check(tool: str, tool_input: dict) -> str | None:
+            if tool in SPAWN_TOOLS:
+                return NO_SPAWN
             if tool not in policy.WRITES:
                 return None
             for p in policy.paths_of(tool_input):

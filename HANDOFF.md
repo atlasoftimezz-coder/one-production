@@ -131,7 +131,8 @@ voice/           engine.py, pipeline.py, server.py, make_srt.py, config.py, tune
   consulted by the Claude PreToolUse hook and by `Runs.permit` (Codex file approvals). Limit →
   worker handoff `handoffs/team-<task>-<n>.md` (redacted), files released, re-pin by load then
   headroom, never Claude login → Claude login (`accounts.switch_allowed`, also used by `eligible`).
-  No account → team pauses (Resume button; also re-checks every 60 s). Review: max 2 rounds,
+  Hard ceiling of 3 workers in `Team` itself (settings or a request can't raise it), and team
+  members may not start Claude Code sub-agents (Task/Agent are refused). No account → team pauses (Resume button; also re-checks every 60 s). Review: max 2 rounds,
   40k in / 8k out per round, 120k per task → otherwise "needs you". Spend caps per account
   (`cap_task_tokens`, `cap_day_tokens`, `cap_day_usd`) on the Usage page.
 - **ChatGPT only through Codex logins** (user, 2026-10-05: "for chatgpt we can use codex") - no
