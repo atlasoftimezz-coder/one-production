@@ -294,4 +294,5 @@ user's voice toward a benchmark — that produced a "different person" once).
 7. Team-mode limits: Codex may apply edits inside its sandbox without asking, so for Codex workers
    the file locks rely on the plan keeping files apart (Claude workers are checked on every write).
    A team does not survive an app restart (its state is saved in `team.json` for reading only).
-8. Offered, not answered: relax the voice module's 8 GB VRAM rule to "4 GB+ with a warning".
+8. Voice module keeps the 8 GB VRAM rule (user, 2026-10-05: 4 GB+ "not required for now").
+9. Commits after 18b8e58 are local only - don't push to GitHub until the user asks (2026-10-05).
