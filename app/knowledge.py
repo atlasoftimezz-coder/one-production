@@ -104,6 +104,7 @@ def pages(path: Path):
         encoding = 'utf-16' if raw[:2] in (b'\xff\xfe', b'\xfe\xff') else 'utf-8-sig'
         text = raw.decode(encoding)  # do not silently corrupt an unsupported encoding
         blocks = re.split(r'(?m)(?=^#{1,6} )', text)
+        blocks = [block for block in blocks if block.strip()]
         for index, block in enumerate(blocks):
             heading = block.splitlines()[0].lstrip('# ').strip() if block.startswith('#') else ''
             yield index + 1, heading, block, len(blocks), ''

@@ -165,6 +165,24 @@ try:
     time.sleep(0.3); shot("06-narrow-1100")
     send("Emulation.setDeviceMetricsOverride", width=W, height=H, deviceScaleFactor=1, mobile=False)
 
+    if os.environ.get("UI_DRIVE_KNOWLEDGE") == "1":
+        js("document.querySelector('#knowledgebtn').click()")
+        check("knowledge panel opens", wait_for("document.querySelector('#knowledgemodal').classList.contains('open')"))
+        js("document.querySelector('#knowledgechannel').value='Finance'; document.querySelector('#knowledgeinstalled').value='21.0'; document.querySelector('#knowledgecontext').requestSubmit()")
+        time.sleep(0.3)
+        manual = SCR / "manual.md"
+        manual.write_text("# Ripple trimming\nRipple trimming moves downstream clips.", encoding="utf-8")
+        document_id = send("DOM.getDocument")["root"]["nodeId"]
+        input_id = send("DOM.querySelector", nodeId=document_id, selector="#knowledgefile")["nodeId"]
+        send("DOM.setFileInputFiles", nodeId=input_id, files=[str(manual)])
+        js("document.querySelector('#knowledgescope').value='channel'; document.querySelector('#knowledgeapplication').value='resolve'; document.querySelector('#knowledgeversion').value='21.0'; document.querySelector('#knowledgeimport').requestSubmit()")
+        check("manual import becomes ready", wait_for("document.querySelector('#knowledgedocuments').innerText.includes('ready')", 15))
+        js("document.querySelector('#knowledgequery').value='ripple'; document.querySelector('#knowledgesearch').requestSubmit()")
+        check("retrieval displays a cited passage", wait_for("document.querySelector('#knowledgeresults').innerText.includes('section 1') && document.querySelector('#knowledgeresults').innerText.includes('downstream clips')"))
+        check("source opening uses protected fetch", js("document.querySelector('#knowledgeresults [data-source]') !== null"))
+        shot("knowledge-library")
+        js("document.querySelector('#knowledgeclose').click()")
+
     # accounts (P2) - only when the server runs against the fake CLIs
     if os.environ.get("UI_DRIVE_ACCOUNTS") == "1":
         check("only Demo in picker at start", js("[...document.querySelectorAll('#picker option')].map(o=>o.value).join()") == "demo")

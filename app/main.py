@@ -21,6 +21,8 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
 from pydantic import BaseModel
 
+from .knowledge import Knowledge
+from .knowledge_api import mount as mount_knowledge
 from . import handoff
 from .accounts import DEFAULT_SWITCH, DEFAULT_WARN, PROVIDERS, SAME_SERVICE_SWITCHING, SUBSCRIPTIONS, \
     AccountError, Accounts
@@ -243,6 +245,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
         login_console = settings.login_console
     token = token or secrets.token_urlsafe(32)
     register_secret(token)
+    knowledge = Knowledge(settings.data_dir)
     store = Store(settings.data_dir)
     accounts = Accounts(settings.data_dir)
     ledger = Ledger(settings.data_dir)
@@ -320,6 +323,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
         yield
         ticker.cancel()
         shutdown_handoffs()
+        await asyncio.to_thread(knowledge.close)
 
     app = FastAPI(title="One Production", version=__version__, lifespan=lifespan,
                   docs_url=None, redoc_url=None, openapi_url=None)
@@ -341,6 +345,8 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
             store.files_dir(pid)
         except NotFound:
             raise HTTPException(404, "project not found")
+
+    mount_knowledge(app, knowledge, _project, WEB_DIR)
 
     def _account(acc_id: str) -> dict:
         if acc_id == "demo":
@@ -1150,7 +1156,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
         # a fresh session (new project, or another account taking over) gets the recent chat
         prompt = message if sid else build_prompt(store.history(pid), message).replace(SYSTEM + "\n\n", "", 1)
         store.append_message(pid, "user", message)
-        studio = Studio(pid, store, voice_svc, voice_jobs, tuned=tuner.for_voice,
+        studio = Studio(pid, store, voice_svc, voice_jobs, tuned=tuner.for_voice, knowledge=knowledge,
                         on_job=lambda job: run.emit({"t": "voicejob", "id": job["id"], "source": job["source"],
                                                      "voice": job["voice"]}))
 
@@ -1290,7 +1296,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
             files, voices, presets, jobs = await studio_state(pid)
             instructions = (STUDIO_INSTRUCTIONS + "\n\n" + actions.context(files, voices, presets, jobs)
                             + "\n\n" + note)
-            studio = Studio(pid, store, voice_svc, voice_jobs, tuned=tuner.for_voice,
+            studio = Studio(pid, store, voice_svc, voice_jobs, tuned=tuner.for_voice, knowledge=knowledge,
                             on_job=lambda job: sub.emit({"t": "voicejob", "id": job["id"], "source": job["source"],
                                                          "voice": job["voice"]}))
             eff = M.effort_for(acc["provider"], model, effort, acc.get("codex_models"))

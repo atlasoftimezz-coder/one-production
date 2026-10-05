@@ -20,7 +20,7 @@ WRITES = {"Write", "Edit", "MultiEdit", "NotebookEdit"}
 SHELL = {"Bash", "PowerShell", "BashOutput", "KillShell", "KillBash", "REPL"}
 WEB = {"WebFetch", "WebSearch"}
 HARMLESS = {"TodoWrite", "Task", "Agent", "ExitPlanMode", "EnterPlanMode", "AskUserQuestion", "ToolSearch"}
-STUDIO_LOOK = {"list_voices", "script_stats", "voiceover_status"}
+STUDIO_LOOK = {"list_voices", "script_stats", "voiceover_status", "knowledge_sources", "knowledge_search", "knowledge_read"}
 STUDIO_GATED = {"make_voiceover"}
 PATH_KEYS = ("file_path", "path", "notebook_path", "directory", "cwd")
 
