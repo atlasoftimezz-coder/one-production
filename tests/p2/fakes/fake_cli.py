@@ -179,8 +179,22 @@ def codex(args, home: Path):
 if __name__ == "__main__":
     tool, rest = sys.argv[1], sys.argv[2:]
     if os.environ.get("FAKE_ARGS"):                  # tests read back the exact command line
-        with open(os.environ["FAKE_ARGS"], "a", encoding="utf-8") as f:
-            f.write(json.dumps(rest) + "\n")
+        # Appends from two fake processes at once (a chat and a sign-in status check) can
+        # interleave on Windows, so hold an exclusive lock on the first byte while writing.
+        import msvcrt
+        with open(os.environ["FAKE_ARGS"], "a+b") as f:
+            for _ in range(500):
+                try:
+                    f.seek(0)
+                    msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+                    break
+                except OSError:
+                    time.sleep(0.01)
+            f.seek(0, 2)
+            f.write((json.dumps(rest) + "\n").encode("utf-8"))
+            f.flush()
+            f.seek(0)
+            msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
     if tool == "claude":
         sys.exit(claude(rest, Path(os.environ["CLAUDE_CONFIG_DIR"])))
     sys.exit(codex(rest, Path(os.environ["CODEX_HOME"])))

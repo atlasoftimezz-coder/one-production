@@ -35,3 +35,13 @@ Real manual (not the owner's library, a throwaway one): 4,351 pages in 65.7 s, 6
 0 pages flagged, 10/10 known questions found the right chapter in the top 3, 3-20 ms per search.
 Not run for real: anything against live Resolve (needs the owner's OK and Resolve Studio).
 Manual checklist: `gates/P10-knowledge-manual.md` - pending.
+
+P10 rest (2026-10-05, Claude; owner: "show newer manuals with a warning, then start P10 rest"):
+numeric gates, ffmpeg editor, animation, packaging and the episode run committed `0b71ed8` …
+`cfd9d04` (plan `P10-production-plan.md`). `check.bat P10`: **PASS 380/381** (incl. P0-P9;
+1 skip = opt-in real GPU test). AUTO items covered with synthetic media: seeded bad take rejected
+(and stops an episode at the voice gate), 6-semitone pitch shift fails the voice gate (measured
+6.2), final video = VO +/- 0.5 s, A/V drift < 40 ms, no black frames (through the whole episode
+run). The run before was 378/381 - a race in the fake CLI's argument log (two processes appending
+at once), fixed with a file lock. Not run for real: an episode with real accounts and a real
+voiceover. Manual: `gates/P10-production-manual.md` - pending.

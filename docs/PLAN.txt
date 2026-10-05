@@ -472,6 +472,8 @@ P10  PRODUCTION ENGINE (quality gates + visuals + edit)                 [Phase 2
   AUTO  : seeded bad take rejected; 6-semitone pitch shift fails voice gate; final video
           duration = VO +/-0.5 s, A/V drift < 40 ms, no black frames.
   MANUAL: [ ] watch one full episode end to end - would you publish it?
+  BUILT (2026-10-05): gates, ffmpeg editor, SVG animation, packaging, episode run -
+          docs/P10-production-plan.md; manual list docs/gates/P10-production-manual.md.
 
 P11 DEV ORCHESTRATION (dispatch.py)                                     [Phase 2]
   Build : dev\dispatch.json + dispatch.py, cross-model review files (D1).

@@ -2,7 +2,16 @@
 
 What changed in each version, in plain words. "Check for updates" shows the newest section.
 
-## Unreleased - P10 knowledge, learning and Resolve
+## Unreleased - P10 production engine, knowledge, learning and Resolve
+- **Make an episode** (Files sidebar): from a finished script to an upload-ready bundle. The
+  voiceover is made (or reused), a worker draws every shot as a drawing timed to the spoken words,
+  the video is put together on your processor, and a worker writes titles, description, tags and a
+  thumbnail. The master reviews the creative parts, and every stage must pass measured checks
+  before the next one starts: voice (read-check, pitch vs. the reference, -14 LUFS, true peak,
+  subtitles), video (length = voiceover, sync, no black frames) and package (YouTube's limits).
+  The bundle lands in `episode/<name>/`; every check's report in `gates/`.
+- Passages from a manual newer than your installed software are shown with a warning instead
+  of being hidden.
 - **Knowledge and learning** (Files sidebar): import PDF, Word, Markdown or text manuals; workers
   search them and cite the PDF page. Directions you give are remembered for the project, channel
   or all projects; corrections replace old ones and "Forget" stops them being used.

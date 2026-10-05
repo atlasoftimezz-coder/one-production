@@ -78,15 +78,61 @@ authorized; existing manual phase approvals are still pending. Do not restart fr
   app's Python 3.12, and whether the installed copy is Studio, are unknown until the owner
   does manual checks 6-8 in `docs/gates/P10-knowledge-manual.md`.
 
+- `e79e8e7`: owner's choice - manuals newer than the installed software are shown with a
+  per-passage warning (`newer_than_installed`) instead of hidden.
+- **P10 rest built** (owner: "start P10 rest"; plan `docs/P10-production-plan.md`):
+  `0b71ed8` R1 numeric gates (`app/gates.py`, `app/media.py`, `app/gates_api.py`, tool
+  `quality_gate`; numpy added), `dadc83c` R2 ffmpeg editor (`app/editor.py`, heavy job
+  `video_render`, tools `render_edit`/`edit_status`), `f92d9ea` R3 animation (`app/animation.py`,
+  tool `build_animation`), `72335b1` R4 packaging (`app/packaging.py`, tool `package_episode`),
+  `cfd9d04` R5 episode run (`app/agent/episode.py`, `web/episode.js`, "Make an episode").
+  Details in "Production engine" below. `check.bat P10` = **PASS 380/381** (1 skip = opt-in GPU).
+  The run before was 378/381: two P9 tests failed because the fake CLI's `FAKE_ARGS` log lost
+  lines when two fake processes appended at once (proven: 37-39 of 40 lines kept); the fake now
+  locks the file.
+
+### Production engine (how it works)
+
+- **Gates** (`app/gates.py`, no AI, CPU): voice = every read-check WER <= 0.05, median pitch within
+  1 semitone of the reference clip (YIN-style estimator on numpy, ~0.1 s per file, within 0.3
+  semitone on synthetic voices), -14 LUFS +/- 0.5, true peak <= -1.0 dBTP, subtitles ordered / not
+  overlapping / not empty / covering the audio to 1.5 s; video = duration = voiceover +/- 0.5 s,
+  stream drift < 40 ms, no black frames (blackdetect), >= 1280x720; package = YouTube's title /
+  description / tag limits, chapters (optional; when present: >= 3, from 0:00, each >= 10 s),
+  thumbnail 1280x720 <= 2 MB. A check is pass / fail / skip; required skips fail the gate (a clone
+  can't skip its pitch check). Reports go to `gates/<stage>-<time>.json` in the project.
+- **Editor** (`app/editor.py`): edit list JSON -> mp4. Visuals are hard cuts fitted to the voiceover
+  to the frame (the last one absorbs up to 2 s). Stills move (push / pull / pans, zoompan on a 2x
+  crop), clips are trimmed and held on their last frame, cards are drawn with Windows fonts copied
+  into the work folder (no filter escaping). Optional music is ducked under the voice and the mix is
+  re-mastered (two-pass loudnorm, TP -1.5 for AAC headroom). Every render runs the video gate. Title
+  cards are dark navy because the gate flags near-black frames. Renders are a heavy job.
+- **Animation** (`app/animation.py`): the worker draws SVGs (stickvid style, the owner's no-image-model
+  rule). They are checked (no script / handlers / outside links) and screenshotted by the PC's own
+  Chrome or Edge as an `<img>` (the browser's SVG sandbox), ~0.5 s each, 4 at a time. Each shot
+  starts when its anchor words are spoken, found in order in the voiceover's SRT.
+- **Packaging** (`app/packaging.py`): chapters from the script's `##` headings timed to the voice
+  (short ones merge), bundle in `episode/<name>/` (video hard-linked), package gate.
+- **Episode run** (`app/agent/episode.py`, on the Team machinery; `Team.run_worker` is now shared
+  with Script Studio): script -> voice (app; voice gate) -> visuals (worker; build must succeed,
+  then master review) -> edit (app; video gate) -> package (worker; package gate, then master
+  review) -> master's final report. A worker's failed check returns as notes (gate_rounds = 3);
+  an app stage's failed gate stops the run as "needs you". The owner OKs the heavy jobs in the
+  dialog. Deviation from the plan, on purpose: voice and edit have no AI turn.
+- Tests (all synthetic media, stand-in AI turns): `tests/p10/test_gates.py`, `test_editor.py`,
+  `test_animation.py`, `test_packaging.py`, `test_episode.py` (the whole run with the real gates,
+  editor, Chrome and packaging), `test_ui_episode.py`. Helpers in `tests/p10/media_fixtures.py`.
+- **Not run for real yet**: a real episode with real accounts (AI usage: roughly one SVG per 3 s
+  of video), a real voiceover through the episode, and how good Claude-drawn frames look at length.
+
 ### Not complete yet - next actions
 
-1. Owner's manual checks: `docs/gates/P10-knowledge-manual.md` (steps 6-8 touch live Resolve -
-   only with the owner present).
-2. Open question for the owner: the library hides a document whose version is newer than the
-   project's Resolve version, so the 21.1 manual is invisible while the context says 21.0. Either
-   label it 21.0 or decide to show newer manuals with a warning instead.
-3. The OTHER P10 work is still outstanding: per-stage production gates, animation worker,
-   ffmpeg editor/packaging workers and the full-episode viewing gate. P11/P12 not started.
+1. Owner's manual checks: `docs/gates/P10-production-manual.md` (one full real episode - the plan's
+   manual gate) and `docs/gates/P10-knowledge-manual.md` (steps 6-8 touch live Resolve - only with
+   the owner present).
+2. Not built in P10: stock footage (Storyblocks key / free sources) and research workers; they
+   need the owner's sources and keys.
+3. Then P11 (dev orchestration) and P12 (terms check, sign-in, learning loop).
 
 ### Sources and implementation details
 
@@ -111,8 +157,8 @@ authorized; existing manual phase approvals are still pending. Do not restart fr
   background thread; otherwise the logging pipe fills and the browser hangs. Fixed.
 - The Codex dynamic-tools assertion in `tests/p5/test_codex_agent.py` was extended to
   include knowledge and learning tools. Keep it in sync when adding Resolve tools.
-- Full gate after the whole extension (2026-10-05): 348 passed, 0 failed, 1 skipped
-  (opt-in real GPU render).
+- Full gate after the knowledge/Resolve extension: 348 passed; after P10 rest (2026-10-05):
+  380 passed, 0 failed, 1 skipped (opt-in real GPU render).
 - All commits are local. Nothing was pushed, and no real account, GPU or Resolve was used in tests.
 
 ## 1. What it is
@@ -200,7 +246,14 @@ setup.py         wizard state (setup.json), drives list
 update.py        Updater (manifest, download, unpack beside, switch, rollback, keep 2)
 migrate.py       data-folder schema migrations (additive only, rollback-tolerant)
 diagnostics.py   diagnostics zip (redacted, emails masked, never chat text/files)
-web/index.html   the whole UI (single file, vanilla JS, light/dark)
+web/index.html   the whole UI (single file, vanilla JS, light/dark); knowledge.js, resolve.js, episode.js add panels
+media.py         ffmpeg/ffprobe measuring (loudness, black frames, pitch, SRT), find_ffmpeg, master()
+gates.py         P10 numeric stage gates (voice / video / package); gates_api.py routes + reports
+editor.py        P10 ffmpeg editor (edit list -> mp4), editor_api.py (+ animation/package routes)
+animation.py     P10 SVG shots -> PNG (local Chrome/Edge) -> timed edit list; packaging.py upload bundle
+resolve.py       P10 constrained Resolve adapter (plans, owner execution); resolve_runner.py the fixed helper
+knowledge.py     P10 document library (SQLite FTS5); learning.py scoped directions + verified recipes
+agent/episode.py P10 episode run (stages + gates on the team machinery)
 voice/           engine.py, pipeline.py, server.py, make_srt.py, config.py, tune.py, static/
 ```
 
@@ -280,12 +333,13 @@ voice/           engine.py, pipeline.py, server.py, make_srt.py, config.py, tune
 | P8 Package + updates + support | **built, manual pending** (a friend installs from zero, voices the sample) | d89fc06 |
 | P9 Orchestrator + model/effort toggles | **built, manual pending** (`docs/gates/P9-manual.md`) | see git log |
 | P10 part 1 Script Studio (competitors → FacelessOS script → Opus review loop; FacelessOS bundled) | **built, manual pending** (`docs/gates/P10-manual.md`) | 2964239 + FacelessOS-bundle commit |
-| P10 rest: quality gates per stage, animation / video-editor / packaging workers, ffmpeg editor, Resolve/Storyblocks behind licence flags | **next to build** | — |
+| P10 knowledge + learning + Resolve adapter | **built, manual pending** (`docs/gates/P10-knowledge-manual.md`) | fd0c0e6 … e79e8e7 |
+| P10 rest: numeric gates, ffmpeg editor, animation, packaging, episode run | **built, manual pending** (`docs/gates/P10-production-manual.md`: watch one full real episode) | 0b71ed8 … cfd9d04 |
 | P11 Dev orchestration (dispatch.py, cross-model code review) | Phase 2 | — |
 | P12 Terms check, Google sign-in, learning loop | later | — |
 
 Last gate: `check.bat P10` (see `docs/gates/P10-auto.md`; the 1 skip is the opt-in real-GPU test).
-Remaining to build: **P10 rest, P11, P12** (2½ phases). Manual checks waiting on the user: P7 Part B,
+Remaining to build: **P11, P12** (stock footage / research workers wait for the owner's keys). Manual checks waiting on the user: P7 Part B,
 P8 friend test, P9 team mode, P10 part 1 Script Studio.
 Version **0.10.0** (P10 part 1). Note: P10 part 1 was built before P9's manual sign-off, at the
 user's request ("can you create a plan for this" → plan approved). The user's habit: "if everything is fine start the next phase" — keep going
@@ -421,7 +475,7 @@ user's voice toward a benchmark — that produced a "different person" once).
 5. Manual checks of P9 (`docs/gates/P9-manual.md`) and P10 part 1 (`docs/gates/P10-manual.md`) - both
    use real accounts. The real AI loop of Script Studio (style guide → script → Opus reviews) has
    only run with stand-ins so far; competitor captions were checked for real (free).
-   Next build: **P10 rest** (plan block P10 in `docs/PLAN.txt`), then P11, P12.
+   Next build: P11, then P12 (P10 rest is built; its manual check is one full real episode).
 6. Known limits: Word scripts need Heading styles; moving the data folder later is manual;
    Claude Code/Codex aren't auto-installed; the setup wizard's big downloads are only proven with
    stand-ins until Part B is done.

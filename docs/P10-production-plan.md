@@ -32,6 +32,15 @@ R5 **Episode flow + UI**: Episode panel runs stages script -> voice -> visuals -
    package. Each stage = Sonnet worker, Opus review (2 rounds, budgets as P9) and its numeric
    gate; a failed gate blocks the next stage and says why. Resolve stays an optional editor.
 
+## Status (2026-10-05, Claude)
+
+R1-R5 built, each committed with its tests: `0b71ed8` gates, `dadc83c` editor, `f92d9ea`
+animation, `72335b1` packaging, `cfd9d04` episode run + UI. Deviations from the steps above, on
+purpose: the voice and edit stages are run by the app itself (no AI turn adds anything there;
+their gates decide), and chapters are optional in the package gate (checked when present). Not
+built: stock footage and research workers (need the owner's sources/keys). Manual check:
+`gates/P10-production-manual.md`.
+
 ## Gates (AUTO, from PLAN.txt)
 
 Seeded bad take rejected; 6-semitone pitch shift fails the voice gate; final video duration =
