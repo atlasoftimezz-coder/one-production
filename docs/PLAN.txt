@@ -465,6 +465,8 @@ P10  PRODUCTION ENGINE (quality gates + visuals + edit)                 [Phase 2
           (Sonnet, the user's own FacelessOS folder, never copied) -> Opus review with a 9-line
           FacelessOS score card -> loop until every score >= 8 and no must-fix; stop rules: 5 rounds,
           no better for 2 rounds, review budget -> keep the best version. Gate: docs/gates/P10-manual.md.
+  ADDED (owner, 2026-10-05): local document RAG, shared scoped learning and a version-aware
+          Resolve adapter. Implementation and gates: docs/P10-knowledge-plan.md.
   Build : numeric gates per stage, research/script/animation/video-editor/packaging workers,
           ffmpeg editor default, Resolve/Storyblocks adapters behind licence flags.
   AUTO  : seeded bad take rejected; 6-semitone pitch shift fails voice gate; final video
