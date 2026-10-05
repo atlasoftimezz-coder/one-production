@@ -12,7 +12,7 @@ phase log and the plan, checks the PC, runs the last gate and reports before tou
 
 ---
 
-## Current continuation checkpoint - Codex, 2026-10-05
+## Current continuation checkpoint - Codex, then Claude, 2026-10-05
 
 The owner switched here because Claude usage was exhausted, then requested document RAG
 for the Resolve manual and automatic cross-learning after giving a direction. The owner
@@ -38,20 +38,54 @@ authorized; existing manual phase approvals are still pending. Do not restart fr
   for future verified Resolve results; it is NOT wired to an executor yet. Thirty-one
   focused learning/API/agent/browser tests passed, including correction and forgetting.
 
+- `e6b0ee0` (Claude, back on Claude Code): **constrained Resolve adapter**, steps 1-4 of the
+  old next-actions list. Details in "Resolve adapter" below. `check.bat P10` = **PASS 348/349**
+  (1 skip = opt-in GPU test). The P1 browser test hung on the first run (server log pipe full,
+  §10 trap) - it now drains the log.
+- Real manual through the importer (throwaway library in `build/`, deleted after; NOT the
+  owner's app library): 4,351 pages in **65.7 s**, 6,205 passages, 0 pages flagged, library
+  205 MB (175 MB is the copied PDF). 10/10 known questions (ripple trim, timeline frame rate,
+  markers, append, render queue, normalize audio, proxies, scripting preference, Text+,
+  SRT subtitles) found the right chapter in the top 3; 3-20 ms per search. pypdf warns that
+  fontTools is missing for some heading fonts; text came through. Repeat with
+  `tools/manual_probe.py <pdf> <empty folder> [version]`.
+
+### Resolve adapter (how it works)
+
+- Workers get `resolve_status` (installed version, on/off, allowed operations) and
+  `resolve_propose_plan`. They can't execute. Policy allows both without a card (nothing runs).
+- Plan = title, optional `requires_version`, settings (`timelineFrameRate`,
+  `timelineResolutionWidth/Height` only), operations (`import_media`, `create_timeline`,
+  `append_clips` (20.3.2+, per the API CHANGELOG fix), `add_marker`), citations. Anything else
+  is rejected with the reason (render, scripts, unknown fields, outside/missing files, wrong
+  extension, version too old, plan needs a newer Resolve than installed).
+- Plans are saved in `projects/<id>/resolve/plans/` (outside `files/`, so an agent can't edit a
+  reviewed plan) with a hash over plan + media size/mtime.
+- Owner runs from **Resolve plans** (Files sidebar): ticks "I saved my open Resolve project",
+  presses Run. Server re-checks: switch on, hash, live Resolve version, media unchanged. Then the
+  fixed helper `app/resolve_runner.py` (own process, stdlib only) creates a NEW project in the
+  Resolve folder "One Production (disposable)", applies the steps, saves, and reads back name,
+  settings, timeline count, items, markers. Passed → `Learning.record_execution` → active
+  recipe (application resolve, installed version, evidence = run id + plan hash + checks).
+  Failed → no recipe; the panel says whether a partial project was left.
+- Resolve control is **off by default** (`resolve_enabled` in settings.json; the panel switch
+  writes it). Off = Resolve is never contacted, even for the version probe.
+- Tests: `tests/p10/test_resolve.py` (7) + `test_ui_resolve.py` use
+  `tests/p10/fakes/fake_resolve_runner.py`, a stand-in Resolve driven through the REAL executor
+  (`ONEPROD_RESOLVE_RUNNER` / `app.state.resolve.runner`). Keep `tests/p5/test_codex_agent.py`'s
+  tool list in sync when adding tools.
+- **Never exercised against real Resolve.** Whether Resolve's `fusionscript.dll` loads in the
+  app's Python 3.12, and whether the installed copy is Studio, are unknown until the owner
+  does manual checks 6-8 in `docs/gates/P10-knowledge-manual.md`.
+
 ### Not complete yet - next actions
 
-1. Implement the constrained Resolve adapter and wire verified execution to learning.
-   The planned first adapter creates a NEW disposable project only, validates version/API
-   support and project-relative media paths, and executes only after an explicit approval.
-   Workers must never supply arbitrary Python to execute. Do not open or modify the owner's
-   real Resolve project while testing. GPU/render operations require separate consent.
-2. Add fake-adapter failure/approval/version tests and verify the UI review/execute path.
-3. Exercise the real large manual through the importer, reporting extraction/index timings
-   and known retrieval questions. Only 17 pages were inspected before implementation;
-   the whole manual has NOT yet been indexed into the owner's app library.
-4. Run `check.bat P10` after integration; update the phase log, manual checklist, changelog
-   and this checkpoint with actual results. No full gate has been run since the new commits.
-5. The OTHER P10 work is still outstanding: per-stage production gates, animation worker,
+1. Owner's manual checks: `docs/gates/P10-knowledge-manual.md` (steps 6-8 touch live Resolve -
+   only with the owner present).
+2. Open question for the owner: the library hides a document whose version is newer than the
+   project's Resolve version, so the 21.1 manual is invisible while the context says 21.0. Either
+   label it 21.0 or decide to show newer manuals with a warning instead.
+3. The OTHER P10 work is still outstanding: per-stage production gates, animation worker,
    ffmpeg editor/packaging workers and the full-episode viewing gate. P11/P12 not started.
 
 ### Sources and implementation details
@@ -77,9 +111,9 @@ authorized; existing manual phase approvals are still pending. Do not restart fr
   background thread; otherwise the logging pipe fills and the browser hangs. Fixed.
 - The Codex dynamic-tools assertion in `tests/p5/test_codex_agent.py` was extended to
   include knowledge and learning tools. Keep it in sync when adding Resolve tools.
-- Latest baseline full gate BEFORE these changes: 322 passed, 0 failed, 1 skipped
-  (opt-in real GPU render). Do not present that as verification of the new extension.
-- All commits are local. Nothing was pushed, and no real account or GPU was used in tests.
+- Full gate after the whole extension (2026-10-05): 348 passed, 0 failed, 1 skipped
+  (opt-in real GPU render).
+- All commits are local. Nothing was pushed, and no real account, GPU or Resolve was used in tests.
 
 ## 1. What it is
 

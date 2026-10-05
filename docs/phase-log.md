@@ -26,3 +26,12 @@ Plan: `P10-knowledge-plan.md`. Existing manual approvals remain pending.
 P10 knowledge checkpoint (2026-10-05): document library and scoped learning committed through
 `450a25c`; 31 focused integration/browser tests passed. Resolve adapter, large-manual import
 and final full regression gate remain pending. See HANDOFF.md continuation checkpoint.
+
+P10 Resolve checkpoint (2026-10-05, Claude): constrained Resolve adapter committed in `e6b0ee0`
+(workers propose, owner runs on a new disposable project, verified runs become recipes).
+`check.bat P10`: **PASS 348/349** (incl. P0-P9; 1 skip = opt-in real GPU test). First run was
+347/349: the P1 browser test hung because its server log pipe filled - the test now drains it.
+Real manual (not the owner's library, a throwaway one): 4,351 pages in 65.7 s, 6,205 passages,
+0 pages flagged, 10/10 known questions found the right chapter in the top 3, 3-20 ms per search.
+Not run for real: anything against live Resolve (needs the owner's OK and Resolve Studio).
+Manual checklist: `gates/P10-knowledge-manual.md` - pending.

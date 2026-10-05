@@ -49,6 +49,16 @@ normalization. Figure-heavy material requires the cited original page for visual
 The installed executable reported 21.0.0.47 and its scripting reference is available.
 Retrieval must not silently treat 21.1-only features as installed capabilities.
 
+## Status (2026-10-05)
+
+Steps 1-5 built and tested with stand-ins; the Resolve adapter (step 4) is `app/resolve.py`
+(validation, plans, owner execution), `app/resolve_runner.py` (fixed executor, own process),
+`app/resolve_api.py`, `app/agent/resolve_tools.py`, `web/resolve.js`. Supported operations:
+import_media, create_timeline, append_clips (20.3.2+), add_marker; settings timelineFrameRate,
+timelineResolutionWidth/Height. Not supported on purpose: render, delete, opening existing projects,
+scripts, Fusion, color. Real manual import measured with `tools/manual_probe.py` (see phase log).
+Live Resolve has not been exercised; that is manual check 6-8 in `gates/P10-knowledge-manual.md`.
+
 ## Remaining production work
 
 Quality gates per stage, CPU animation, ffmpeg assembly and episode packaging remain
