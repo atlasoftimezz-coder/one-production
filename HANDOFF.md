@@ -1,7 +1,7 @@
 # One Production — handoff
 
 Read this first when picking the project up in a new session. It holds the context of the chat
-that built it (2026-10-03 → 2026-10-05): what it is, how it's built, every decision and why, where
+that built it (2026-10-03 → 2026-10-05, Claude and Codex): what it is, how it's built, every decision and why, where
 each phase stands, verified facts about the tools, the owner's preferences, and the traps already
 hit. The master plan is `docs/PLAN.txt`; progress is `docs/phase-log.md`; changes are
 `docs/CHANGELOG.md`.
@@ -14,10 +14,18 @@ phase log and the plan, checks the PC, runs the last gate and reports before tou
 
 ## Current continuation checkpoint - Codex, then Claude, 2026-10-05
 
-The owner switched here because Claude usage was exhausted, then requested document RAG
-for the Resolve manual and automatic cross-learning after giving a direction. The owner
-said **"Start"** and later **"continue and update the handoff.md"**. This extension is
-authorized; existing manual phase approvals are still pending. Do not restart from scratch.
+**Where it stands (end of 2026-10-05):** everything in the plan up to and including P10 is
+built and the full gate is green (`check.bat P10` = 380 passed, 0 failed, 1 opt-in GPU skip,
+last commit `ccdfbb3` + this handoff). Nothing has been pushed. What's left: the owner's manual
+checks (P7 Part B, P8, P9, P10 part 1, P10 knowledge/Resolve, P10 production = one full real
+episode), the stock-footage/research workers (need the owner's keys), then **P11** and **P12**.
+
+How we got here: Codex took over while Claude usage was exhausted and built the document
+library and shared learning (owner: **"Start"**, then **"continue and update the handoff.md"**).
+Claude then finished the Resolve adapter, real-manual import test and full gate (owner: "continue
+implementation where it stopped"), switched newer manuals to "shown with a warning" and built
+the rest of P10 (owner: **"show newer manuals with a warning, then start P10 rest"**). Manual
+phase approvals are still pending. Do not restart from scratch.
 
 ### Committed and tested
 
@@ -314,6 +322,18 @@ voice/           engine.py, pipeline.py, server.py, make_srt.py, config.py, tune
 - **Model + effort** (user: "toggle model and effort wherever we are using claude, likewise codex and
   anthropic api"): stored on the account (`model`, `effort`; "auto" = the client's default) and set
   from the pickers under the message box. Haiku gets no effort (the API rejects it).
+- **Document library + learning (P10)**, owner via Codex, 2026-10-05: local SQLite FTS5 (no
+  embeddings, OCR, GPU or paid service); directions remembered per project / channel / all;
+  worker suggestions stay candidates; only a Resolve run that reads back correctly becomes a
+  verified recipe. **Newer manuals** (owner, 2026-10-05): shown with a per-passage warning, not hidden.
+- **Resolve (P10)**: workers only propose; the owner runs a plan from the panel; it always builds a
+  NEW project in "One Production (disposable)"; fixed operation list; no rendering; off by default;
+  the executor is a fixed helper in its own process (no worker-written code ever runs).
+- **Production engine (P10 rest)**, owner: "start P10 rest". Free / CPU / no image models: the AI
+  draws shots as SVG (the owner's stickman-explainer preference), the PC's Chrome/Edge rasterises,
+  ffmpeg edits. Numeric gates decide every stage; the master reviews only the creative stages;
+  voice and edit stages have no AI turn (Claude's call, recorded in `docs/P10-production-plan.md`).
+  Renders are a new heavy job `video_render` (approval card / episode dialog tick).
 - **Package**: zip with the official embeddable Python 3.12.10 (sha256 pinned in
   `build_package.py`); launcher `One Production.cmd` is never rewritten by updates (cmd.exe reads
   batch files while running). Update hosting is **not chosen yet** (shared folder / web / GitHub).
@@ -340,8 +360,9 @@ voice/           engine.py, pipeline.py, server.py, make_srt.py, config.py, tune
 
 Last gate: `check.bat P10` (see `docs/gates/P10-auto.md`; the 1 skip is the opt-in real-GPU test).
 Remaining to build: **P11, P12** (stock footage / research workers wait for the owner's keys). Manual checks waiting on the user: P7 Part B,
-P8 friend test, P9 team mode, P10 part 1 Script Studio.
-Version **0.10.0** (P10 part 1). Note: P10 part 1 was built before P9's manual sign-off, at the
+P8 friend test, P9 team mode, P10 part 1 Script Studio, P10 knowledge/Resolve, P10 production (one real episode).
+Version **0.10.0** in `app/version.py`; everything since is under "Unreleased" in the changelog (bump the
+version when the owner wants a release / package). Note: P10 part 1 was built before P9's manual sign-off, at the
 user's request ("can you create a plan for this" → plan approved). The user's habit: "if everything is fine start the next phase" — keep going
 after a green gate, but report honestly which manual items they haven't confirmed.
 
@@ -383,7 +404,18 @@ after a green gate, but report honestly which manual items they haven't confirme
   (cu124 builds have no kernels; `torch.cuda.is_available()` lies — prove with an fp16 matmul).
   `chatterbox-tts` pins torch 2.6 → install it with `--no-deps` plus its dep list.
 - **ffmpeg**: gyan.dev essentials build includes rubberband; `.sha256` file is the bare hash; zip
-  ~115 MB. Studio PC uses `D:\Software\Voice\ffmpeg.exe` and chocolatey's on PATH.
+  ~115 MB. Studio PC uses `D:\Software\Voice\ffmpeg.exe` and chocolatey's on PATH (8.0 essentials:
+  zoompan, drawtext, subtitles/libass, sidechaincompress, tpad, blackdetect, libx264 all present).
+  The app finds it via `ONEPROD_FFMPEG` → `data_dir/modules/ffmpeg` → PATH (`media.find_ffmpeg`).
+- **Headless Chrome screenshots** (2026-10-05): `chrome --headless=new --screenshot=out.png
+  --window-size=W,H file:///page.html` takes ~0.4 s; an SVG loaded as `<img>` cannot run scripts or
+  fetch anything (an outside `href` just shows a broken-image icon). Edge works the same.
+- **Pitch**: the app's own estimator (`media.median_f0`, numpy) read synthetic voices at 85-300 Hz
+  within 0.3 semitone and a rubberband +6-semitone shift as 6.2; the P4 real test used librosa pyin.
+- **DaVinci Resolve 21.0.0.47** installed; external scripting is Studio-only and needs
+  Preferences → System → General → External scripting = Local. `AppendToTimeline` had a fix in
+  20.3.2 (API CHANGELOG), so the adapter needs 20.3.2+ for it. Not yet tried live from the app.
+- **Real manual import**: the 4,351-page Resolve 21.1 PDF indexes in 65.7 s (`tools/manual_probe.py`).
 
 ## 7. Voiceover pipeline (what the voice module wraps)
 
@@ -428,10 +460,16 @@ user's voice toward a benchmark — that produced a "different person" once).
   (app-server, incl. `model/list`), `tests\p9\test_team.py` `Deps` (stand-in app for the Team:
   accounts, clock, scripted master/worker turns), `FAKE_ARGS` (fake CLI writes its argv) and
   `API_BODIES` (fake Messages API keeps request bodies),
-  `tests\p7\conftest.py` local Range-capable download server.
+  `tests\p7\conftest.py` local Range-capable download server,
+  `tests\p10\fakes\fake_resolve_runner.py` (stand-in Resolve driven through the REAL executor;
+  `FAKE_RESOLVE_STATE / DOWN / FAIL / VERSION`), `tests\p10\media_fixtures.py` (synthetic voice,
+  mastering, SRT, test-pattern videos with black frames / late audio, PNGs - all via numpy + ffmpeg),
+  `tests\p10\test_episode.py` `Deps` (p9 Deps + the real gates/animation/editor/packaging).
 - Browser: `tools\ui_drive.py` drives the user's installed Chrome headless over DevTools; sections
-  switched on by `UI_DRIVE_ACCOUNTS / SWITCH / VOICE / AGENT / P6 / SETUP / P8 / P9 / P10`. Fresh data folders
-  open the setup wizard, so the driver presses "Finish later" first.
+  switched on by `UI_DRIVE_ACCOUNTS / SWITCH / VOICE / AGENT / P6 / SETUP / P8 / P9 / P10 / KNOWLEDGE /
+  RESOLVE / EPISODE`. Fresh data folders open the setup wizard, so the driver presses "Finish later"
+  first. Every browser test must drain the server's stdout in a thread (see §10).
+- Media tests skip without ffmpeg; animation/episode tests skip without Chrome/Edge.
 - Opt-in real GPU test: `ONEPROD_GPU_TESTS=1 ONEPROD_REAL_SCRIPT=… ONEPROD_REAL_VOICE=human_ref48.wav`
   `pytest tests\p4\test_voice_real.py` (~7–8 min of GPU — ask first).
 - `tests\p8\test_package.py` builds two real packages, installs, updates, rolls back — it works in
@@ -462,6 +500,17 @@ user's voice toward a benchmark — that produced a "different person" once).
   global scope, so a second `const m` is a SyntaxError.
 - The chat bubble has `white-space: pre-wrap`: HTML built with template literals inside it needs
   `white-space: normal` or its indentation shows as big gaps.
+- **Heredoc backslashes again** (3 more times on 2026-10-05): `'\n'` or `'\\'` inside Python written
+  through a Bash heredoc came out as a real newline / lone backslash and broke `app/editor.py`. In
+  code use `chr(10)` / `chr(92)` / `.splitlines()`, or edit with the Edit tool.
+- **Browser tests hang if the server's log pipe fills**: drain `proc.stdout` in a thread (P1's test
+  hung once a new request line pushed it over).
+- **Appends from two processes interleave on Windows** (the fake CLI's `FAKE_ARGS` log lost lines →
+  two flaky P9 tests): lock the file while writing.
+- **UI race**: a panel that opens before its first fetch returns can have a quick click overwritten
+  by the late answer (the Resolve switch did) - fetch, then open.
+- The video gate flags near-black frames (blackdetect pix_th 0.10, 98 % of the picture): dark cards
+  must stay above that (title cards are navy `#1B2A4A`).
 - `git grep` before publishing: the repo contains fake test keys (`sk-ant-api03-GOODgood…`,
   AWS's `AKIAIOSFODNN7EXAMPLE`) on purpose — they test the redaction.
 
@@ -471,11 +520,16 @@ user's voice toward a benchmark — that produced a "different person" once).
 2. Choose where updates are hosted; then build with `--update-source`.
 3. Decide whether to hide the four unnamed voices (`2f8d1479.wav`, `647376c1.wav`, `845106da.wav`,
    `b4ed042b.wav`) from the picker.
-4. Free space on C: (≈11 GB free).
-5. Manual checks of P9 (`docs/gates/P9-manual.md`) and P10 part 1 (`docs/gates/P10-manual.md`) - both
-   use real accounts. The real AI loop of Script Studio (style guide → script → Opus reviews) has
-   only run with stand-ins so far; competitor captions were checked for real (free).
-   Next build: P11, then P12 (P10 rest is built; its manual check is one full real episode).
+4. Free space on C: (≈17 GB free after cleaning test temp on 2026-10-05).
+5. Manual checks of P9 (`docs/gates/P9-manual.md`), P10 part 1 (`docs/gates/P10-manual.md`), P10
+   knowledge/Resolve (`docs/gates/P10-knowledge-manual.md`) and P10 production
+   (`docs/gates/P10-production-manual.md`) - all use real accounts. The real AI loops (Script Studio,
+   episode visuals/packaging) have only run with stand-ins; competitor captions and the real manual
+   import were checked for real (free). Live Resolve has never been driven from the app.
+   Next build: P11, then P12.
+5b. P10 not built: stock footage (Storyblocks key / free sources) and research workers.
+5c. Episode cost is untested: the visuals worker draws roughly one SVG per 3 s of video; watch Usage
+   on the first real run. The bundle hard-links the video (no extra disk), but backups with media on (the default) zip it twice.
 6. Known limits: Word scripts need Heading styles; moving the data folder later is manual;
    Claude Code/Codex aren't auto-installed; the setup wizard's big downloads are only proven with
    stand-ins until Part B is done.
