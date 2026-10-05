@@ -84,7 +84,7 @@ $('#knowledgesearch').onsubmit = async e => {
   e.preventDefault();
   try {
     const result = await (await api(knowledgePath() + '/search?q=' + encodeURIComponent($('#knowledgequery').value))).json();
-    $('#knowledgeresults').innerHTML = '<p>' + esc(result.note) + (result.excluded_newer_versions ? ' ' + result.excluded_newer_versions + ' newer-version documents excluded.' : '') + '</p>' + result.matches.map(m => `<article style="border-top:1px solid var(--line);padding:12px 0"><strong>${esc(m.citation)}</strong><p>${esc(m.section)}</p><p style="white-space:pre-wrap">${esc(m.text)}</p><button class="btn" data-source="${m.document}" data-page="${m.page}">Open cited source</button></article>`).join('');
+    $('#knowledgeresults').innerHTML = '<p>' + esc(result.note) + '</p>' + result.matches.map(m => `<article style="border-top:1px solid var(--line);padding:12px 0"><strong>${esc(m.citation)}</strong>${m.warning ? '<p class="newerwarn">⚠ ' + esc(m.warning) + '</p>' : ''}<p>${esc(m.section)}</p><p style="white-space:pre-wrap">${esc(m.text)}</p><button class="btn" data-source="${m.document}" data-page="${m.page}">Open cited source</button></article>`).join('');
     $('#knowledgeresults').querySelectorAll('[data-source]').forEach(b => b.onclick = () => openKnowledgeSource(b.dataset.source, b.dataset.page));
   } catch (e) { toast(e.message, true); }
 };

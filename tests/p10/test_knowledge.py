@@ -39,9 +39,14 @@ def test_project_channel_and_version_filters(library, tmp_path):
     shared = add(library, tmp_path, 'Channel ripple procedure.', scope='channel', application='resolve', version='21.0')
     newer = add(library, tmp_path, 'Future ripple procedure.', scope='global', application='resolve', version='21.1')
     assert {d['id'] for d in library.list('second')} == {shared['id'], newer['id']}
+    # newer manuals stay searchable, flagged with a warning (owner's choice, 2026-10-05)
     result = library.search('second', 'ripple', application='resolve')
-    assert [m['document'] for m in result['matches']] == [shared['id']]
-    assert result['excluded_newer_versions'] == 1
+    assert {m['document'] for m in result['matches']} == {shared['id'], newer['id']}
+    flags = {m['document']: m for m in result['matches']}
+    assert flags[newer['id']]['newer_than_installed'] and '21.1 manual; 21.0 is installed' in flags[newer['id']]['warning']
+    assert not flags[shared['id']]['newer_than_installed'] and flags[shared['id']]['warning'] == ''
+    assert result['newer_version_matches'] == 1 and 'newer than the installed version (21.0)' in result['note']
+    assert library.passage(flags[newer['id']]['id'], 'second')['newer_than_installed'] is True
     assert [m['document'] for m in library.search('third', 'ripple')['matches']] == [newer['id']]
     chunk = library.search('first', 'Secret')['matches'][0]
     with pytest.raises(ValueError):

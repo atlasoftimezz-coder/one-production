@@ -44,7 +44,7 @@ def test_library_context_sharing_and_rejected_uploads(client):
     assert client.get(f'/api/projects/{pids[2]}/knowledge').json()['documents'] == []
     assert client.get(f'/api/projects/{pids[2]}/knowledge/{r.json()["id"]}/source').status_code == 404
     result = client.get(base + '/search?q=ripple').json()
-    assert result['matches'] == [] and result['excluded_newer_versions'] == 1
+    assert len(result['matches']) == 1 and result['matches'][0]['newer_than_installed'] and result['newer_version_matches'] == 1
     assert client.post(base, files={'file': ('run.exe', b'anything')}).status_code == 400
     assert client.get('/api/projects/missing/knowledge').status_code == 404
     assert client.get('/knowledge.js').status_code == 200

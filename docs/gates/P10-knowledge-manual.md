@@ -6,9 +6,8 @@ make a NEW project in a "One Production (disposable)" folder. Save your open Res
 
 - [ ] **1. Import the manual.** Files sidebar → **Knowledge and learning** → set Channel and
   Resolve version (21.0) → import `DaVinci_Resolve_21.1_Reference_Manual.pdf` with Application
-  `resolve`, Version `21.1`. It takes a few minutes (see the measured time in HANDOFF.md). Note: a
-  21.1 manual is hidden from searches while the version says 21.0 — that is on purpose; set the
-  manual's version to 21.0 if you want it searchable anyway.
+  `resolve`, Version `21.1`. It takes about a minute (65.7 s measured on this PC). Passages
+  from the 21.1 manual show a warning while your Resolve is 21.0 (your choice, 2026-10-05).
 - [ ] **2. Search.** Try "ripple trim" or "add marker". Does "Open cited source" open the right page?
 - [ ] **3. Directions.** Save a direction, correct it, forget it. Only the newest one shows.
 - [ ] **4. Resolve off by default.** Files sidebar → **Resolve plans**: the switch is off and

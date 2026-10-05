@@ -175,10 +175,11 @@ try:
         document_id = send("DOM.getDocument")["root"]["nodeId"]
         input_id = send("DOM.querySelector", nodeId=document_id, selector="#knowledgefile")["nodeId"]
         send("DOM.setFileInputFiles", nodeId=input_id, files=[str(manual)])
-        js("document.querySelector('#knowledgescope').value='channel'; document.querySelector('#knowledgeapplication').value='resolve'; document.querySelector('#knowledgeversion').value='21.0'; document.querySelector('#knowledgeimport').requestSubmit()")
+        js("document.querySelector('#knowledgescope').value='channel'; document.querySelector('#knowledgeapplication').value='resolve'; document.querySelector('#knowledgeversion').value='21.1'; document.querySelector('#knowledgeimport').requestSubmit()")
         check("manual import becomes ready", wait_for("document.querySelector('#knowledgedocuments').innerText.includes('ready')", 15))
         js("document.querySelector('#knowledgequery').value='ripple'; document.querySelector('#knowledgesearch').requestSubmit()")
         check("retrieval displays a cited passage", wait_for("document.querySelector('#knowledgeresults').innerText.includes('section 1') && document.querySelector('#knowledgeresults').innerText.includes('downstream clips')"))
+        check("newer manual shown with a warning", "21.1 manual; 21.0 is installed" in (js("document.querySelector('#knowledgeresults').innerText") or ""))
         check("source opening uses protected fetch", js("document.querySelector('#knowledgeresults [data-source]') !== null"))
         js("document.querySelector('#learningtitle').value='Transitions'; document.querySelector('#learningtext').value='Use restrained transitions.'; document.querySelector('#learningform').requestSubmit()")
         check("direction saved in channel memory", wait_for("document.querySelector('#learninglist').innerText.includes('Use restrained transitions.')"))
