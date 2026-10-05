@@ -43,6 +43,9 @@ files there directly. Besides your usual tools you have studio tools:
   and media files from this project, citing the manual passages you used. You never run Resolve
   yourself and never write Resolve scripts; the owner reviews the plan and runs it on a new project.
   Video editing defaults to ffmpeg; use Resolve only when the owner asks for it.
+- Video editing (ffmpeg, the default): write an edit list JSON in this folder (see render_edit) whose
+  visuals cover the voiceover, then render_edit (asks the owner first: minutes of CPU) and follow it
+  with edit_status. Every render is checked by the video gate automatically.
 - quality_gate measures a finished stage (voice, video, package) against fixed limits. A stage is
   done only when its gate passes; report the failed numbers instead of calling it done.
 Be direct and practical. Plain text, no markdown tables."""
@@ -60,10 +63,11 @@ class Studio:
     """Studio tools bound to one project. `on_job(job)` lets the run show the voice card."""
 
     def __init__(self, pid: str, store, voice_svc, voice_jobs, on_job: Callable[[dict], None],
-                 tuned: Callable[[str], dict | None] | None = None, knowledge=None, learning=None, resolve=None, gates=None):
+                 tuned: Callable[[str], dict | None] | None = None, knowledge=None, learning=None, resolve=None, gates=None, editor=None):
         self.knowledge = knowledge
         self.resolve = resolve
         self.gates = gates
+        self.editor = editor
         self.learning = learning
         self.pid, self.store, self.svc, self.jobs, self.on_job = pid, store, voice_svc, voice_jobs, on_job
         self.tuned = tuned or (lambda voice: None)          # settings tune.py found for a voice
@@ -73,8 +77,10 @@ class Studio:
         from .learning_tools import tools as learning_tools
         from .resolve_tools import tools as resolve_tools
         from .gate_tools import tools as gate_tools
+        from .edit_tools import tools as edit_tools
         return (knowledge_tools(self) if self.knowledge else []) + (learning_tools(self) if self.learning else []) + (
-            resolve_tools(self) if self.resolve else []) + (gate_tools(self) if self.gates else []) + [
+            resolve_tools(self) if self.resolve else []) + (gate_tools(self) if self.gates else []) + (
+            edit_tools(self) if self.editor else []) + [
             Tool("list_voices", "List the reference voices and delivery presets available for voiceovers.",
                  {"type": "object", "properties": {}}, self.list_voices),
             Tool("script_stats", "Spoken word count, sections and length of a script file in this project "

@@ -19,6 +19,12 @@ TOOLS = {
         "uses": "your graphics card (GPU) for the voice clone, roughly 1 minute of work per "
                 "minute of audio, plus a few minutes of CPU for the read-check and subtitles",
     },
+    "video_render": {
+        "label": "Video render",
+        "cost_class": HEAVY,
+        "uses": "your processor (CPU) for roughly 1-3 minutes per minute of video, and some disk space "
+                "while it works (no graphics card)",
+    },
     "voice_tune": {
         "label": "Finding the best settings for a voice",
         "cost_class": HEAVY,

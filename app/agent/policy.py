@@ -23,8 +23,9 @@ HARMLESS = {"TodoWrite", "Task", "Agent", "ExitPlanMode", "EnterPlanMode", "AskU
 STUDIO_LOOK = {"list_voices", "script_stats", "voiceover_status", "knowledge_sources", "knowledge_search", "knowledge_read", "learning_recall",
                "quality_gate"}
 STUDIO_MEMORY = {"remember_direction", "propose_lesson"}
-STUDIO_PLAN = {"resolve_status", "resolve_propose_plan"}   # look / save a plan; only the owner executes
-STUDIO_GATED = {"make_voiceover"}
+STUDIO_PLAN = {"resolve_status", "resolve_propose_plan", "edit_status"}   # look / save a plan; only the owner executes
+STUDIO_GATED = {"make_voiceover", "render_edit"}
+HEAVY = {"make_voiceover": "voiceover", "render_edit": "video_render"}   # tools.TOOLS key per gated tool
 PATH_KEYS = ("file_path", "path", "notebook_path", "directory", "cwd")
 
 
@@ -67,7 +68,7 @@ def decide(tool: str, tool_input: dict, root: Path) -> tuple[str, str]:
     if s in STUDIO_PLAN:
         return "allow", "reads Resolve's version or saves a plan for your review; nothing runs in Resolve"
     if s in STUDIO_GATED:
-        return "gate", "uses the GPU"
+        return "gate", "uses the GPU" if s == "make_voiceover" else "uses the processor for minutes"
     if tool in HARMLESS:
         return "allow", "bookkeeping"
     if tool in READS | WRITES:
@@ -92,6 +93,8 @@ def describe(tool: str, tool_input: dict, root: Path) -> tuple[str, str]:
         except (ValueError, OSError):
             return p
     s = studio_name(tool)
+    if s == "render_edit":
+        return "Render video", str(tool_input.get("edit", ""))
     if s == "make_voiceover":
         pace = tool_input.get("pace_mode") or "natural"
         wpm = f" at {tool_input.get('target_wpm')} wpm" if pace == "wpm" else ""

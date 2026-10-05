@@ -38,10 +38,10 @@ def ffprobe_for(ffmpeg: str) -> str:
     return found
 
 
-def run(args: list[str], timeout: float = 600) -> subprocess.CompletedProcess:
+def run(args: list[str], timeout: float = 3600, cwd: Path | None = None) -> subprocess.CompletedProcess:
     try:
         return subprocess.run(args, capture_output=True, text=True, encoding='utf-8', errors='replace',
-                              timeout=timeout, creationflags=NO_WINDOW)
+                              timeout=timeout, creationflags=NO_WINDOW, cwd=cwd)
     except subprocess.TimeoutExpired:
         raise MediaError(f'{Path(args[0]).stem} took longer than {int(timeout)} s.') from None
 
@@ -66,6 +66,24 @@ def loudness(ffmpeg: str, path: Path) -> dict:
         return {'lufs': float(data['input_i']), 'true_peak': float(data['input_tp'])}
     except (ValueError, KeyError):
         raise MediaError(f'Could not measure loudness of {Path(path).name}.') from None
+
+
+def master(ffmpeg: str, src: Path, dst: Path, lufs: float = -14.0, true_peak: float = -1.5) -> Path:
+    """Two-pass loudnorm to the channel's level (measure, then exact gain), like the voice pipeline.
+    -1.5 dBTP leaves room for the AAC encoder's overshoot under the -1.0 limit."""
+    target = f'loudnorm=I={lufs}:TP={true_peak}:LRA=11'
+    r = run([ffmpeg, '-hide_banner', '-nostats', '-i', str(src), '-af', target + ':print_format=json', '-f', 'null', '-'])
+    try:
+        m = json.loads(r.stderr[r.stderr.rindex('{'):r.stderr.rindex('}') + 1])
+    except ValueError:
+        raise MediaError(f'Could not measure {Path(src).name} for mastering.') from None
+    r = run([ffmpeg, '-y', '-hide_banner', '-v', 'error', '-i', str(src), '-af',
+             f"{target}:measured_I={m['input_i']}:measured_TP={m['input_tp']}:measured_LRA={m['input_lra']}:"
+             f"measured_thresh={m['input_thresh']}:offset={m['target_offset']}:linear=true,aresample=48000",
+             '-ar', '48000', str(dst)])
+    if r.returncode:
+        raise MediaError(f'Mastering failed: {r.stderr.strip()[-200:]}')
+    return dst
 
 
 def black_intervals(ffmpeg: str, path: Path, min_seconds: float = 0.1) -> list[tuple[float, float]]:

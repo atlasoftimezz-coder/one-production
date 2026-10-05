@@ -75,7 +75,8 @@ class Runs:
         if verdict == "allow":
             return True, ""
         if verdict == "gate":
-            need = gate() if gate else None          # None = already approved ("always")
+            heavy = policy.HEAVY.get(policy.studio_name(tool) or "", "voiceover")
+            need = gate(tool=heavy) if gate else None   # None = already approved ("always")
             if not need:
                 return True, ""
             reason = f"{need['label']} uses {need['uses']}"
@@ -102,7 +103,7 @@ class Runs:
         if answer == "session":
             self.session_allow.setdefault(run.pid, set()).add(tool)
         if answer == "always" and gate:
-            gate(remember=True)
+            gate(remember=True, tool=policy.HEAVY.get(policy.studio_name(tool) or "", "voiceover"))
         if answer in ("once", "session", "always"):
             return True, ""
         return False, "The user said no to this. Don't try it another way; ask what they want instead."

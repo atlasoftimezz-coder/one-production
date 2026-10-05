@@ -35,14 +35,7 @@ def voice(path: Path, f0: float = 120, seconds: float = 8, rate: int = 48000) ->
 
 
 def master(src: Path, dst: Path, lufs: float = -14.0, tp: float = -1.5) -> Path:
-    """Two-pass loudnorm, the way the voice pipeline masters."""
-    r = subprocess.run([FF, '-hide_banner', '-nostats', '-i', str(src), '-af', f'loudnorm=I={lufs}:TP={tp}:LRA=11:print_format=json',
-                        '-f', 'null', '-'], capture_output=True, text=True)
-    m = json.loads(r.stderr[r.stderr.rindex('{'):r.stderr.rindex('}') + 1])
-    ff('-i', src, '-af', f"loudnorm=I={lufs}:TP={tp}:LRA=11:measured_I={m['input_i']}:measured_TP={m['input_tp']}:"
-       f"measured_LRA={m['input_lra']}:measured_thresh={m['input_thresh']}:offset={m['target_offset']}:linear=true,aresample=48000",
-       '-ar', 48000, dst)
-    return dst
+    return media.master(FF, src, dst, lufs, tp)
 
 
 def srt(path: Path, seconds: float, cues: list[tuple[float, float, str]] | None = None) -> Path:
