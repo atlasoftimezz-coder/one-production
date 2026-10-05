@@ -134,6 +134,8 @@ voice/           engine.py, pipeline.py, server.py, make_srt.py, config.py, tune
   No account → team pauses (Resume button; also re-checks every 60 s). Review: max 2 rounds,
   40k in / 8k out per round, 120k per task → otherwise "needs you". Spend caps per account
   (`cap_task_tokens`, `cap_day_tokens`, `cap_day_usd`) on the Usage page.
+- **ChatGPT only through Codex logins** (user, 2026-10-05: "for chatgpt we can use codex") - no
+  OpenAI API-key provider is planned.
 - **Model + effort** (user: "toggle model and effort wherever we are using claude, likewise codex and
   anthropic api"): stored on the account (`model`, `effort`; "auto" = the client's default) and set
   from the pickers under the message box. Haiku gets no effort (the API rejects it).

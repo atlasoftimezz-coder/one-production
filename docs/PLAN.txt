@@ -103,7 +103,8 @@ D9 Assume a brand-new user with nothing installed.
 ---------------
 R1 ACCOUNTS
   - Add any number of: Claude logins, Codex/ChatGPT logins, Anthropic API keys
-    (later: OpenAI API keys). Each may use a different email.
+    Each may use a different email. ChatGPT is used only through Codex
+    logins - no OpenAI API keys (user, 2026-10-05).
   - Each account isolated:
       Claude  -> own folder, launched with CLAUDE_CONFIG_DIR=profiles\claude-<n>
       Codex   -> own folder, launched with CODEX_HOME=profiles\codex-<n>
