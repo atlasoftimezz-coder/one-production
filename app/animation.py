@@ -4,7 +4,8 @@ shots.json (project files):
     {"voiceover": "vo.wav", "subtitles": "vo.srt", "size": "1920x1080", "fps": 30, "output": "episode.mp4",
      "shots": [{"svg": "art/s01.svg", "motion": "push"},                      # first shot starts at 0
                {"svg": "art/s02.svg", "anchor": "in nineteen eighty six"},     # starts when these words are said
-               {"card": {"text": "1986", "style": "date"}, "anchor": "april"}],
+               {"card": {"text": "1986", "style": "date"}, "anchor": "april"},
+               {"file": "stock/pexels-video-123.mp4", "anchor": "the river", "from": 2.0}],  # stock clip / photo
      "music": {...}}
 
 Each shot starts when its anchor words are spoken (times from the voiceover's subtitles, searched
@@ -26,7 +27,7 @@ from pathlib import Path
 from xml.etree import ElementTree as ET
 
 from . import media
-from .editor import CARD_STYLES, MOTIONS, SIZES, EditError
+from .editor import CARD_STYLES, CLIPS, MOTIONS, SIZES, STILLS, EditError
 from .storage import NotFound
 
 MIN_SHOT = 0.4
@@ -174,9 +175,20 @@ class Animation:
         cues = media.srt_cues(file_of(str(spec.get('subtitles') or '')).read_text(encoding='utf-8-sig', errors='replace'))
         svgs = []
         for n, shot in enumerate(shots, 1):
-            if not isinstance(shot, dict) or ('svg' in shot) == ('card' in shot):
-                raise EditError(f'Shot {n} needs either an svg drawing or a card.')
-            if 'svg' in shot:
+            if not isinstance(shot, dict) or sum(k in shot for k in ('svg', 'card', 'file')) != 1:
+                raise EditError(f'Shot {n} needs exactly one of: an svg drawing, a card, or a file (stock clip / photo).')
+            if 'file' in shot:
+                path = file_of(str(shot['file']))
+                if path.suffix.lower() not in STILLS | CLIPS:
+                    raise EditError(f'Shot {n}: {shot["file"]} is not a video clip or a picture.')
+                if path.suffix.lower() in STILLS and str(shot.get('motion') or 'push') not in MOTIONS:
+                    raise EditError(f'Shot {n}: motion must be one of {", ".join(sorted(MOTIONS))}.')
+                try:
+                    if float(shot.get('from') or 0) < 0:
+                        raise ValueError
+                except (TypeError, ValueError):
+                    raise EditError(f'Shot {n}: "from" is the number of seconds into the clip.') from None
+            elif 'svg' in shot:
                 path = file_of(str(shot['svg']))
                 if path.suffix.lower() != '.svg':
                     raise EditError(f'Shot {n}: {shot["svg"]} is not an .svg file.')
@@ -204,6 +216,12 @@ class Animation:
             item = {'seconds': round(b - a, 3)}
             if 'svg' in shot:
                 item.update(file=next(pngs).relative_to(files_root).as_posix(), motion=str(shot.get('motion') or 'push'))
+            elif 'file' in shot:
+                item['file'] = str(shot['file'])
+                if Path(item['file']).suffix.lower() in CLIPS:
+                    item['from'] = float(shot.get('from') or 0)
+                else:
+                    item['motion'] = str(shot.get('motion') or 'push')
             else:
                 item['card'] = shot['card']
             visuals.append(item)

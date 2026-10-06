@@ -787,7 +787,9 @@ try:
         nxt()
         check("modules step: core always on, voice suggested on the graphics card", on_step(2) and wait_for(
             "document.querySelector('.mod[data-id=voice] .opt.on') && document.querySelector('.mod[data-id=voice] .opt.on').dataset.mode==='gpu'", 8))
-        check("later modules greyed", js("document.querySelectorAll('.mod.later').length") == 5)
+        check("later modules greyed", js("document.querySelectorAll('.mod.later').length") == 4)
+        check("stock module offers a Pexels key field", js("!!document.querySelector('.mod[data-id=stock] #stockkey') && "
+                                                          "!!document.querySelector('.mod[data-id=stock] #stocksave')"))
         shot("31-setup-modules")
         nxt()
         check("install step lists what's missing with size and source", on_step(3) and wait_for(

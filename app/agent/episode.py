@@ -33,8 +33,9 @@ class EpisodeConfig(TeamConfig):
     shot_seconds: float = 3.0        # aimed-for average shot length (the stickman style cuts every 2-4 s)
 
 
-VISUALS_NOTE = ("You are the ANIMATOR in One Production's episode run. You draw every shot yourself as SVG code "
-                "(no image models, no downloads) and time it to the voiceover with anchor words from the script.")
+VISUALS_NOTE = ("You are the ANIMATOR in One Production's episode run. You draw shots yourself as SVG code "
+                "(no image models; free Pexels stock only through stock_search / stock_fetch when they are offered) "
+                "and time them to the voiceover with anchor words from the script.")
 PACKAGER_NOTE = ("You are the PACKAGER in One Production's episode run. You write what the upload needs: honest, "
                  "specific titles and a description that matches the video, tags, and a thumbnail drawn as SVG.")
 
@@ -220,6 +221,12 @@ class EpisodeRun(Team):
                  f"4. Call build_animation with shots \"{b}/shots.json\" and edit \"{b}/edit.json\". Fix whatever "
                  "it reports and call it again until it succeeds.",
                  "Finish with a short summary: number of shots and drawings, and anything you were unsure about."]
+        if getattr(self.deps, "stock_ready", lambda: False)():
+            lines[-1:-1] = ["5. Free Pexels stock is available for real-world subjects (places, animals, nature, objects): "
+                            "stock_search with specific words, stock_fetch the ones you use, then shots like "
+                            "{\"file\": \"stock/pexels-video-123.mp4\", \"anchor\": \"...\", \"from\": 2.0}. Keep drawings "
+                            "for explanations, numbers and anything stock can't show truthfully; stock at most about half "
+                            "the shots. Count stock shots separately in your summary."]
         if s.get("visual_notes"):
             lines += ["", "The owner's directions for the look: " + s["visual_notes"]]
         if task.notes:

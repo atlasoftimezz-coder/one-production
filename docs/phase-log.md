@@ -45,3 +45,15 @@ numeric gates, ffmpeg editor, animation, packaging and the episode run committed
 run). The run before was 378/381 - a race in the fake CLI's argument log (two processes appending
 at once), fixed with a file lock. Not run for real: an episode with real accounts and a real
 voiceover. Manual: `gates/P10-production-manual.md` - pending.
+
+P11 + Pexels stock (2026-10-06, Claude; owner: "i dont have story block api key so for now we can use
+pexel stock footage api ... continue on phase 11"). Plan `P11-plan.md`. Built: `dev/dispatch.py` +
+`dev/dispatch.json` (coder picked by rules + headroom floor, worktree per task, cross-model review to
+`dev/reviews/<task>.md`, hand-over at a limit) and Pexels stock (`app/stock.py`, tools stock_search /
+stock_fetch, key in Credential Manager, stock clips in shots). AUTO items: Claude floor mocked low ->
+Codex picked; Codex review file appears for a Claude-written change (and the reverse). `check.bat P11`:
+**PASS 410/411** (incl. P0-P10; 1 skip = opt-in real GPU test). The run before failed 2 P7 setup
+tests on purpose-changed behaviour (Stock no longer "Phase 2") and showed browser-test servers used
+the real Credential Manager - every test now uses an in-memory keyring. Real (free): Pexels search,
+fetch of a 1080p clip + photo, and that clip through render + video gate. Not run for real: dispatch
+with real accounts. Manual: `gates/P11-manual.md` - pending.

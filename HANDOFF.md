@@ -12,9 +12,58 @@ phase log and the plan, checks the PC, runs the last gate and reports before tou
 
 ---
 
-## Current continuation checkpoint - Codex, then Claude, 2026-10-05
+## Current continuation checkpoint - Claude, 2026-10-06
 
-**Where it stands (end of 2026-10-05):** everything in the plan up to and including P10 is
+**Where it stands:** P11 and Pexels stock footage are built. The full gate result is
+`check.bat P11` = **410 passed, 0 failed, 1 opt-in GPU skip**. Nothing has been pushed. Owner, 2026-10-06: "i dont have story
+block api key so for now we can use pexel stock footage api ... continue on phase 11". Plan:
+`docs/P11-plan.md`. Manual checklist: `docs/gates/P11-manual.md`, pending.
+
+- **P11 dispatch** (`dev/dispatch.py` + `dev/dispatch.json`, reviews in `dev/reviews/`):
+  - `pick`, `run <task> "text"`, `review <range|branch|commit>` and `status`.
+  - Rules pick Claude or Codex; an account needs `floor_pct` (20 %) left in every window to code
+    and `review_floor_pct` (10 %) to review.
+  - Live usage comes from Claude `/usage` (0 turns) and the Codex session files. The shared
+    `app.usage.usage_pct` replaces `main.py`'s copy.
+  - Only the first signed-in account per service is used (D7), and API keys are never used.
+  - A coder runs unattended in a worktree `build/dispatch/<task>` on branch `dispatch/<task>`.
+    Claude runs with `acceptEdits` and the tool list from `dispatch.json`; Codex runs with
+    `exec --sandbox workspace-write`. Its work is committed with a `Co-Authored-By: Claude|Codex`
+    line.
+  - When the coder hits a limit, its partial work is committed and the other model continues.
+  - The other model reviews read-only (Claude `--tools Read,Glob,Grep`, Codex
+    `--sandbox read-only`) and writes `dev/reviews/<task>.md`. A re-review gets `-2`, `-3` and
+    never overwrites.
+  - Calls go to the usage ledger as roles `dispatch-coder` / `dispatch-reviewer`.
+  - `dev/` is not shipped in the package. 19 tests are in `tests/p11`. The fake CLI gained
+    `FAKE_WRITE`, `FAKE_MODE_CLAUDE/CODEX` and `FAKE_CODEX_REPLY`.
+  - **Never run for real yet.** That is the manual check, and it uses real usage.
+- **Pexels stock** (`app/stock.py`, `app/agent/stock_tools.py`, key UI under Set up / modules →
+  Stock footage, routes `/api/stock`, `/api/stock/key`):
+  - The key is in Windows Credential Manager under `OneProduction` / `pexels`. **The owner's key
+    is already saved there** (hint `…GpKr`).
+  - Tools `stock_search` / `stock_fetch` run without a card (policy `STUDIO_STOCK`). They are
+    offered only once a key is set.
+  - Videos are mp4 between 720p and 1080p. Photos are saved at most 2560 wide.
+  - Files land in `files/stock/`, with credits in `stock/CREDITS.md` + `credits.json`.
+  - Shots JSON now takes `{"file": "stock/...", "anchor", "from" | "motion"}`.
+  - The episode animator is told about stock (at most about half the shots) when a key is set.
+  - Verified for real on 2026-10-06 (free):
+    - A search returned good 1080p results.
+    - A real 1080p clip (5.2 MB) and a photo were fetched.
+    - That clip went through shots → edit → render → video gate and passed (throwaway test,
+      deleted).
+    - The key's rate header says limit **25,000**, not the documented 200/hour, so the app
+      reports whatever Pexels says.
+  - 11 tests in `tests/p10/test_stock.py`.
+- Tests: every test (and every app server a test starts) now uses an in-memory keyring
+  (`app/security/memkeyring.py`, set in `tests/conftest.py`). Two P7 setup tests were changed
+  because Stock is no longer greyed "Phase 2".
+- Codex on this PC is now **0.160.0** (was 0.157.1). The `exec` flags used are unchanged.
+
+## Previous checkpoint - Codex, then Claude, 2026-10-05
+
+**Where it stood (end of 2026-10-05):** everything in the plan up to and including P10 is
 built and the full gate is green (`check.bat P10` = 380 passed, 0 failed, 1 opt-in GPU skip,
 last commit `ccdfbb3` + this handoff). Nothing has been pushed. What's left: the owner's manual
 checks (P7 Part B, P8, P9, P10 part 1, P10 knowledge/Resolve, P10 production = one full real
@@ -355,11 +404,11 @@ voice/           engine.py, pipeline.py, server.py, make_srt.py, config.py, tune
 | P10 part 1 Script Studio (competitors → FacelessOS script → Opus review loop; FacelessOS bundled) | **built, manual pending** (`docs/gates/P10-manual.md`) | 2964239 + FacelessOS-bundle commit |
 | P10 knowledge + learning + Resolve adapter | **built, manual pending** (`docs/gates/P10-knowledge-manual.md`) | fd0c0e6 … e79e8e7 |
 | P10 rest: numeric gates, ffmpeg editor, animation, packaging, episode run | **built, manual pending** (`docs/gates/P10-production-manual.md`: watch one full real episode) | 0b71ed8 … cfd9d04 |
-| P11 Dev orchestration (dispatch.py, cross-model code review) | Phase 2 | — |
+| P11 Dev orchestration (dispatch.py, cross-model code review) + Pexels stock | **built, manual pending** (`docs/gates/P11-manual.md`) | see git log 2026-10-06 |
 | P12 Terms check, Google sign-in, learning loop | later | — |
 
 Last gate: `check.bat P10` (see `docs/gates/P10-auto.md`; the 1 skip is the opt-in real-GPU test).
-Remaining to build: **P11, P12** (stock footage / research workers wait for the owner's keys). Manual checks waiting on the user: P7 Part B,
+Remaining to build: **P12** (research workers wait for the owner's NexLev / vidIQ access; Storyblocks for a paid key). Manual checks waiting on the user: P7 Part B,
 P8 friend test, P9 team mode, P10 part 1 Script Studio, P10 knowledge/Resolve, P10 production (one real episode).
 Version **0.10.0** in `app/version.py`; everything since is under "Unreleased" in the changelog (bump the
 version when the owner wants a release / package). Note: P10 part 1 was built before P9's manual sign-off, at the
@@ -511,6 +560,11 @@ user's voice toward a benchmark — that produced a "different person" once).
   by the late answer (the Resolve switch did) - fetch, then open.
 - The video gate flags near-black frames (blackdetect pix_th 0.10, 98 % of the picture): dark cards
   must stay above that (title cards are navy `#1B2A4A`).
+- **Browser-test servers are subprocesses**: before 2026-10-06 they used the REAL Windows Credential
+  Manager (the in-process `memory_keyring` fixture doesn't reach them). Now `tests/conftest.py` sets
+  `PYTHON_KEYRING_BACKEND=app.security.memkeyring.MemoryKeyring` for the whole run, so no test can see
+  the owner's saved Pexels key (found because the stock UI check saw it). `cmdkey /list` showed no
+  leaked test entries.
 - `git grep` before publishing: the repo contains fake test keys (`sk-ant-api03-GOODgood…`,
   AWS's `AKIAIOSFODNN7EXAMPLE`) on purpose — they test the redaction.
 
@@ -526,8 +580,8 @@ user's voice toward a benchmark — that produced a "different person" once).
    (`docs/gates/P10-production-manual.md`) - all use real accounts. The real AI loops (Script Studio,
    episode visuals/packaging) have only run with stand-ins; competitor captions and the real manual
    import were checked for real (free). Live Resolve has never been driven from the app.
-   Next build: P11, then P12.
-5b. P10 not built: stock footage (Storyblocks key / free sources) and research workers.
+   Next build: P12. P11 manual: `docs/gates/P11-manual.md`.
+5b. Not built: Storyblocks (no key; Pexels is used instead, 2026-10-06) and research workers.
 5c. Episode cost is untested: the visuals worker draws roughly one SVG per 3 s of video; watch Usage
    on the first real run. The bundle hard-links the video (no extra disk), but backups with media on (the default) zip it twice.
 6. Known limits: Word scripts need Heading styles; moving the data folder later is manual;

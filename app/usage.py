@@ -45,6 +45,27 @@ def range_start(name: str, now: float | None = None) -> float:
     raise ValueError("unknown range")
 
 
+def usage_pct(acc: dict, ledger: "Ledger | None" = None, now: float | None = None) -> tuple[float | None, str]:
+    """(percent used, "exact" | "estimated" | "none"). Exact when the provider reports its
+    own utilisation (Claude, Codex); estimated from tokens against a user-set 5-hour budget.
+    Shared by the app and dev/dispatch.py, so both read limits the same way."""
+    now = now or time.time()
+    rl = acc.get("rate_limit") or {}
+    windows = []
+    for w in (rl.get("windows") or {}).values():
+        if w.get("utilization") is None:
+            continue
+        # a window whose reset time has passed has started again from zero
+        windows.append(0.0 if w.get("resets_at") and w["resets_at"] <= now else w["utilization"])
+    if windows and now - rl.get("at", 0) < 7 * 86400:
+        return round(max(windows) * 100, 1), "exact"
+    budget = acc.get("budget_tokens_5h")
+    if budget and ledger is not None:
+        used = ledger.tokens_since(acc["id"], now - 5 * 3600)
+        return round(100 * used / budget, 1), "estimated"
+    return None, "none"
+
+
 class Ledger:
     def __init__(self, data_dir: Path):
         self.path = data_dir / "usage.sqlite"

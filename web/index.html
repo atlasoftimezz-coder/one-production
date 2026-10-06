@@ -2832,7 +2832,24 @@ async function stepModules() {
       ${m.detail ? `<p>${esc(m.detail)}</p>` : ""}${m.warning ? `<p class="wnote warn">${esc(m.warning)}</p>` : ""}
       ${m.id === "voice" && !m.external ? `<div class="opts">${["gpu", "cpu", "off"].map(k => `<button class="opt ${m.mode === k ? "on" : ""}" data-mode="${k}"
           ${k === "gpu" && !m.gpu_ok ? "disabled title='No NVIDIA card with 8 GB found'" : ""}>${MODE_TEXT[k]}${k === m.suggested ? " · suggested" : ""}</button>`).join("")}</div>` : ""}
+      ${m.id === "stock" ? `<div class="opts">${m.key_set ? `<button class="opt" id="stockdel">Remove the Pexels key</button>`
+          : `<input id="stockkey" type="password" autocomplete="off" placeholder="Pexels API key" style="flex:1;min-width:12em">
+             <button class="opt" id="stocksave">Check and save</button>`}</div>` : ""}
     </div>`).join("");
+  const save = $("#stocksave"), del = $("#stockdel");
+  if (save) save.onclick = async () => {
+    save.disabled = true;
+    try {
+      await api("/api/stock/key", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: $("#stockkey").value }) });
+      toast("Pexels key saved in Windows Credential Manager");
+    } catch (e) { toast(e.message, true); }
+    stepModules();
+  };
+  if (del) del.onclick = async () => {
+    try { await api("/api/stock/key", { method: "DELETE" }); toast("Pexels key removed"); }
+    catch (e) { toast(e.message, true); }
+    stepModules();
+  };
   document.querySelectorAll(".mod .opt[data-mode]").forEach(b => b.onclick = async () => {
     try { await api("/api/modules/voice", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: b.dataset.mode }) }); }
     catch (e) { toast(e.message, true); }

@@ -49,8 +49,10 @@ def test_rtx_5060_ti_gets_the_cuda_12_8_build_and_nothing_runs_without_ok(make_a
 def test_later_modules_are_greyed_with_what_they_will_need(make_app):
     m = mods(make_app())
     assert m["core"]["state"] == "ready"
-    for later in ("subtitles", "animation", "video", "stock", "research"):
+    for later in ("subtitles", "animation", "video", "research"):
         assert m[later]["state"] == "later" and m[later]["needs"] and "Phase 2" in m[later]["detail"]
+    # Stock is built (Pexels, 2026-10-06): off until the owner adds a key, never greyed
+    assert m["stock"]["state"] == "off" and "Pexels" in m["stock"]["needs"] and not m["stock"]["key_set"]
 
 
 def test_your_own_voice_app_counts_as_ready(make_app):

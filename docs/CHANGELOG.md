@@ -2,7 +2,12 @@
 
 What changed in each version, in plain words. "Check for updates" shows the newest section.
 
-## Unreleased - P10 production engine, knowledge, learning and Resolve
+## Unreleased - P10 production engine, knowledge, learning and Resolve; P11 stock footage
+- **Stock footage from Pexels**: add your free Pexels key under System → Set up / modules →
+  Stock footage. The key is kept in Windows Credential Manager. The AI can then search and fetch
+  free Pexels clips and photos into the project's `stock/` folder, and each one is credited in
+  `stock/CREDITS.md`. In **Make an episode**, the animator mixes stock clips with drawings for
+  real-world subjects. Storyblocks is not built yet.
 - **Make an episode** (Files sidebar): from a finished script to an upload-ready bundle. The
   voiceover is made (or reused), a worker draws every shot as a drawing timed to the spoken words,
   the video is put together on your processor, and a worker writes titles, description, tags and a

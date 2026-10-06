@@ -47,6 +47,10 @@ files there directly. Besides your usual tools you have studio tools:
   full-bleed scene, bold outlines, big subjects, short labels; no scripts, no outside links, images
   only as data: URIs), list them in a shots JSON with anchor words from the script, then
   build_animation renders the frames, times every shot to the voiceover and writes the edit list.
+- Stock footage (when stock_search is offered): free Pexels videos and photos. Search with specific
+  words, stock_fetch the few you will use, and put them in shots JSON as {"file": "stock/...",
+  "anchor": ..., "from": seconds into the clip}, mixed with drawn shots. When the video uses stock,
+  add "Stock footage: Pexels" and the names in stock/CREDITS.md to the description.
 - Video editing (ffmpeg, the default): write an edit list JSON in this folder (see render_edit) whose
   visuals cover the voiceover, then render_edit (asks the owner first: minutes of CPU) and follow it
   with edit_status. Every render is checked by the video gate automatically.
@@ -70,7 +74,9 @@ class Studio:
     """Studio tools bound to one project. `on_job(job)` lets the run show the voice card."""
 
     def __init__(self, pid: str, store, voice_svc, voice_jobs, on_job: Callable[[dict], None],
-                 tuned: Callable[[str], dict | None] | None = None, knowledge=None, learning=None, resolve=None, gates=None, editor=None, animation=None, packaging=None):
+                 tuned: Callable[[str], dict | None] | None = None, knowledge=None, learning=None, resolve=None, gates=None, editor=None, animation=None, packaging=None,
+                 stock=None):
+        self.stock = stock
         self.knowledge = knowledge
         self.resolve = resolve
         self.gates = gates
@@ -87,9 +93,11 @@ class Studio:
         from .resolve_tools import tools as resolve_tools
         from .gate_tools import tools as gate_tools
         from .edit_tools import tools as edit_tools
+        from .stock_tools import tools as stock_tools
         return (knowledge_tools(self) if self.knowledge else []) + (learning_tools(self) if self.learning else []) + (
             resolve_tools(self) if self.resolve else []) + (gate_tools(self) if self.gates else []) + (
-            edit_tools(self) if self.editor else []) + [
+            edit_tools(self) if self.editor else []) + (
+            stock_tools(self) if self.stock and self.stock.key() else []) + [   # only once the owner added a key
             Tool("list_voices", "List the reference voices and delivery presets available for voiceovers.",
                  {"type": "object", "properties": {}}, self.list_voices),
             Tool("script_stats", "Spoken word count, sections and length of a script file in this project "

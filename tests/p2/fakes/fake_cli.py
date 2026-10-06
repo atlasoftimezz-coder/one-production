@@ -12,6 +12,10 @@ Behaviour comes from environment variables set by the tests:
     FAKE_UTIL   Claude five_hour utilisation to report (default 0.42 in replies, 0.34 in /usage)
     FAKE_CODEX_PCT  Codex 5-hour used_percent written to its session file (default 35)
     FAKE_REPLY  exact reply text for Claude (default: echoes the user's last line)
+    FAKE_CODEX_REPLY  exact reply text for Codex (default: echoes the user's last line)
+    FAKE_MODE_CLAUDE / FAKE_MODE_CODEX  FAKE_MODE for one of the two only (P11 hand-over)
+    FAKE_WRITE  "path=text": a run that may edit (Claude --permission-mode acceptEdits, Codex
+                --sandbox workspace-write) writes that file in its working folder (P11 coder)
 Login state is a file "logged_in" inside the account's own folder (CLAUDE_CONFIG_DIR /
 CODEX_HOME), which is exactly what proves the folders keep accounts apart.
 """
@@ -39,6 +43,17 @@ def bump() -> int:
     n = int(p.read_text()) + 1 if p.exists() else 1
     p.write_text(str(n))
     return n
+
+
+def write_file():
+    """FAKE_WRITE="path=text": what a coding run leaves in its working folder (P11)."""
+    spec = os.environ.get("FAKE_WRITE")
+    if spec:
+        path, _, text = spec.partition("=")
+        p = Path.cwd() / path
+        p.parent.mkdir(parents=True, exist_ok=True)
+        with open(p, "a", encoding="utf-8") as fh:
+            fh.write(text + "\n")
 
 
 def last_user_line(prompt: str) -> str:
@@ -84,7 +99,9 @@ def claude(args, home: Path):
         sys.stderr.write("Not logged in · Please run /login\n")
         return 1
     n = bump()
-    mode = os.environ.get("FAKE_MODE", "ok")
+    mode = os.environ.get("FAKE_MODE_CLAUDE") or os.environ.get("FAKE_MODE", "ok")
+    if "acceptEdits" in args:
+        write_file()
     out({"type": "system", "subtype": "init", "model": "claude-sonnet-5-5"})
     rl = {"type": "rate_limit_event", "rate_limit_info": {
         "status": "rejected" if mode == "limit" else "allowed", "rateLimitType": "five_hour",
@@ -151,7 +168,9 @@ def codex(args, home: Path):
         sys.stderr.write("Not logged in. Run `codex login`.\n")
         return 1
     n = bump()
-    mode = os.environ.get("FAKE_MODE", "ok")
+    mode = os.environ.get("FAKE_MODE_CODEX") or os.environ.get("FAKE_MODE", "ok")
+    if "workspace-write" in args:
+        write_file()
     out({"type": "thread.started", "thread_id": "fake"})
     out({"type": "turn.started"})
     if mode == "limit":
@@ -171,7 +190,8 @@ def codex(args, home: Path):
                 "secondary": {"used_percent": 10.0, "window_minutes": 10080, "resets_at": 4102444800}}}}) + "\n",
             encoding="utf-8")
     out({"type": "item.completed", "item": {"id": "item_0", "type": "agent_message",
-                                            "text": f"Fake Codex says: {last_user_line(prompt)}"}})
+                                            "text": os.environ.get("FAKE_CODEX_REPLY")
+                                            or f"Fake Codex says: {last_user_line(prompt)}"}})
     out({"type": "turn.completed", "usage": {"input_tokens": 50, "cached_input_tokens": 10, "output_tokens": 8}})
     return 0
 

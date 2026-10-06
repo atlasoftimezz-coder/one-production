@@ -32,6 +32,7 @@ from .editor import Editor
 from .editor_api import mount as mount_editor
 from .animation import Animation
 from .packaging import Packaging
+from .stock import Stock, StockError
 from . import handoff
 from .accounts import DEFAULT_SWITCH, DEFAULT_WARN, PROVIDERS, SAME_SERVICE_SWITCHING, SUBSCRIPTIONS, \
     AccountError, Accounts
@@ -67,7 +68,7 @@ from .scripts import SUPPORTED as SCRIPT_TYPES, read_script, stats as script_sta
 from .media import duration as media_duration
 from .storage import NotFound, Store
 from .tools import Approvals, TOOLS
-from .usage import RANGES, Ledger, range_start
+from .usage import RANGES, Ledger, range_start, usage_pct as shared_usage_pct
 from .accounts import CAP_FIELDS, switch_allowed
 from .version import __version__
 from .voice import VoiceTuner, VoiceError, VoiceJobs, VoiceService
@@ -196,6 +197,10 @@ class VoiceModeIn(BaseModel):
     mode: str
 
 
+class StockKeyIn(BaseModel):
+    key: str
+
+
 class InstallIn(BaseModel):
     approve: list[str] = []
 
@@ -267,7 +272,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
                login_console: bool | None = None, voice_transport=None, agent_client=None,
                codex_transport=None, backup_delay: float = 120, backup_tick: float = 3600,
                restart=None, gpu_probe=None, tune_script: Path | None = None, relaunch=None,
-               updater: Updater | None = None, ytdlp=None) -> FastAPI:
+               updater: Updater | None = None, ytdlp=None, stock_transport=None) -> FastAPI:
     if login_console is None:
         login_console = settings.login_console
     token = token or secrets.token_urlsafe(32)
@@ -285,6 +290,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
     editor = Editor(store, settings.data_dir, gates)
     animation = Animation(store, settings.data_dir)
     packaging = Packaging(store, settings.data_dir, gates)
+    stock = Stock(store, transport=stock_transport)
     runs = Runs()
     backups = Backups(settings.data_dir, store, redact)
     profile = Profile(settings.data_dir)
@@ -412,21 +418,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
         own utilisation (Claude); estimated from tokens against a user-set 5-hour budget."""
         if acc["id"] == "demo":
             return None, "none"
-        rl = acc.get("rate_limit") or {}
-        now = time.time()
-        windows = []
-        for w in (rl.get("windows") or {}).values():
-            if w.get("utilization") is None:
-                continue
-            # a window whose reset time has passed has started again from zero
-            windows.append(0.0 if w.get("resets_at") and w["resets_at"] <= now else w["utilization"])
-        if windows and now - rl.get("at", 0) < 7 * 86400:
-            return round(max(windows) * 100, 1), "exact"
-        budget = acc.get("budget_tokens_5h")
-        if budget:
-            used = ledger.tokens_since(acc["id"], time.time() - 5 * 3600)
-            return round(100 * used / budget, 1), "estimated"
-        return None, "none"
+        return shared_usage_pct(acc, ledger)
 
     def spend_today(acc: dict) -> dict:
         tok, usd = ledger.spent_since(acc["id"], range_start("today"))
@@ -890,8 +882,30 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
     @app.get("/api/modules")
     async def list_modules() -> dict:
         gpu = await gpu_info()
-        return {"modules": modules.status(gpu, installer.running() and installer.module == "voice"),
-                "gpu": gpu}
+        mods = modules.status(gpu, installer.running() and installer.module == "voice")
+        for m in mods:
+            if m["id"] == "stock":                  # Pexels is built (owner, 2026-10-06); Storyblocks is not
+                st = stock.status()
+                m.update(state="ready" if st["key_set"] else "off", key_set=st["key_set"], key_hint=st["key_hint"],
+                         needs="Your own free Pexels API key (pexels.com/api). Storyblocks needs its paid key - not built yet.",
+                         detail=("Pexels key " + st["key_hint"] + " - the AI can search and fetch free Pexels clips and photos."
+                                 if st["key_set"] else "Add your free Pexels key to switch it on."))
+        return {"modules": mods, "gpu": gpu}
+
+    @app.get("/api/stock")
+    def stock_status() -> dict:
+        return stock.status()
+
+    @app.post("/api/stock/key")
+    async def stock_set_key(body: StockKeyIn) -> dict:
+        try:
+            return await asyncio.to_thread(stock.set_key, body.key)
+        except StockError as e:
+            raise HTTPException(400, str(e))
+
+    @app.delete("/api/stock/key")
+    def stock_remove_key() -> dict:
+        return stock.remove_key()
 
     @app.patch("/api/modules/voice")
     async def set_voice_mode(body: VoiceModeIn) -> dict:
@@ -1201,7 +1215,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
         # a fresh session (new project, or another account taking over) gets the recent chat
         prompt = message if sid else build_prompt(store.history(pid), message).replace(SYSTEM + "\n\n", "", 1)
         store.append_message(pid, "user", message)
-        studio = Studio(pid, store, voice_svc, voice_jobs, tuned=tuner.for_voice, knowledge=knowledge, learning=learning, resolve=resolve, gates=gates, editor=editor, animation=animation, packaging=packaging,
+        studio = Studio(pid, store, voice_svc, voice_jobs, tuned=tuner.for_voice, knowledge=knowledge, learning=learning, resolve=resolve, gates=gates, editor=editor, animation=animation, packaging=packaging, stock=stock,
                         on_job=lambda job: run.emit({"t": "voicejob", "id": job["id"], "source": job["source"],
                                                      "voice": job["voice"]}))
 
@@ -1341,7 +1355,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
             files, voices, presets, jobs = await studio_state(pid)
             instructions = (STUDIO_INSTRUCTIONS + "\n\n" + actions.context(files, voices, presets, jobs)
                             + "\n\n" + note + "\n\n" + learning.instructions(pid, prompt))
-            studio = Studio(pid, store, voice_svc, voice_jobs, tuned=tuner.for_voice, knowledge=knowledge, learning=learning, resolve=resolve, gates=gates, editor=editor, animation=animation, packaging=packaging,
+            studio = Studio(pid, store, voice_svc, voice_jobs, tuned=tuner.for_voice, knowledge=knowledge, learning=learning, resolve=resolve, gates=gates, editor=editor, animation=animation, packaging=packaging, stock=stock,
                             on_job=lambda job: sub.emit({"t": "voicejob", "id": job["id"], "source": job["source"],
                                                          "voice": job["voice"]}))
             eff = M.effort_for(acc["provider"], model, effort, acc.get("codex_models"))
@@ -1568,6 +1582,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
             from .gates_api import VoiceCheck
             return await gates.voice(pid, VoiceCheck(job_id=jid))
 
+        deps.stock_ready = lambda: bool(stock.key())
         deps.script_stats = script_stats_of
         deps.voice_job = voice_job_of
         deps.start_voice = start_voice_job

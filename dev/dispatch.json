@@ -1,0 +1,21 @@
+{
+ "_about": "Rules for dev/dispatch.py (plan D1, P11). See docs/P11-plan.md.",
+ "floor_pct": 20,
+ "review_floor_pct": 10,
+ "rules": [
+  {"kind": "tests", "keywords": ["add tests", "write tests", "regression test", "flaky"],
+   "order": ["codex", "claude"],
+   "why": "test-writing goes to Codex first, so Claude reviews it"},
+  {"kind": "default", "keywords": [], "order": ["claude", "codex"]}
+ ],
+ "coder": {
+  "timeout_s": 3600,
+  "claude_allowed_tools": ["Read", "Edit", "Write", "Glob", "Grep",
+                           "Bash(python -m pytest:*)", "Bash(git status:*)",
+                           "Bash(git diff:*)", "Bash(git log:*)"]
+ },
+ "review": {
+  "timeout_s": 900,
+  "max_diff_chars": 80000
+ }
+}
