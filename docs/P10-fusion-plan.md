@@ -199,11 +199,41 @@ Project "One Production (disposable)/OP Fusion style study 60p", **1080p 60 fps*
   flowchart shot (tiles + connectors + pill + reframing camera) and one 3D shot (stage, cash
   stacks via Duplicate3D, Camera3D dolly) built by script. Export stills and compare with the
   reference. This proves the API and look before anything is rebuilt.
-- F2 Building-block library (style-agnostic, driven by an art-direction spec) + art-direction step with 3 style frames.
-- F3 Runner: project / timeline / per-shot Fusion clips at anchors; stills export.
-- F4 Episode stage rewired (Fusion only), worker and master prompts, owner-render hand-off;
-  remove the SVG path; tests with a stand-in Resolve.
-- F5 Real episode (manual gate).
+- **F2 done (2026-10-06):** `app/fusion_kit.py`, the Fusion kit v1.
+  - It is style-agnostic: values come from the episode's art.json stored in each comp. It has
+    layers, masks, text, icons, typewriter, pop/rise, draw-on lines, dashed lines, glow, grain,
+    vignette, bars, and a 3D stage with camera, lights and renderer.
+  - **Resolve's sandbox has no `exec`**, so a shot script starts with `from op_kit import *` and
+    the app swaps in the kit when the owner approves the card (`expand`, in the Claude agent's
+    `can_use_tool`). The card shows the AI's code plus "kit v1".
+  - It was run live on Resolve 21.1 and has 7 unit tests against a stand-in Fusion object model.
+  - The art direction is written by the worker as art.json (concept, palette, installed fonts,
+    motion, 3D yes/no) and checked by the master on the stills. The "3 style frames before the
+    shots" idea folded into the stills review: the worker builds, exports stills and fixes,
+    then the master reviews.
+- **F3 done:** `resolve_runner.fusion_build` / `fusion_stills` + `app/fusion.py`, verified live.
+  - Measured on 21.1: `InsertFusionCompositionIntoTimeline` is a **300-frame ripple insert at
+    the playhead**. Inserting each shot in order at its start frame gives exact cuts; the
+    leftovers past the end are deleted with `DeleteClips(…, False)`.
+  - A Fusion comp **added to a video clip** (`AddFusionComp`) renders black in stills, and
+    `CreateFusionClip` gives no comp handle, so shots are inserted compositions.
+  - Still clips ignore `startFrame`/`endFrame`. Video clips honor them (end exclusive), and
+    `recordFrame` works.
+  - The voiceover goes on A1 via `AppendToTimeline([{mediaPoolItem, trackIndex: 1, recordFrame,
+    mediaType: 2}])`.
+  - `SetName` on timeline items works.
+  - Projects go into the "One Production episodes" folder. 11 tests use an in-process stand-in
+    Resolve with that behavior.
+- **F4 done:** the episode's visuals stage is Fusion only.
+  - The worker must be a Claude or API account (`Task.providers`), because Codex has no Resolve
+    MCP.
+  - Edit = "waiting for your render". `POST /api/projects/{pid}/episode/render {video}` resumes,
+    also after a restart (`EpisodeRun.from_snapshot`). The video gate runs on the rendered file,
+    then packaging.
+  - The SVG `build_animation` tool is no longer offered to agents.
+  - 8 episode tests.
+- F5 Real episode (manual gate, `docs/gates/P10-production-manual.md`): needs the owner, Resolve
+  open, both switches on, and the GPU for the voiceover.
 
 Open: the 3D model source (owner folder vs CC0 downloads), fonts (the reference uses a geometric
 sans similar to Inter / Montserrat), and the logo file.

@@ -16,6 +16,7 @@ from pathlib import Path
 import keyring
 
 from . import models as M
+from . import terms
 
 PROVIDERS = {
     "claude": {"label": "Claude", "needs_login": True, "models": ["sonnet", "opus", "haiku", "fable"]},
@@ -26,18 +27,24 @@ KEYRING_SERVICE = "OneProduction"
 DEFAULT_WARN, DEFAULT_SWITCH = 70, 85
 SUBSCRIPTIONS = {"claude", "codex"}
 # Plan D7/R8: hopping between two accounts of the SAME subscription service to get past its
-# limit stays off until the terms check is done. Switching to a different service, or to a
+# limit ("chaining") is allowed only when the owner switches it on AND the terms check
+# (app/terms.json, docs/terms-check.md) says the provider allows it. On 2026-10-06 neither
+# Anthropic nor OpenAI does, so it stays off. Switching to a different service, or to a
 # pay-per-use API key, is ordinary use and is allowed.
-SAME_SERVICE_SWITCHING = False
+SAME_SERVICE_SWITCHING = False          # the default; the effective rule is chaining_allowed()
 
 
-def switch_allowed(from_acc: dict, to_acc: dict) -> bool:
+def chaining_allowed(provider: str, owner_allows: bool = False) -> bool:
+    return SAME_SERVICE_SWITCHING or terms.chaining_allowed(provider, owner_allows)
+
+
+def switch_allowed(from_acc: dict, to_acc: dict, owner_allows: bool = False) -> bool:
     """May work move from one account to the other after a limit? (D7: not between two
-    accounts of the same subscription service until the terms check.)"""
+    accounts of the same subscription service unless the owner and the provider's terms allow it.)"""
     if to_acc["id"] == from_acc["id"]:
         return False
-    return SAME_SERVICE_SWITCHING or not (to_acc["provider"] in SUBSCRIPTIONS
-                                          and to_acc["provider"] == from_acc["provider"])
+    same_service = to_acc["provider"] in SUBSCRIPTIONS and to_acc["provider"] == from_acc["provider"]
+    return not same_service or chaining_allowed(to_acc["provider"], owner_allows)
 
 
 CAP_FIELDS = ("cap_task_tokens", "cap_day_tokens", "cap_day_usd")

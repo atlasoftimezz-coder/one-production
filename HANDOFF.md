@@ -12,9 +12,49 @@ phase log and the plan, checks the PC, runs the last gate and reports before tou
 
 ---
 
-## Current continuation checkpoint - Claude, 2026-10-06
+## Current continuation checkpoint - Claude, 2026-10-06 (late): Fusion F2-F4 built
 
-**State at the end of 2026-10-06:**
+**Fusion episodes.** Owner, in order:
+- "Animation, motion graphics should done in davinci fusion page not drawing";
+- "No reference for each and every script ... new style for easy understanding ... super duper
+  high quality with 1080p 60fps. not always same templeted style";
+- "do this: F2-F5, P12, research/Storyblocks".
+
+Choices: the AI writes Fusion scripts per shot (an approval card each), Fusion only, and the
+owner renders.
+
+- **Read `docs/P10-fusion-plan.md`.** It holds the research (manual chapters, API, the Bravos
+  reference study), F1/F1b prototypes, and every Resolve 21.1 behavior measured live.
+- **F2:** `app/fusion_kit.py` (kit v1, style-agnostic).
+  - Shot scripts start with `from op_kit import *`, and the Claude agent swaps the kit in when
+    the owner approves, because Resolve's sandbox has no `exec`.
+  - `app/resolve_mcp.py` instructions include `fusion_kit.GUIDE`.
+- **F3:** `resolve_runner.fusion_build` / `fusion_stills` and `app/fusion.py`, plus tools
+  `fusion_setup` / `fusion_stills` (policy `STUDIO_FUSION`). They are offered only when Resolve
+  control and the MCP are both on.
+- **F4:** `app/agent/episode.py`.
+  - Visuals: art.json → shots.json → fusion_setup → a script per shot → stills → master review.
+    The worker must be Claude or API (`Task.providers`).
+  - Edit: waits for the owner's render (state `waiting_render`);
+    `POST /api/projects/{pid}/episode/render {video}` resumes, via `from_snapshot` after a
+    restart.
+  - `build_animation` is no longer offered to agents.
+  - The episode panel got a render picker.
+  - Manual checklist rewritten: `docs/gates/P10-production-manual.md`.
+- **Verified live on Resolve 21.1:**
+  - the runner built a 4-shot project with exact cuts and the voiceover on A1;
+  - a kit-built shot rendered;
+  - stills exported, and empty shots were reported.
+- **Not run yet:** a whole episode with a real AI. That is F5, and needs the owner.
+- **Test projects left in Resolve:**
+  - "One Production (disposable)": OP Fusion prototype, OP Fusion style study 60p (with
+    timelines Glyphs, Feasibility A-D);
+  - "One Production episodes": OP runner test 1.
+  All are safe to delete.
+- **Still open:** P12, then research workers and Storyblocks (need access and keys); 3D models
+  for realistic objects (the owner hasn't chosen a source).
+
+**State at the end of 2026-10-06 (before the Fusion work):**
 - **Built:** everything up to and including P11.
 - **Extras today:** Pexels stock footage, and DaVinci Resolve's own MCP inside Claude chats.
 - **Last commit:** `85af852`.

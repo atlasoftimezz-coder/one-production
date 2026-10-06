@@ -15,7 +15,7 @@ import os
 import re
 from pathlib import Path
 
-from .. import resolve_mcp
+from .. import fusion_kit, resolve_mcp
 
 READS = {"Read", "Glob", "Grep", "LS", "NotebookRead"}
 WRITES = {"Write", "Edit", "MultiEdit", "NotebookEdit"}
@@ -31,6 +31,9 @@ STUDIO_GATED = {"make_voiceover", "render_edit"}
 # Pexels with the owner's own free key (owner, 2026-10-06): one fixed site, files only into the
 # project's stock/ folder, the key never shown to the agent - so no card, unlike open web access.
 STUDIO_STOCK = {"stock_search", "stock_fetch"}
+# The fixed runner builds a NEW Resolve project for an episode / exports stills; only offered while the
+# owner has Resolve control and the Resolve MCP switched on.
+STUDIO_FUSION = {"fusion_setup", "fusion_stills"}
 HEAVY = {"make_voiceover": "voiceover", "render_edit": "video_render"}   # tools.TOOLS key per gated tool
 PATH_KEYS = ("file_path", "path", "notebook_path", "directory", "cwd")
 
@@ -39,7 +42,7 @@ def studio_name(tool: str) -> str | None:
     """'mcp__studio__make_voiceover' (Claude) or 'make_voiceover' (Codex dynamic tool) -> name."""
     if tool.startswith("mcp__studio__"):
         return tool[len("mcp__studio__"):]
-    return tool if tool in STUDIO_LOOK | STUDIO_GATED | STUDIO_MEMORY | STUDIO_PLAN | STUDIO_DRAW | STUDIO_STOCK else None
+    return tool if tool in STUDIO_LOOK | STUDIO_GATED | STUDIO_MEMORY | STUDIO_PLAN | STUDIO_DRAW | STUDIO_STOCK | STUDIO_FUSION else None
 
 
 def inside(path: str | None, root: Path) -> bool:
@@ -81,6 +84,8 @@ def decide(tool: str, tool_input: dict, root: Path) -> tuple[str, str]:
         return "allow", "reads Resolve's version or saves a plan for your review; nothing runs in Resolve"
     if s in STUDIO_DRAW:
         return "allow", "works only inside the project (a few seconds of processor)"
+    if s in STUDIO_FUSION:
+        return "allow", "builds a new Resolve project for the episode or exports review stills (fixed One Production helper)"
     if s in STUDIO_STOCK:
         return "allow", "free Pexels stock with your key; files go only into the project's stock folder"
     if s in STUDIO_GATED:
@@ -112,7 +117,11 @@ def describe(tool: str, tool_input: dict, root: Path) -> tuple[str, str]:
         name = tool[len(f"mcp__{resolve_mcp.SERVER}__"):]
         texts = [v for v in tool_input.values() if isinstance(v, str)]
         if name.startswith("run_script"):        # the owner reads the whole script before saying yes
-            return "Run a script in DaVinci Resolve", max(texts, key=len, default="")[:4000]
+            code = max(texts, key=len, default="")
+            if fusion_kit.MARKER.search(code):
+                code = fusion_kit.MARKER.sub(f"from op_kit import *   # + One Production Fusion kit v{fusion_kit.KIT_VERSION} "
+                                             "(fixed, reviewed code, added on approval)", code, count=1)
+            return "Run a script in DaVinci Resolve", code[:6000]
         return "Resolve: " + name.replace("_", " "), ", ".join(f"{k}={str(v)[:80]}" for k, v in tool_input.items())[:300]
     s = studio_name(tool)
     if s == "render_edit":

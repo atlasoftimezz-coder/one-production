@@ -106,6 +106,7 @@ class Script:
         self.turns: list[list] = []
         self.seen: list[dict] = []           # options + prompt of every turn
         self.results: list[dict] = []        # tool results the agent got back
+        self.ran: list[tuple] = []           # (tool, input) of every tool that actually ran, after approval
 
 
 class FakeAgent:
@@ -137,6 +138,9 @@ class FakeAgent:
             res = await self.o.can_use_tool(name, args, None)
             if type(res).__name__ == "PermissionResultDeny":
                 return res.message, True
+            if getattr(res, "updated_input", None) is not None:     # like Claude Code: the tool runs with this input
+                args = res.updated_input
+        self.s.ran.append((name, args))
         if name in self.o._studio_tools:
             r = await self.o._studio_tools[name].handler(args)
             return r["content"][0]["text"], bool(r.get("is_error"))

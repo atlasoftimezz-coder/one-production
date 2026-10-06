@@ -37,7 +37,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from app import models as M  # noqa: E402
-from app.accounts import SAME_SERVICE_SWITCHING, Accounts  # noqa: E402
+from app.accounts import Accounts, chaining_allowed  # noqa: E402
 from app.config import Settings, load_settings  # noqa: E402
 from app.providers.base import Fail, RateLimit, Usage, classify_text  # noqa: E402
 from app.providers.claude_cli import MODELS as CLAUDE_MODELS, ClaudeCLI  # noqa: E402
@@ -168,9 +168,9 @@ class Dispatcher:
         for acc in self.accounts.list():
             if acc["provider"] != provider:
                 continue
-            if out and not SAME_SERVICE_SWITCHING:
+            if out and not chaining_allowed(provider, getattr(self.settings, "allow_chaining", False)):
                 notes.append(f"{NAMES[provider]} ({label(acc)}): not used - moving between two "
-                             f"{NAMES[provider]} logins is off until the terms check (D7)")
+                             f"{NAMES[provider]} logins is off: the provider's terms don't allow it (docs/terms-check.md)")
                 continue
             if not acc.get("enabled", True):
                 notes.append(f"{NAMES[provider]} ({label(acc)}): turned off")

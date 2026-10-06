@@ -23,6 +23,8 @@ import json
 import os
 from pathlib import Path
 
+from . import fusion_kit
+
 SERVER = "davinci"
 EXE = "ResolveMCP.exe"
 READ_ONLY = ("get_resolve_status", "get_whats_new", "get_scripting_api", "search_scripting_api",
@@ -45,7 +47,11 @@ INSTRUCTIONS = """- DaVinci Resolve: the owner connected Resolve's own MCP serve
   project only when asked. Media comes from this project's folder (absolute paths inside it).
   After a script, read the result back (names, counts, settings) and report what changed.
   run_script_unsafe (full PC access) is not available. For a longer reviewable edit you may still
-  propose a plan with resolve_propose_plan (the owner runs it from the Resolve panel)."""
+  propose a plan with resolve_propose_plan (the owner runs it from the Resolve panel).
+- Fusion shots (motion graphics, animation, 3D) for an episode: one script per shot, built with the
+  """ + fusion_kit.GUIDE.replace("\n", "\n  ") + """
+  Quality bar: 60 fps motion with eased keys and motion blur, generous margins, nothing overlapping,
+  text large enough to read on a phone, one idea per shot, the art direction followed exactly."""
 
 
 def find_exe(override: str | None = None) -> str | None:

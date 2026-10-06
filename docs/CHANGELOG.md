@@ -3,6 +3,15 @@
 What changed in each version, in plain words. "Check for updates" shows the newest section.
 
 ## Unreleased - P10 production engine, knowledge, learning and Resolve; P11 stock footage
+- **Episode visuals are made in DaVinci Resolve's Fusion page** (1080p, 60 fps). Drawn SVG shots
+  are gone.
+  - For every script the AI designs a new look to make that script easy to follow, then builds
+    each shot by script.
+  - One Production creates the Resolve project (folder "One Production episodes") with one
+    Fusion shot per spoken idea.
+  - You approve each shot script on a card, review the stills, render the timeline yourself in
+    Resolve, and pick the file. One Production then checks it and packages the episode.
+  - Needs Resolve Studio and both switches in Resolve plans.
 - **DaVinci Resolve's own MCP in Claude chats**: in **Resolve plans**, tick "Let the AI use
   DaVinci Resolve's own MCP". It needs Resolve Studio 21.1 or newer, which ships
   `ResolveMCP.exe`.

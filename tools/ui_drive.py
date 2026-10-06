@@ -223,7 +223,8 @@ try:
         check("episode dialog opens", wait_for("document.querySelector('#episodemodal').classList.contains('open')"))
         check("scripts listed (not gate reports)", wait_for("[...document.querySelectorAll('#ep_script option')].some(o=>o.value==='notes.txt')"))
         check("music offers project audio", "voice.mp3" in (js("[...document.querySelectorAll('#ep_music option')].map(o=>o.value).join()") or ""))
-        check("heavy work listed", "Video render" in (js("document.querySelector('#ep_heavy').innerText") or ""))
+        check("heavy work listed", "DaVinci Resolve" in (js("document.querySelector('#ep_heavy').innerText") or ""))
+        check("no size or burn-in controls (Fusion is 1080p60)", js("!document.querySelector('#ep_size') && !document.querySelector('#ep_burn')"))
         js("document.querySelector('#ep_name').value='Ep 1'; document.querySelector('#episodeform').requestSubmit()")
         check("start refused until heavy work is OK'd", wait_for("document.querySelector('#toast').textContent.includes('OK for this episode')"))
         check("dialog stays open", js("document.querySelector('#episodemodal').classList.contains('open')"))
@@ -237,6 +238,15 @@ try:
         txt = (js("document.querySelector('#epdemo').innerText") or "").lower()      # status chips are upper-cased by CSS
         check("episode panel shows each stage", all(x in txt for x in ("script", "passed", "needs you", "waiting", "review 1", "gate report")), txt[:200])
         js("document.querySelector('#epdemo').remove()")
+        js("""{ const b = document.createElement('div'); b.id = 'epwait'; document.body.appendChild(b);
+             renderEpisode(b, {state: 'waiting_render', spec: {name: 'Ep 1'}, master: null, tasks: [], result: {stage: 'edit', project: 'Ep 1 - One Production 1'},
+               stages: [{id: 'visuals', title: 'Visuals (Fusion)', status: 'passed', detail: '5 Fusion shots'},
+                        {id: 'edit', title: 'Render', status: 'waiting', detail: 'Render the timeline'}], notes: []}, state.current, null); }""")
+        check("waiting episode asks for the render and offers the project's videos",
+              wait_for("document.querySelector('#epwait [data-rendered]') && document.querySelector('#epwait').innerText.includes('Ep 1 - One Production 1')"
+                       " && document.querySelector('#epwait [data-video]').innerText.includes('No video in this project yet')", 10),
+              (js("document.querySelector('#epwait').innerText") or "")[:200])
+        js("document.querySelector('#epwait').remove()")
 
     # accounts (P2) - only when the server runs against the fake CLIs
     if os.environ.get("UI_DRIVE_ACCOUNTS") == "1":

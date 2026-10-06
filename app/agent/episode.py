@@ -1,18 +1,23 @@
-"""Episode run (P10): a finished script -> voiceover -> visuals -> edit -> upload bundle.
+"""Episode run (P10, Fusion since F4): a finished script -> voiceover -> Fusion visuals -> the owner's
+render -> upload bundle.
 
-    script    the owner's script file (Script Studio writes and reviews it)          app, no AI
-    voice     a voiceover job (or one the owner already made), then the voice gate   app, GPU
-    visuals   a worker draws SVG shots + a shots list; build_animation must succeed;   worker + master
-              then the master reviews (2 rounds)
-    edit      the ffmpeg editor renders the edit list, then the video gate             app, CPU
-    package   a worker writes title options, description, tags and a thumbnail;      worker + master
+    script    the owner's script file (Script Studio writes and reviews it)               app, no AI
+    voice     a voiceover job (or one the owner already made), then the voice gate        app, GPU
+    visuals   a worker designs this episode's own art direction, writes the shot list,     worker (Claude) + master
+              fusion_setup builds the Resolve project (1080p 60 fps, one Fusion comp per
+              shot at its spoken words), the worker scripts every shot through Resolve's
+              MCP with the Fusion kit (each script is an approval card), fusion_stills;
+              every shot must be built, then the master reviews the stills (2 rounds)
+    edit      the OWNER renders the timeline in Resolve (owner, 2026-10-06: "I render         owner
+              myself") and picks the file; then the video gate
+    package   a worker writes title options, description, tags and a thumbnail;           worker + master
               the bundle must pass the package gate; then the master reviews
     final     the master's short report for the owner
 
 A numeric gate that fails sends its numbers back to the worker as the review notes (at most
-`gate_rounds` times); a gate the app's own stages fail stops the run with "needs you" - nothing
-moves on past a failed gate. The heavy jobs (GPU voice, CPU render) are approved by the owner
-when the run starts. Same accounts, limits, handoffs, pause and Stop as the team (team.py).
+`gate_rounds` times); a gate the app's own stages fail stops the run with "needs you". The run
+waits at "edit" (state "waiting_render") until the owner picks the rendered file, then resumes
+- also after an app restart, from the saved snapshot.
 """
 from __future__ import annotations
 
@@ -22,22 +27,26 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from ..fusion_kit import FONTS
 from .team import Stopped, Task, Team, TeamConfig
 
-STAGES = (("script", "Script"), ("voice", "Voiceover"), ("visuals", "Visuals"), ("edit", "Edit"), ("package", "Package"))
+STAGES = (("script", "Script"), ("voice", "Voiceover"), ("visuals", "Visuals"), ("edit", "Render"), ("package", "Package"))
+ORDER = [s for s, _ in STAGES]
 
 
 @dataclass
 class EpisodeConfig(TeamConfig):
     gate_rounds: int = 3             # a worker may miss its numeric gate this often before it's your call
-    shot_seconds: float = 3.0        # aimed-for average shot length (the stickman style cuts every 2-4 s)
+    shot_seconds: float = 3.5        # aimed-for average shot length
 
 
-VISUALS_NOTE = ("You are the ANIMATOR in One Production's episode run. You draw shots yourself as SVG code "
-                "(no image models; free Pexels stock only through stock_search / stock_fetch when they are offered) "
-                "and time them to the voiceover with anchor words from the script.")
+VISUALS_NOTE = ("You are the MOTION DESIGNER in One Production's episode run. You make every shot in DaVinci Resolve's "
+                "Fusion page by script (no drawings, no image models). Every episode gets its own art direction, chosen "
+                "so this script's ideas are as easy as possible to understand; never fall back to a generic template look. "
+                "Quality bar: 1080p 60 fps, eased motion with motion blur, clean type, nothing overlapping or cut off.")
 PACKAGER_NOTE = ("You are the PACKAGER in One Production's episode run. You write what the upload needs: honest, "
                  "specific titles and a description that matches the video, tags, and a thumbnail drawn as SVG.")
+CLAUDE_ACCOUNTS = ["claude", "anthropic_api"]      # Resolve's MCP reaches Claude Code only (resolve_mcp.py)
 
 
 def slug(text: str) -> str:
@@ -55,6 +64,17 @@ class EpisodeRun(Team):
         self.result: dict = {}
         self.vo: dict = {}
 
+    @classmethod
+    def from_snapshot(cls, pid: str, snap: dict, run, deps, config: EpisodeConfig, state_file: Path | None = None) -> "EpisodeRun":
+        """Pick a run up again where it waited (the owner's render) - e.g. after an app restart."""
+        ep = cls(pid, snap["spec"], run, deps, config, state_file)
+        ep.stages = snap.get("stages") or ep.stages
+        ep.vo = dict(snap.get("vo") or {})
+        ep.base = snap.get("base") or ep.base
+        ep.state = snap.get("state") or "running"
+        ep.notes = list(snap.get("notes") or [])
+        return ep
+
     # ------------------------------------------------ reporting
     def snapshot(self) -> dict:
         return {"kind": "episode", "id": self.id, "state": self.state, "spec": self.spec, "stages": self.stages,
@@ -62,7 +82,7 @@ class EpisodeRun(Team):
                 "config": {k: getattr(self.cfg, k) for k in ("master_model", "master_effort", "worker_model", "worker_effort",
                                                               "review_rounds", "gate_rounds")},
                 "tasks": [t.public() for t in self.tasks], "master_tokens": self.master_tokens, "final": self.final,
-                "result": self.result, "notes": self.notes[-6:], "started": self.started, "base": self.base}
+                "result": self.result, "notes": self.notes[-6:], "started": self.started, "base": self.base, "vo": self.vo}
 
     def publish(self) -> None:
         snap = self.snapshot()
@@ -93,15 +113,17 @@ class EpisodeRun(Team):
         return self.snapshot()
 
     # ------------------------------------------------ the flow
-    async def go(self) -> dict:
+    async def go(self, start: str = "script") -> dict:
         try:
+            self.state = "running"
             await self._changed()
-            for sid, step in (("script", self.do_script), ("voice", self.do_voice), ("visuals", self.do_visuals),
-                              ("edit", self.do_edit), ("package", self.do_package)):
+            steps = {"script": self.do_script, "voice": self.do_voice, "visuals": self.do_visuals,
+                     "edit": self.do_edit, "package": self.do_package}
+            for sid in ORDER[ORDER.index(start):]:
                 if self.run.stopped:
                     raise Stopped()
                 await self.set_stage(sid, "running")
-                ok = await step()
+                ok = await steps[sid]()
                 if not ok:
                     return self.snapshot()
             self.state = "reviewing"
@@ -116,13 +138,16 @@ class EpisodeRun(Team):
             for s in self.stages:
                 if s["status"] in ("waiting", "running"):
                     s["status"] = "stopped"
-            if self.vo.get("render_job"):
-                self.deps.cancel_render(self.vo["render_job"])
         finally:
             for t in self.tasks:
                 self.locks.release(t.id)
             self.publish()
         return self.snapshot()
+
+    async def resume(self, video: str) -> dict:
+        """The owner rendered the timeline: check the file, then package."""
+        self.vo["rendered"] = video
+        return await self.go("edit")
 
     async def do_script(self) -> bool:
         try:
@@ -197,36 +222,31 @@ class EpisodeRun(Team):
                 return None
             self.notice(f"{task.title}: the master asked for changes.")
 
-    # visuals ------------------------------------------------------------
+    # visuals (Fusion) -----------------------------------------------------------
     def visuals_prompt(self, task: Task) -> str:
         s, b = self.spec, self.base
-        lines = [f"Draw the visuals for the episode \"{s['name']}\".",
+        music = f' music="{s["music"]}"' if s.get("music") else ""
+        lines = [f"Make the visuals for the episode \"{s['name']}\" in DaVinci Resolve's Fusion page (1080p, 60 fps).",
                  f"Script: {s['script']}. Voiceover: {self.vo['wav']} ({self.vo.get('seconds', 0):.0f} s). Subtitles with the spoken "
-                 f"words and times: {self.vo['srt']}.", "",
-                 f"1. Draw each shot as a self-contained SVG at {b}/art/sNNN.svg with viewBox \"0 0 1920 1080\": full-bleed "
-                 "scene background, bold dark outlines, big subjects filling most of the frame, a few large labels; "
-                 "no <script>, no event handlers, no links to other files (images only as data: URIs). Reuse a "
-                 "drawing for recurring scenes instead of redrawing it.",
-                 f"2. Write {b}/shots.json: {{\"voiceover\": \"{self.vo['wav']}\", \"subtitles\": \"{self.vo['srt']}\", "
-                 f"\"size\": \"{s.get('size') or '1920x1080'}\", \"fps\": 30, \"output\": \"{b}/{slug(s['name'])}.mp4\", "
-                 f"\"burn_subtitles\": {json.dumps(bool(s.get('burn_subtitles')))}"
-                 + (f", \"music\": {{\"file\": \"{s['music']}\", \"db\": -22, \"duck\": true}}" if s.get("music") else "")
-                 + ", \"shots\": [{\"svg\": \"...\", \"motion\": \"push\"}, {\"svg\": \"...\", \"anchor\": \"exact words\", "
-                 "\"motion\": \"pan_right\"}, {\"card\": {\"text\": \"1986\", \"style\": \"date\"}, \"anchor\": \"...\"}]}. "
-                 "The first shot starts at 0; every other shot starts when its anchor words (3-6 consecutive words, "
-                 "exactly as in the subtitles) are spoken. Motions: push, pull, pan_left, pan_right, none. Cards: "
-                 "title, date, label.",
-                 f"3. Aim for a new shot about every {self.cfg.shot_seconds:g} seconds and change it whenever the "
+                 f"words and times: {self.vo['srt']}. Read the script first.", "",
+                 f"1. Art direction for THIS episode only (never reuse a look from another video): write {b}/art.json "
+                 "{\"concept\": \"one paragraph: why this look makes this script's ideas easiest to follow\", \"palette\": "
+                 "{\"bg\", \"ink\", \"accent\", ... named \"#RRGGBB\" colors}, \"fonts\": {\"heading\", \"body\", \"mono\"} from "
+                 f"{', '.join(f for f in FONTS if f not in ('Segoe UI Emoji', 'Segoe Fluent Icons'))}, \"motion\": \"eases, "
+                 "stagger, transitions, camera language\", \"three_d\": true/false}.",
+                 f"2. Shot list: write {b}/shots.json {{\"shots\": [{{\"idea\": \"what the shot shows and how it moves\", "
+                 "\"text\": \"on-screen words\"}, {\"anchor\": \"3-6 consecutive words exactly as in the subtitles\", "
+                 "\"idea\": \"...\", \"text\": \"...\"}]}. The first shot starts at 0; every other shot starts when its anchor "
+                 f"words are spoken. One idea per shot, a new shot about every {self.cfg.shot_seconds:g} s and whenever the "
                  "narration changes subject.",
-                 f"4. Call build_animation with shots \"{b}/shots.json\" and edit \"{b}/edit.json\". Fix whatever "
-                 "it reports and call it again until it succeeds.",
-                 "Finish with a short summary: number of shots and drawings, and anything you were unsure about."]
-        if getattr(self.deps, "stock_ready", lambda: False)():
-            lines[-1:-1] = ["5. Free Pexels stock is available for real-world subjects (places, animals, nature, objects): "
-                            "stock_search with specific words, stock_fetch the ones you use, then shots like "
-                            "{\"file\": \"stock/pexels-video-123.mp4\", \"anchor\": \"...\", \"from\": 2.0}. Keep drawings "
-                            "for explanations, numbers and anything stock can't show truthfully; stock at most about half "
-                            "the shots. Count stock shots separately in your summary."]
+                 f"3. Call fusion_setup with shots=\"{b}/shots.json\" art=\"{b}/art.json\" voiceover=\"{self.vo['wav']}\" "
+                 f"subtitles=\"{self.vo['srt']}\"{music} name=\"{s['name']}\". Fix whatever it reports and call it again.",
+                 "4. Script EVERY shot with its own mcp__davinci__run_script: the script starts with `from op_kit import *`, "
+                 "then S = begin(\"shot-NNN\"), builds the shot from the art direction and its brief, and ends with "
+                 "result = finish(S, layer). The owner approves each script, so keep each one clear and focused.",
+                 f"5. Call fusion_stills with state=\"{b}/fusion.json\", open the stills (Read the PNG files) and re-script any "
+                 "shot that is unclear, off-style, cramped or overlapping; call fusion_stills again afterwards.",
+                 "Finish with a short summary: the concept in one line, the number of shots, and anything you were unsure about."]
         if s.get("visual_notes"):
             lines += ["", "The owner's directions for the look: " + s["visual_notes"]]
         if task.notes:
@@ -235,44 +255,53 @@ class EpisodeRun(Team):
 
     async def check_visuals(self) -> tuple[bool, str, dict]:
         try:
-            out = await asyncio.to_thread(self.deps.build_animation, f"{self.base}/shots.json", f"{self.base}/edit.json")
+            out = await asyncio.to_thread(self.deps.fusion_stills, f"{self.base}/fusion.json")
         except Exception as exc:                     # noqa: BLE001 - goes back to the worker
             return False, str(exc)[:600], {}
-        return True, "", {"detail": f"{out['shots']} shots, {out['drawings']} drawings, median {out['median_shot']} s",
-                          "files": [out["edit"], out["frames_folder"]]}
+        if out.get("empty"):
+            return False, "these shots are still empty in Resolve: " + ", ".join(out["empty"][:20]), {}
+        if not out.get("stills"):
+            return False, "no stills could be exported", {}
+        return True, "", {"detail": f"{out['shots']} Fusion shots in Resolve project {out['project']}",
+                          "files": [out["folder"], f"{self.base}/art.json", f"{self.base}/shots.json"],
+                          "project": out["project"]}
 
     async def do_visuals(self) -> bool:
-        task = Task(id="visuals", title="Visuals", files=[f"{self.base}/shots.json"],
-                    brief=("Draw every shot as SVG, list the shots with anchor words and build the edit list. Pass only "
-                           f"if the drawings are clear and on-topic for what is said at that moment (look at a few frames "
-                           f"in {self.base} frames folder) and the shots change often enough."))
+        ok, why = self.deps.fusion_ready()
+        if not ok:
+            await self.blocked("visuals", why)
+            return False
+        task = Task(id="visuals", title="Visuals (Fusion)", files=[f"{self.base}/art.json", f"{self.base}/shots.json"],
+                    providers=list(CLAUDE_ACCOUNTS),
+                    brief=(f"Fusion motion graphics at 1080p 60 fps. Read {self.base}/art.json and open the stills in "
+                           f"{self.base}/stills/ (Read the PNG files). Pass only if: the art direction suits this script and "
+                           "is followed in every shot; each shot makes its one idea easy to understand at a glance; type is "
+                           "clean and readable on a phone; nothing overlaps or is cut off; margins are consistent; and it does "
+                           "not look like a generic template."))
         self.vo["seconds"] = await asyncio.to_thread(self.deps.duration, self.vo["wav"])
-        return await self.worker_stage("visuals", task, self.visuals_prompt, VISUALS_NOTE, self.check_visuals) is not None
+        extra = await self.worker_stage("visuals", task, self.visuals_prompt, VISUALS_NOTE, self.check_visuals)
+        if extra is None:
+            return False
+        self.vo["resolve_project"] = extra.get("project", "")
+        return True
 
-    # edit ------------------------------------------------------------------
+    # render (the owner) ---------------------------------------------------------------
     async def do_edit(self) -> bool:
-        try:
-            job = await asyncio.to_thread(self.deps.start_render, f"{self.base}/edit.json")
-        except Exception as exc:                     # noqa: BLE001
-            await self.blocked("edit", f"the render could not start: {exc}")
+        video = self.vo.pop("rendered", "")
+        if not video:
+            project = self.vo.get("resolve_project") or "the episode's project"
+            await self.set_stage("edit", "waiting",
+                                 f"Render the \"Episode\" timeline of Resolve project \"{project}\" (Deliver page: H.264, "
+                                 "1920x1080, 60 fps) into this project's folder, then pick the file here.")
+            self.state = "waiting_render"
+            self.result = {"stage": "edit", "project": project}
             return False
-        self.vo["render_job"] = job["id"]
-        while job["status"] == "rendering":
-            await self.set_stage("edit", "running", f"{job.get('step')} ({int(100 * (job.get('progress') or 0))}%)")
-            await asyncio.sleep(self.deps.poll)
-            if self.run.stopped:
-                raise Stopped()
-            job = self.deps.render_job(job["id"])
-        self.vo.pop("render_job", None)
-        if job["status"] != "done":
-            await self.blocked("edit", f"the render {job['status']}: {job.get('error')}")
+        report = await self.deps.video_gate(video, self.vo["wav"])
+        if not report["passed"]:
+            await self.blocked("edit", "video gate: " + report["summary"], report.get("report", ""))
             return False
-        gate = job.get("gate") or {}
-        self.vo["video"] = job["output"]
-        if not gate.get("passed"):
-            await self.blocked("edit", "video gate: " + (gate.get("summary") or "no report"), gate.get("report", ""))
-            return False
-        await self.set_stage("edit", "passed", f"{job['output']} - all video checks passed", report=gate["report"], files=[job["output"]])
+        self.vo["video"] = video
+        await self.set_stage("edit", "passed", f"{video} - all video checks passed", report=report.get("report", ""), files=[video])
         return True
 
     # package ---------------------------------------------------------------
@@ -280,7 +309,8 @@ class EpisodeRun(Team):
         s, b = self.spec, self.base
         lines = [f"Package the finished episode \"{s['name']}\" for upload. Video: {self.vo['video']}. Script: {s['script']}.",
                  f"1. Draw the thumbnail as a self-contained SVG at {b}/art/thumbnail.svg with viewBox \"0 0 1280 720\": "
-                 "one big clear subject, at most 4 large words, strong contrast, readable when small.",
+                 "one big clear subject, at most 4 large words, strong contrast, readable when small; use the episode's "
+                 f"art direction ({b}/art.json).",
                  f"2. Write {b}/package.json: {{\"name\": \"{slug(s['name'])}\", \"video\": \"{self.vo['video']}\", "
                  f"\"subtitles\": \"{self.vo['srt']}\", \"script\": \"{s['script']}\", \"title\": \"...\", "
                  "\"title_options\": [\"3-5 options\"], \"description\": \"2-4 short paragraphs, no chapter list (it is "

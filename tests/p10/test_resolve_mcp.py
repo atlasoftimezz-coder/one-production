@@ -91,3 +91,25 @@ def test_frame_rate_reads_back_as_a_number():
     """Resolve 21.1 reads timelineFrameRate "30" back as 30.0 - three of the owner's plans failed on it."""
     assert same_setting(30.0, "30") and same_setting("30.0", "30") and same_setting("23.976", "23.976")
     assert not same_setting(25.0, "30") and same_setting("1920", "1920") and not same_setting(None, "30")
+
+
+def test_an_approved_kit_script_runs_with_the_kit_and_the_card_shows_the_ai_code(agent, tmp_path, monkeypatch):
+    """Resolve's sandbox has no exec, so the app swaps `from op_kit import *` for the fixed kit on approval."""
+    from app import fusion_kit
+    monkeypatch.setenv("ONEPROD_SETTINGS_FILE", str(tmp_path / "settings.json"))
+    acc = claude_account(agent)
+    agent.app.state.resolve.settings.resolve_mcp_cmd = fake_exe(tmp_path)
+    agent.patch("/api/resolve", json={"mcp": True})
+    shot = "from op_kit import *\nS = begin(\"shot-001\")\nresult = finish(S, S.solid(S.c(\"bg\")))\n"
+    agent.script.turns = [[("tool", "mcp__davinci__run_script", {"script": shot}), ("text", "built")]]
+    fut = send(agent, acc, "build shot 1")
+    ask = wait_ask(agent)
+    assert ask["detail"].startswith("from op_kit import *   # + One Production Fusion kit v%d" % fusion_kit.KIT_VERSION)
+    assert "class Shot" not in ask["detail"] and "begin(\"shot-001\")" in ask["detail"]   # the owner reads the AI's code
+    answer(agent, ask, "once")
+    events(fut)
+    name, args = agent.script.ran[-1]
+    assert name == "mcp__davinci__run_script"
+    assert "class Shot" in args["script"] and "from op_kit import" not in args["script"]
+    assert args["script"].rstrip().endswith('result = finish(S, S.solid(S.c("bg")))')
+    agent.patch("/api/resolve", json={"mcp": False})

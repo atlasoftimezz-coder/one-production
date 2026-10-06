@@ -1,0 +1,11 @@
+{
+ "_about": "Plan R8 terms check, read 2026-10-06. Human-readable reasons and sources: docs/terms-check.md. Values: allowed | not_allowed | unclear. Chaining = moving work to another account of the SAME service when one hits its limit.",
+ "checked": "2026-10-06",
+ "providers": {
+  "claude": {"automated_cli": "allowed", "automated_note": "own account, unmodified Claude Code, ordinary individual usage",
+             "several_accounts": "allowed", "chaining": "not_allowed"},
+  "codex": {"automated_cli": "allowed", "automated_note": "own account, the official Codex CLI",
+            "several_accounts": "unclear", "chaining": "not_allowed"},
+  "anthropic_api": {"automated_cli": "allowed", "several_accounts": "allowed", "chaining": "allowed"}
+ }
+}

@@ -40,13 +40,6 @@ def tools(studio):
         return json.dumps({k: job[k] for k in ('status', 'step', 'progress', 'output', 'error')} |
                           {'video_gate': {'passed': gate.get('passed'), 'summary': gate.get('summary'), 'report': gate.get('report')} if gate else None})
 
-    async def build(args):
-        if not studio.animation:
-            return json.dumps({'error': 'Animation is not available.'})
-        try:
-            return json.dumps(await asyncio.to_thread(studio.animation.build, pid, str(args.get('shots') or ''), str(args.get('edit') or '')))
-        except (EditError, MediaError) as exc:
-            return json.dumps({'error': str(exc)})
 
     async def package(args):
         try:
@@ -62,17 +55,9 @@ def tools(studio):
                   {'type': 'object', 'properties': {'spec': {'type': 'string', 'description': 'package JSON file in this project'}},
                    'required': ['spec']}, package)] if studio.packaging else []
 
-    return extra + [Tool('build_animation', 'Render the SVG drawings listed in a shots JSON to frames, time each shot to the voiceover '
-                 '(first shot at 0, the others when their anchor words are spoken, found in the subtitles in order) and write '
-                 'the edit list for render_edit. Shots JSON: {"voiceover": "vo.wav", "subtitles": "vo.srt", "size": "1920x1080", '
-                 '"fps": 30, "output": "episode.mp4", "burn_subtitles": false, "music": {...}, "shots": [{"svg": "art/s01.svg", '
-                 '"motion": "push"}, {"svg": "art/s02.svg", "anchor": "exact words from the script", "motion": "pan_right"}, '
-                 '{"card": {"text": "1986", "style": "date"}, "anchor": "..."}, {"file": "stock/pexels-video-1.mp4", '
-                 '"anchor": "...", "from": 2.0}]}. A file shot is a clip (from = seconds into it) or a picture (with motion). '
-                 'Each shot needs >= 0.4 s.',
-                 {'type': 'object', 'properties': {'shots': {'type': 'string'}, 'edit': {'type': 'string', 'description': 'edit list name (optional)'}},
-                  'required': ['shots']}, build),
-            Tool('render_edit', 'Render a finished video from an edit list with ffmpeg on the processor (the owner approves it first). ' + EDIT_FORMAT,
+    # Animation is made in Resolve's Fusion page (owner, 2026-10-06), so the SVG build_animation tool is no
+    # longer offered; app/animation.py stays as the shot-timing helper (anchor_times) the Fusion runner uses.
+    return extra + [Tool('render_edit', 'Render a finished video from an edit list with ffmpeg on the processor (the owner approves it first). ' + EDIT_FORMAT,
                  {'type': 'object', 'properties': {'edit': {'type': 'string', 'description': 'edit list JSON file in this project'}},
                   'required': ['edit']}, render),
             Tool('edit_status', 'Progress or result of a render, including its video gate. wait_seconds (max 900) blocks until it finishes.',

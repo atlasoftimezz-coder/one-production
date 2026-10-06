@@ -88,7 +88,7 @@ def test_second_claude_login_is_not_used_when_the_first_runs_low(env, repo, monk
     monkeypatch.setenv("FAKE_UTIL", "0.90")
     choice, report = pick(make(env, repo))
     assert choice is None
-    assert any("second" in r and "terms check" in r for r in report), report
+    assert any("second" in r and "terms don't allow it" in r for r in report), report
 
 
 def test_unknown_usage_does_not_block(env, repo):

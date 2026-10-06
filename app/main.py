@@ -34,6 +34,7 @@ from .editor_api import mount as mount_editor
 from .animation import Animation
 from .packaging import Packaging
 from .stock import Stock, StockError
+from .fusion import Fusion
 from . import handoff
 from .accounts import DEFAULT_SWITCH, DEFAULT_WARN, PROVIDERS, SAME_SERVICE_SWITCHING, SUBSCRIPTIONS, \
     AccountError, Accounts
@@ -70,7 +71,8 @@ from .media import duration as media_duration
 from .storage import NotFound, Store
 from .tools import Approvals, TOOLS
 from .usage import RANGES, Ledger, range_start, usage_pct as shared_usage_pct
-from .accounts import CAP_FIELDS, switch_allowed
+from .accounts import CAP_FIELDS, chaining_allowed, switch_allowed
+from . import terms
 from .version import __version__
 from .voice import VoiceTuner, VoiceError, VoiceJobs, VoiceService
 
@@ -202,6 +204,14 @@ class StockKeyIn(BaseModel):
     key: str
 
 
+class ChainingIn(BaseModel):
+    allow_chaining: bool
+
+
+class RenderedIn(BaseModel):
+    video: str
+
+
 class InstallIn(BaseModel):
     approve: list[str] = []
 
@@ -292,6 +302,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
     animation = Animation(store, settings.data_dir)
     packaging = Packaging(store, settings.data_dir, gates)
     stock = Stock(store, transport=stock_transport)
+    fusion = Fusion(store, settings.data_dir, resolve, settings)
     runs = Runs()
     backups = Backups(settings.data_dir, store, redact)
     profile = Profile(settings.data_dir)
@@ -448,9 +459,9 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
                 why = "turned off"
             elif a["status"] != "ok":
                 why = a.get("reason") or "not signed in"
-            elif not switch_allowed(from_acc, a):
-                why = ("switching between two accounts of the same service is off until the terms "
-                       "check (plan R8)")
+            elif not switch_allowed(from_acc, a, settings.allow_chaining):
+                why = ("moving between two logins of the same service is off: the provider's terms don't allow it "
+                       f"(terms check {terms.load().get('checked')}, docs/terms-check.md)")
             elif pct is not None and pct >= a.get("switch_pct", DEFAULT_SWITCH):
                 why = f"also at {pct:.0f}%"
             out.append({"id": a["id"], "label": a.get("label") or a.get("email") or a["provider"],
@@ -749,7 +760,8 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
                           "caps": {k: a.get(k) for k in CAP_FIELDS}, "today": spend_today(a)})
         return {"range": range, "since": s["since"], "cards": cards, "totals": s["totals"],
                 "by_project": s["by_project"], "by_model": s["by_model"], "by_role": s["by_role"],
-                "same_service_switching": SAME_SERVICE_SWITCHING}
+                "same_service_switching": any(chaining_allowed(p, settings.allow_chaining) for p in SUBSCRIPTIONS),
+                "terms": terms.summary(settings.allow_chaining)}
 
     async def _refresh_one(a: dict) -> None:
         prov = providers.get(a["provider"])
@@ -892,6 +904,18 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
                          detail=("Pexels key " + st["key_hint"] + " - the AI can search and fetch free Pexels clips and photos."
                                  if st["key_set"] else "Add your free Pexels key to switch it on."))
         return {"modules": mods, "gpu": gpu}
+
+    @app.get("/api/terms")
+    def terms_state() -> dict:
+        """The terms check (plan R8): verdicts per provider and whether chaining is in effect."""
+        return terms.summary(settings.allow_chaining)
+
+    @app.patch("/api/terms")
+    def set_chaining(body: ChainingIn) -> dict:
+        """The owner's wish; it only takes effect where the recorded terms allow chaining."""
+        settings.allow_chaining = bool(body.allow_chaining)
+        save_setting("allow_chaining", settings.allow_chaining)
+        return terms.summary(settings.allow_chaining)
 
     @app.get("/api/stock")
     def stock_status() -> dict:
@@ -1222,7 +1246,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
         # a fresh session (new project, or another account taking over) gets the recent chat
         prompt = message if sid else build_prompt(store.history(pid), message).replace(SYSTEM + "\n\n", "", 1)
         store.append_message(pid, "user", message)
-        studio = Studio(pid, store, voice_svc, voice_jobs, tuned=tuner.for_voice, knowledge=knowledge, learning=learning, resolve=resolve, gates=gates, editor=editor, animation=animation, packaging=packaging, stock=stock,
+        studio = Studio(pid, store, voice_svc, voice_jobs, tuned=tuner.for_voice, knowledge=knowledge, learning=learning, resolve=resolve, gates=gates, editor=editor, animation=animation, packaging=packaging, stock=stock, fusion=fusion,
                         on_job=lambda job: run.emit({"t": "voicejob", "id": job["id"], "source": job["source"],
                                                      "voice": job["voice"]}))
 
@@ -1362,7 +1386,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
             files, voices, presets, jobs = await studio_state(pid)
             instructions = (STUDIO_INSTRUCTIONS + "\n\n" + actions.context(files, voices, presets, jobs)
                             + "\n\n" + note + "\n\n" + learning.instructions(pid, prompt))
-            studio = Studio(pid, store, voice_svc, voice_jobs, tuned=tuner.for_voice, knowledge=knowledge, learning=learning, resolve=resolve, gates=gates, editor=editor, animation=animation, packaging=packaging, stock=stock,
+            studio = Studio(pid, store, voice_svc, voice_jobs, tuned=tuner.for_voice, knowledge=knowledge, learning=learning, resolve=resolve, gates=gates, editor=editor, animation=animation, packaging=packaging, stock=stock, fusion=fusion,
                             on_job=lambda job: sub.emit({"t": "voicejob", "id": job["id"], "source": job["source"],
                                                          "voice": job["voice"]}))
             eff = M.effort_for(acc["provider"], model, effort, acc.get("codex_models"))
@@ -1394,7 +1418,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
             resets_at=lambda a: resets_of(accounts.get(a["id"])),
             over_cap=lambda a: over_cap(accounts.get(a["id"])),
             task_cap=lambda a: accounts.get(a["id"]).get("cap_task_tokens"),
-            switch_allowed=switch_allowed, usage_pct=lambda a: usage_pct(a)[0],
+            switch_allowed=lambda f, t: switch_allowed(f, t, settings.allow_chaining), usage_pct=lambda a: usage_pct(a)[0],
             handoff_dir=lambda: store.project_dir(pid) / "handoffs", redact=redact)
 
     @app.post("/api/projects/{pid}/team")
@@ -1595,10 +1619,13 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
         deps.start_voice = start_voice_job
         deps.voice_gate = voice_gate_of
         deps.duration = lambda name: media_duration(gates.ffmpeg(), store.file_path(pid, name))
-        deps.build_animation = lambda shots, edit: animation.build(pid, shots, edit)
-        deps.start_render = lambda edit: editor.start(pid, edit)
-        deps.render_job = lambda jid: editor.get(pid, jid)
-        deps.cancel_render = lambda jid: editor.cancel(pid, jid)
+        async def video_gate_of(video, voiceover):
+            from .gates_api import VideoCheck
+            return await gates.video(pid, VideoCheck(video=video, voiceover=voiceover))
+
+        deps.fusion_ready = fusion.ready
+        deps.fusion_stills = lambda state: fusion.stills(pid, state)
+        deps.video_gate = video_gate_of
         deps.package = lambda spec: packaging.build(pid, spec)
         deps.poll = 2.0
         return deps
@@ -1623,7 +1650,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
                 raise HTTPException(400, "that voiceover is not a finished one in this project")
         if not team_accounts():
             raise HTTPException(400, "the episode run needs at least one signed-in Claude, Codex or API-key account")
-        needs = [n for n in (approvals.check(t, body.approve) for t in (["video_render"] + ([] if body.voice_job else ["voiceover"]))) if n]
+        needs = [n for n in (approvals.check(t, body.approve) for t in ([] if body.voice_job else ["voiceover"])) if n]
         if needs:
             from fastapi.responses import JSONResponse
             return JSONResponse({"needs_approval": needs}, status_code=409)
@@ -1638,22 +1665,55 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
         teams[pid] = ep
         store.append_message(pid, "user", f"Episode: {name} (script {body.script})", episode=True)
 
-        async def work():
-            snap = await ep.go()
-            if snap["state"] == "done":
-                text = ep.final or "Episode finished."
-            elif snap["state"] == "needs_you":
-                text = f"Episode stopped at {snap['result']['stage']}: {snap['result']['why']}"
-            else:
-                text = "Episode run stopped."
-            store.append_message(pid, "assistant", text, episode={
-                "id": snap["id"], "state": snap["state"], "stages": snap["stages"], "result": snap["result"],
-                "master": snap["master"], "spec": {"name": spec["name"], "script": spec["script"]},
-                "tasks": [{k: t[k] for k in ("id", "title", "status", "pins", "rounds", "tokens", "why", "handoffs")} for t in snap["tasks"]]})
-            runs.finish(run)
-            run.emit({"t": "done"})
+        run.task = asyncio.get_running_loop().create_task(episode_work(pid, ep, run, ep.go()))
+        return StreamingResponse(follow(run), media_type="application/x-ndjson", headers={"Cache-Control": "no-store"})
 
-        run.task = asyncio.get_running_loop().create_task(work())
+    async def episode_work(pid: str, ep: EpisodeRun, run, steps) -> None:
+        snap = await steps
+        if snap["state"] == "done":
+            text = ep.final or "Episode finished."
+        elif snap["state"] == "waiting_render":
+            text = (f"The visuals are built in Resolve project \"{snap['result'].get('project')}\". Render its \"Episode\" "
+                    "timeline (Deliver page: H.264, 1920x1080, 60 fps) into this project's folder, then pick the file in "
+                    "Make an episode to finish packaging.")
+        elif snap["state"] == "needs_you":
+            text = f"Episode stopped at {snap['result']['stage']}: {snap['result']['why']}"
+        else:
+            text = "Episode run stopped."
+        store.append_message(pid, "assistant", text, episode={
+            "id": snap["id"], "state": snap["state"], "stages": snap["stages"], "result": snap["result"],
+            "master": snap["master"], "spec": {"name": ep.spec["name"], "script": ep.spec["script"]},
+            "tasks": [{k: t[k] for k in ("id", "title", "status", "pins", "rounds", "tokens", "why", "handoffs")} for t in snap["tasks"]]})
+        runs.finish(run)
+        run.emit({"t": "done"})
+
+    @app.post("/api/projects/{pid}/episode/render")
+    async def episode_rendered(pid: str, body: RenderedIn):
+        """The owner rendered the episode's timeline in Resolve: check it and package (resumes the run)."""
+        _project(pid)
+        try:
+            store.file_path(pid, body.video)
+        except NotFound:
+            raise HTTPException(400, f"{body.video} is not a file in this project - render it into the project's folder")
+        live = teams.get(pid)
+        state_file = store.project_dir(pid) / "episode.json"
+        try:
+            run = runs.start(pid, store.files_dir(pid))
+        except RuntimeError as e:
+            raise HTTPException(409, str(e))
+        if isinstance(live, EpisodeRun) and live.state == "waiting_render":
+            ep = live
+            ep.run = run
+        else:
+            snap = json.loads(state_file.read_text(encoding="utf-8")) if state_file.exists() else None
+            if not snap or snap.get("state") != "waiting_render":
+                runs.finish(run)
+                raise HTTPException(409, "no episode is waiting for its render")
+            ep = EpisodeRun.from_snapshot(pid, snap, run, episode_deps(pid), EpisodeConfig.from_dict({**team_settings(), **(snap.get("config") or {})}),
+                                          state_file=state_file)
+        teams[pid] = ep
+        store.append_message(pid, "user", f"Rendered video: {body.video}", episode=True)
+        run.task = asyncio.get_running_loop().create_task(episode_work(pid, ep, run, ep.resume(body.video)))
         return StreamingResponse(follow(run), media_type="application/x-ndjson", headers={"Cache-Control": "no-store"})
 
     @app.get("/api/projects/{pid}/episode")

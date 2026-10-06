@@ -17,6 +17,7 @@ from typing import Any, Callable
 
 from ..providers.base import Fail, Usage, classify_status, classify_text
 from ..providers.cli import resolve
+from .. import fusion_kit, resolve_mcp
 from . import policy
 from .runs import Run, Runs
 from .studio import RESOLVE_RULE, Studio, call
@@ -91,6 +92,11 @@ class ClaudeAgent:
         async def can_use_tool(tool: str, tool_input: dict, context: Any):
             ok, message = await runs.permit(run, tool, tool_input, gate=gate)
             if ok:
+                if tool == f"mcp__{resolve_mcp.SERVER}__run_script":
+                    # the approved script's `from op_kit import *` line becomes the fixed kit (sandbox has no exec)
+                    script, used = fusion_kit.expand(tool_input.get("script", ""))
+                    if used:
+                        return sdk.PermissionResultAllow(updated_input={**tool_input, "script": script})
                 return sdk.PermissionResultAllow(updated_input=tool_input)
             return sdk.PermissionResultDeny(message=message or "not allowed", interrupt=run.stopped)
 

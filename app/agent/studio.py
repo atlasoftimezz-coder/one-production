@@ -46,14 +46,14 @@ files there directly. Besides your usual tools you have studio tools:
   does not prove the feature is available in this installation: passages marked
   newer_than_installed must be confirmed (resolve_status, the API) or presented as unconfirmed.
 """ + RESOLVE_RULE + """
-- Animation: draw each shot as a self-contained 1920x1080 SVG in this folder (stickman-explainer style:
-  full-bleed scene, bold outlines, big subjects, short labels; no scripts, no outside links, images
-  only as data: URIs), list them in a shots JSON with anchor words from the script, then
-  build_animation renders the frames, times every shot to the voiceover and writes the edit list.
+- Animation and motion graphics are made in DaVinci Resolve's Fusion page (owner's choice; no SVG
+  drawings): every script gets its own art direction designed for clarity, 1080p 60 fps, high quality,
+  never the same template look. fusion_setup builds the episode's Resolve project with one Fusion
+  composition per shot; you script each shot with mcp__davinci__run_script and the Fusion kit (when
+  the Resolve MCP is connected), then fusion_stills exports stills to check your work.
 - Stock footage (when stock_search is offered): free Pexels videos and photos. Search with specific
-  words, stock_fetch the few you will use, and put them in shots JSON as {"file": "stock/...",
-  "anchor": ..., "from": seconds into the clip}, mixed with drawn shots. When the video uses stock,
-  add "Stock footage: Pexels" and the names in stock/CREDITS.md to the description.
+  words and stock_fetch the few you will use. When the video uses stock, add "Stock footage: Pexels"
+  and the names in stock/CREDITS.md to the description.
 - Video editing (ffmpeg, the default): write an edit list JSON in this folder (see render_edit) whose
   visuals cover the voiceover, then render_edit (asks the owner first: minutes of CPU) and follow it
   with edit_status. Every render is checked by the video gate automatically.
@@ -78,8 +78,9 @@ class Studio:
 
     def __init__(self, pid: str, store, voice_svc, voice_jobs, on_job: Callable[[dict], None],
                  tuned: Callable[[str], dict | None] | None = None, knowledge=None, learning=None, resolve=None, gates=None, editor=None, animation=None, packaging=None,
-                 stock=None):
+                 stock=None, fusion=None):
         self.stock = stock
+        self.fusion = fusion
         self.knowledge = knowledge
         self.resolve = resolve
         self.gates = gates
@@ -97,10 +98,12 @@ class Studio:
         from .gate_tools import tools as gate_tools
         from .edit_tools import tools as edit_tools
         from .stock_tools import tools as stock_tools
+        from .fusion_tools import tools as fusion_tools
         return (knowledge_tools(self) if self.knowledge else []) + (learning_tools(self) if self.learning else []) + (
             resolve_tools(self) if self.resolve else []) + (gate_tools(self) if self.gates else []) + (
             edit_tools(self) if self.editor else []) + (
-            stock_tools(self) if self.stock and self.stock.key() else []) + [   # only once the owner added a key
+            stock_tools(self) if self.stock and self.stock.key() else []) + (   # only once the owner added a key
+            fusion_tools(self) if self.fusion and self.fusion.ready()[0] else []) + [   # Resolve control + MCP on
             Tool("list_voices", "List the reference voices and delivery presets available for voiceovers.",
                  {"type": "object", "properties": {}}, self.list_voices),
             Tool("script_stats", "Spoken word count, sections and length of a script file in this project "

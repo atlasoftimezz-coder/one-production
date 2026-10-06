@@ -64,6 +64,9 @@ class Settings(BaseModel):
     # resolve_mcp_cmd overrides where ResolveMCP.exe is (tests use a stand-in).
     resolve_mcp: bool = False
     resolve_mcp_cmd: str | None = None
+    # Plan D7/R8: the owner's wish to move work between two logins of the SAME service at a limit.
+    # Only takes effect where the terms check (app/terms.json) allows it - on 2026-10-06 nowhere.
+    allow_chaining: bool = False
 
     @field_validator("host")
     @classmethod

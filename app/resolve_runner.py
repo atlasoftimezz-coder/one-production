@@ -134,13 +134,148 @@ def execute(resolve, spec: dict) -> dict:
     return out
 
 
+# ---------------------------------------------------------------- Fusion episodes (docs/P10-fusion-plan.md, F3)
+EPISODE_FOLDER = 'One Production episodes'
+
+
+def timecode(frame: int, fps: float) -> str:
+    """Absolute timeline frame -> HH:MM:SS:FF (whole-frame rates; the episode timelines are 60 fps)."""
+    f = int(round(fps))
+    s, ff = divmod(int(frame), f)
+    return '%02d:%02d:%02d:%02d' % (s // 3600, s // 60 % 60, s % 60, ff)
+
+
+def open_episode(resolve, spec: dict):
+    """Load the episode's project and timeline (fusion_stills / later steps)."""
+    pm = resolve.GetProjectManager()
+    current = pm.GetCurrentProject()
+    if not current or current.GetName() != spec['project_name']:
+        need(pm.GotoRootFolder() and pm.OpenFolder(EPISODE_FOLDER), f'The "{EPISODE_FOLDER}" folder is missing.')
+        current = need(pm.LoadProject(spec['project_name']), f'Project {spec["project_name"]} could not be opened.')
+    timeline = None
+    for n in range(1, (current.GetTimelineCount() or 0) + 1):
+        t = current.GetTimelineByIndex(n)
+        if t and t.GetName() == spec.get('timeline', 'Episode'):
+            timeline = t
+    need(timeline, 'The episode timeline is missing.')
+    need(current.SetCurrentTimeline(timeline), 'Could not open the episode timeline.')
+    return pm, current, timeline
+
+
+def fusion_build(resolve, spec: dict) -> dict:
+    """A NEW project for the episode: 60 fps timeline, one Fusion composition per shot cut exactly at
+    its frames (ripple inserts at each start, leftovers deleted), the voiceover on A1, music on A2,
+    and the episode's style + each shot's brief stored in the shot's comp for the AI's scripts."""
+    info = probe(resolve)
+    out = {'passed': False, 'version': info['version'], 'previous_project': info['current_project'],
+           'project': spec['project_name'], 'shots': [], 'changed': False}
+    try:
+        need(info['version'] == spec['expected_version'],
+             f"Resolve is now {info['version']}, the episode was checked against {spec['expected_version']}.")
+        fps = float(spec['fps'])
+        shots = spec['shots']
+        need(shots and shots[0]['start'] == 0, 'The first shot must start at frame 0.')
+        pm = resolve.GetProjectManager()
+        need(pm.GotoRootFolder(), 'Could not open the root of the project library.')
+        if EPISODE_FOLDER not in (pm.GetFolderListInCurrentFolder() or []):
+            need(pm.CreateFolder(EPISODE_FOLDER), f'Could not create the "{EPISODE_FOLDER}" folder.')
+        need(pm.OpenFolder(EPISODE_FOLDER), f'Could not open the "{EPISODE_FOLDER}" folder.')
+        need(spec['project_name'] not in (pm.GetProjectListInCurrentFolder() or []),
+             'A project with this name already exists; nothing was changed.')
+        project = need(pm.CreateProject(spec['project_name']), 'Resolve refused to create the project.')
+        out['changed'] = True
+        for key, value in (('timelineFrameRate', str(int(fps))), ('timelineResolutionWidth', str(spec['width'])),
+                           ('timelineResolutionHeight', str(spec['height'])), ('timelinePlaybackFrameRate', str(int(fps)))):
+            project.SetSetting(key, value)
+        need(same_setting(project.GetSetting('timelineFrameRate'), str(int(fps))), 'Resolve refused the frame rate.')
+        pool = project.GetMediaPool()
+        media = [spec['voiceover']] + ([spec['music']] if spec.get('music') else [])
+        imported = pool.ImportMedia(media) or []
+        need(len(imported) == len(media), f'Imported {len(imported)} of {len(media)} audio files.')
+        timeline = need(pool.CreateEmptyTimeline(spec.get('timeline', 'Episode')), 'Could not create the timeline.')
+        need(project.SetCurrentTimeline(timeline), 'Could not select the timeline.')
+        resolve.OpenPage('edit')
+        base = timeline.GetStartFrame() or 0
+        end = shots[-1]['start'] + shots[-1]['frames']
+        for shot in shots:                       # ripple inserts: each one ends the shot before it
+            need(timeline.SetCurrentTimecode(timecode(base + shot['start'], fps)), 'Could not move the playhead.')
+            need(timeline.InsertFusionCompositionIntoTimeline(), f'Resolve refused the Fusion clip for {shot["name"]}.')
+        need(timeline.SetCurrentTimecode(timecode(base + end, fps)), 'Could not move the playhead to the end.')
+        timeline.InsertFusionCompositionIntoTimeline()
+        leftovers = [i for i in (timeline.GetItemListInTrack('video', 1) or []) if i.GetStart() >= base + end]
+        if leftovers:
+            need(timeline.DeleteClips(leftovers, False), 'Could not remove the pieces past the last shot.')
+        items = sorted(timeline.GetItemListInTrack('video', 1) or [], key=lambda i: i.GetStart())
+        need(len(items) == len(shots), f'Expected {len(shots)} shot clips, Resolve has {len(items)}.')
+        for item, shot in zip(items, shots):
+            need(item.GetStart() - base == shot['start'] and item.GetDuration() == shot['frames'],
+                 f'{shot["name"]} landed at {item.GetStart() - base}+{item.GetDuration()}, '
+                 f'expected {shot["start"]}+{shot["frames"]}.')
+            need(item.SetName(shot['name']), f'Could not name {shot["name"]}.')
+            comp = need(item.GetFusionCompByIndex(1), f'{shot["name"]} has no Fusion composition.')
+            comp.SetData('OneProduction.style', spec.get('style') or {})
+            comp.SetData('OneProduction.shot', {k: shot.get(k) for k in ('name', 'start', 'frames', 'idea', 'anchor', 'text')}
+                         | {'fps': fps})
+            out['shots'].append({'name': shot['name'], 'start': item.GetStart() - base, 'frames': item.GetDuration()})
+        for track, path in enumerate(media, 1):
+            clip = imported[media.index(path)]
+            placed = pool.AppendToTimeline([{'mediaPoolItem': clip, 'trackIndex': track, 'recordFrame': base, 'mediaType': 2}]) or []
+            need(placed, f'Could not place {path} on audio track {track}.')
+        need(pm.SaveProject(), 'Resolve could not save the project.')
+        out['audio'] = [(i.GetStart() - base, i.GetDuration()) for n in (1, 2) for i in (timeline.GetItemListInTrack('audio', n) or [])]
+        out['timeline'] = timeline.GetName()
+        out['passed'] = True
+    except Failed as exc:
+        out['error'] = str(exc)
+    except Exception as exc:                 # noqa: BLE001 - Resolve raised; report, don't crash
+        out['error'] = f'Resolve raised {type(exc).__name__}: {exc}'
+    return out
+
+
+def fusion_stills(resolve, spec: dict) -> dict:
+    """Export review stills of each shot and say which shots are still empty (nothing built yet)."""
+    out = {'passed': False, 'stills': [], 'empty': [], 'shots': []}
+    try:
+        pm, project, timeline = open_episode(resolve, spec)
+        resolve.OpenPage('edit')
+        base = timeline.GetStartFrame() or 0
+        fps = float(spec['fps'])
+        items = {i.GetName(): i for i in (timeline.GetItemListInTrack('video', 1) or [])}
+        for shot in spec['shots']:
+            item = items.get(shot['name'])
+            if item is None:
+                out['empty'].append(shot['name'])
+                continue
+            comp = item.GetFusionCompByIndex(1)
+            tools = len(comp.GetToolList(False) or {}) if comp else 0
+            out['shots'].append({'name': shot['name'], 'tools': tools})
+            if tools <= 2:                  # only MediaOut (+ MediaIn): nothing was built
+                out['empty'].append(shot['name'])
+                continue
+            for f in shot['at']:
+                f = max(0, min(int(f), item.GetDuration() - 1))
+                need(timeline.SetCurrentTimecode(timecode(item.GetStart() + f, fps)), 'Could not move the playhead.')
+                path = spec['out_dir'].rstrip('\\/') + '\\%s_f%04d.png' % (shot['name'], f)
+                need(project.ExportCurrentFrameAsStill(path), f'Resolve could not export a still of {shot["name"]}.')
+                out['stills'].append(path)
+        out['passed'] = True
+    except Failed as exc:
+        out['error'] = str(exc)
+    except Exception as exc:                 # noqa: BLE001
+        out['error'] = f'Resolve raised {type(exc).__name__}: {exc}'
+    return out
+
+
+ACTIONS = {'execute': execute, 'fusion_build': fusion_build, 'fusion_stills': fusion_stills}
+
+
 def main(connector=connect) -> int:
     request = json.loads(sys.stdin.read() or '{}')
     resolve, reason = connector()
     if resolve is None:
         answer = {'available': False, 'reason': reason}
-    elif request.get('action') == 'execute':
-        answer = execute(resolve, request['spec'])
+    elif request.get('action') in ACTIONS:
+        answer = ACTIONS[request['action']](resolve, request['spec'])
     else:
         answer = probe(resolve)
     sys.stdout.write(json.dumps(answer) + '\n')

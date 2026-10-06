@@ -83,6 +83,7 @@ class Task:
     resume: str = ""                 # partial work handed to the next account after a limit
     handoffs: list[str] = field(default_factory=list)
     activity: str = ""
+    providers: list[str] = field(default_factory=list)   # empty = any; Fusion shots need Claude (the Resolve MCP)
 
     def public(self) -> dict:
         d = asdict(self)
@@ -334,6 +335,8 @@ class Team:
             cands = []
             capped = []
             for a in self._usable():
+                if task.providers and a["provider"] not in task.providers:
+                    continue
                 why = self.deps.over_cap(a)
                 if why:
                     capped.append(f"{a.get('label') or a['id']}: {why}")
@@ -346,6 +349,8 @@ class Team:
             if cands:
                 return min(cands, key=lambda a: (self.load.get(a["id"], 0), self.deps.usage_pct(a) or 0, a["order"]))
             why = f"no account can take '{task.title}'"
+            if task.providers:
+                why += " (it needs a " + " or ".join(sorted(set(task.providers))) + " account)"
             if capped:
                 why += " - spend cap reached (" + "; ".join(capped) + "); raise it on the Usage page, then Resume"
             elif moved_from:
