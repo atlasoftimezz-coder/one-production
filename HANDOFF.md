@@ -12,7 +12,27 @@ phase log and the plan, checks the PC, runs the last gate and reports before tou
 
 ---
 
-## Current continuation checkpoint - Claude, 2026-10-06 (night): P12 built
+## Current continuation checkpoint - Claude, 2026-10-06 (night): P12 built, handed to a friend
+
+**Handover.** The owner, 2026-10-06: "Here after friend will take care you can push in git hub and
+update handoff". Everything up to P12 plus this handoff is pushed to `origin/main`.
+The friend continues from GitHub, probably on another PC: run `/handoff` first (paths below like
+`C:\Users\Work\...` and `D:\Software\Voice` are the studio PC's). Nothing is half-done: the
+working tree was clean at the push.
+
+**What to do next, in order:**
+1. `/handoff` checks: `setup_dev.ps1` if `.venv` is missing, then `check.bat P12` (last result
+   476 passed, 1 opt-in GPU skip; one earlier run hung silently - if it does, stop it and rerun).
+2. The manual checklists waiting on the owner (section 5) - mainly `docs/gates/P12-manual.md` and
+   `docs/gates/P10-production-manual.md` (one real Fusion episode = **F5**).
+3. F5 needs the owner present: GPU voiceover, DaVinci Resolve Studio 21.1+ open with both Resolve
+   switches on, an approval card per Fusion shot script, and the owner renders. Ask first.
+4. Parked until the owner provides access: research workers (NexLev / vidIQ) and Storyblocks
+   (paid key; Pexels is used instead - its key lives only in Windows Credential Manager, never in
+   files, so on a new PC the owner enters it again in the app).
+5. Owner decisions still open: a source for 3D models; whether heavy unattended runs (team mode,
+   episodes) should use an API key instead of a subscription (`docs/terms-check.md`).
+
 
 **P12** (owner: "do this ... 8. P12: terms check, Google sign-in, learning loop"). Plan and
 results: `docs/P12-plan.md`; manual checklist `docs/gates/P12-manual.md` (pending).
@@ -584,13 +604,13 @@ voice/           engine.py, pipeline.py, server.py, make_srt.py, config.py, tune
 | P9 Orchestrator + model/effort toggles | **built, manual pending** (`docs/gates/P9-manual.md`) | see git log |
 | P10 part 1 Script Studio (competitors → FacelessOS script → Opus review loop; FacelessOS bundled) | **built, manual pending** (`docs/gates/P10-manual.md`) | 2964239 + FacelessOS-bundle commit |
 | P10 knowledge + learning + Resolve adapter (+ Resolve MCP switch, frame-rate fix, 2026-10-06) | **built, manual pending** (`docs/gates/P10-knowledge-manual.md`, now 9 steps) | fd0c0e6 … e79e8e7, 85af852 |
-| P10 rest: numeric gates, ffmpeg editor, animation, packaging, episode run | **built, manual pending** (`docs/gates/P10-production-manual.md`: watch one full real episode) | 0b71ed8 … cfd9d04 |
+| P10 rest: numeric gates, ffmpeg editor, animation, packaging, episode run; visuals now in Resolve Fusion (F2-F4; F5 = one real episode, pending) | **built, manual pending** (`docs/gates/P10-production-manual.md`: watch one full real episode) | 0b71ed8 … cfd9d04, 253a40f, 1624bc3 |
 | P11 Dev orchestration (dispatch.py, cross-model code review) + Pexels stock | **built, manual pending** (`docs/gates/P11-manual.md`) | 873b9f6 |
-| P12 Terms check, Google sign-in, learning loop | later | — |
+| P12 Terms check, risky actions always ask, outside MCP, Google sign-in, learning loop | **built, manual pending** (`docs/gates/P12-manual.md`) | 1624bc3, e4129ad |
 
-Last gate: `check.bat P11` = 414 passed, 0 failed, 1 skip (`docs/gates/P11-auto.md`; the skip is the opt-in real-GPU test).
-Remaining to build: **P12** (research workers wait for the owner's NexLev / vidIQ access; Storyblocks for a paid key). Manual checks waiting on the user: P7 Part B,
-P8 friend test, P9 team mode, P10 part 1 Script Studio, P10 knowledge/Resolve, P10 production (one real episode), P11.
+Last gate: `check.bat P12` = 476 passed, 0 failed, 1 skip (`docs/gates/P12-auto.md`; the skip is the opt-in real-GPU test).
+All planned phases are built. Remaining: **F5** (one real Fusion episode, with the owner); research workers wait for the owner's NexLev / vidIQ access; Storyblocks for a paid key. Manual checks waiting on the user: P7 Part B,
+P8 friend test, P9 team mode, P10 part 1 Script Studio, P10 knowledge/Resolve, P10 production (one real episode), P11, P12.
 Version **0.10.0** in `app/version.py`; everything since is under "Unreleased" in the changelog (bump the
 version when the owner wants a release / package). Note: P10 part 1 was built before P9's manual sign-off, at the
 user's request ("can you create a plan for this" → plan approved). The user's habit: "if everything is fine start the next phase" — keep going
@@ -814,14 +834,14 @@ user's voice toward a benchmark — that produced a "different person" once).
    - Live Resolve from the app: the owner ran plans (project new1, 1 passed and 3 failed on the
      frame-rate bug, now fixed). A read-only Resolve MCP script ran for real in new2.
    - Scripts that CHANGE Resolve through the MCP are untested for real; watch the first card.
-   - Next build: P12. P11 manual: `docs/gates/P11-manual.md`.
+   - Next: F5 (one real Fusion episode). P11 manual: `docs/gates/P11-manual.md`; P12 manual: `docs/gates/P12-manual.md`.
 5a. The owner must restart One Production and tick "Let the AI use DaVinci Resolve's own MCP"
    (manual step 9). The MCP does not reach Codex accounts.
 5d. dispatch.py has never run with real accounts (that's the P11 manual check). Its review
    prompt may need tuning after the owner reads the first 2 review files.
 5b. Not built: Storyblocks (no key; Pexels is used instead, 2026-10-06) and research workers.
-5c. Episode cost is untested: the visuals worker draws roughly one SVG per 3 s of video; watch Usage
-   on the first real run. The bundle hard-links the video (no extra disk), but backups with media on (the default) zip it twice.
+5c. Episode cost is untested: the visuals worker writes one Fusion script per spoken idea (an approval card
+   each); watch Usage on the first real run. The bundle hard-links the video (no extra disk), but backups with media on (the default) zip it twice.
 6. Known limits: Word scripts need Heading styles; moving the data folder later is manual;
    Claude Code/Codex aren't auto-installed; the setup wizard's big downloads are only proven with
    stand-ins until Part B is done.
@@ -829,8 +849,10 @@ user's voice toward a benchmark — that produced a "different person" once).
    the file locks rely on the plan keeping files apart (Claude workers are checked on every write).
    A team does not survive an app restart (its state is saved in `team.json` for reading only).
 8. Voice module keeps the 8 GB VRAM rule (user, 2026-10-05: 4 GB+ "not required for now").
-9. Commits after bb716e1 (P9 onward) are local only - don't push to GitHub until the user asks (2026-10-05).
-   A friend continuing from GitHub therefore sees the project as of P8 until the user pushes.
+9. Pushed to GitHub on the owner's request (2026-10-06, handover to a friend): `origin/main` has
+   everything through P12. Keep committing per step; push when the owner (or the friend) asks.
+12. Learning loop: try it on the first published episode (Knowledge and learning > Learn from a
+    published video). Google sign-in needs the owner's own Google Cloud Desktop OAuth client.
 10. FacelessOS is bundled in the package by the owner's decision (licence is theirs to handle).
 11. Team mode: the user sets "workers at once" (any number ≥ 1, warning above 3) and may write the
     parts themselves (Parts…); Script Studio defaults (5 rounds, pass 8, stall 2) were Claude's
