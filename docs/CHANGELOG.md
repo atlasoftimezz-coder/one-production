@@ -2,7 +2,21 @@
 
 What changed in each version, in plain words. "Check for updates" shows the newest section.
 
-## Unreleased - P10 production engine, knowledge, learning and Resolve; P11 stock footage
+## Unreleased - P10 production engine, knowledge, learning and Resolve; P11 stock footage; P12 safety and learning
+- **Learn from a published video**: in Knowledge and learning, pick the YouTube Studio
+  audience-retention CSV of an episode. One Production finds where viewers left (after the intro),
+  names the chapter, the Fusion shot and the words at that moment, and suggests at most 3 lessons.
+  Nothing changes until you press "Use as my guidance" on one.
+- **Risky actions always ask**: deleting, installing, sending files out, writing outside the
+  project and an outside tool's write / run actions get a card every time, with no "Allow this
+  session". Session allowances show as chips above the message box (✕ takes one back) and are
+  gone after a restart.
+- **Outside MCP servers** (System): connect e.g. Desktop Commander to Claude chats; every call of
+  its tools asks.
+- **Sign in with Google** (optional, Profile): your own Google "Desktop app" client, only the
+  email addresses you list get in. Can be required every time the app starts.
+- **Terms check**: moving work between two logins of the same service stays off, because Anthropic's
+  and OpenAI's terms don't allow it (`docs/terms-check.md`, read 2026-10-06).
 - **Episode visuals are made in DaVinci Resolve's Fusion page** (1080p, 60 fps). Drawn SVG shots
   are gone.
   - For every script the AI designs a new look to make that script easy to follow, then builds

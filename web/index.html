@@ -559,6 +559,11 @@
   .step code { font: 12px ui-monospace, Consolas, monospace; overflow: hidden; text-overflow: ellipsis;
                white-space: nowrap; min-width: 0; }
   @keyframes pulse { 50% { opacity: .35; } }
+  .allowstrip { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12px; color: var(--muted); margin: 0 0 6px; }
+  .allowstrip[hidden] { display: none; }
+  .allowstrip .chip { border: 1px solid var(--line); border-radius: 999px; padding: 2px 4px 2px 10px; display: inline-flex; gap: 4px; align-items: center; }
+  .allowstrip .chip button { border: 0; background: none; color: inherit; cursor: pointer; font-size: 13px; padding: 0 4px; }
+  .askcard .risk { color: var(--bad); font-weight: 600; margin-top: 4px; }
   .askcard { margin: 8px 0; border: 1px solid var(--warn); background: rgba(251,191,36,.08); border-radius: 12px;
              padding: 10px 12px; display: grid; gap: 7px; white-space: normal; }
   .askcard .why { color: var(--dim); font-size: 12.5px; }
@@ -682,6 +687,7 @@
   <main>
     <div id="messages"></div>
     <div class="composer">
+      <div class="allowstrip" id="allowstrip" hidden></div>
       <form class="box" id="composer">
         <button type="button" class="iconbtn" id="attach" title="Attach files"><svg class="icon"><use href="#i-clip"/></svg></button>
         <label class="picker" title="Which account answers"><i class="pdot" id="pickdot"></i>
@@ -825,7 +831,16 @@
       <button class="btn" id="sysagain">Scan again</button>
       <button class="iconbtn" id="sysclose" title="Close"><svg class="icon"><use href="#i-x"/></svg></button>
     </div>
-    <div class="mbody"><div class="upd" id="sysupd"></div><div id="sysbody"></div></div>
+    <div class="mbody"><div class="upd" id="sysupd"></div><div id="sysbody"></div>
+      <div class="mcpbox" style="margin-top:16px;border-top:1px solid var(--line);padding-top:12px">
+        <b>Outside MCP servers</b> <span style="color:var(--muted);font-size:13px">for Claude chats - e.g. a local OS server. Every call asks you first; writing, deleting, running programs or uploading is asked every time.</span>
+        <div id="mcplist" style="margin:8px 0;display:grid;gap:6px"></div>
+        <form id="mcpadd" style="display:flex;gap:6px;flex-wrap:wrap">
+          <input id="mcpname" placeholder="name, e.g. desktop" maxlength="32" style="width:9em" required>
+          <input id="mcpcmd" placeholder="command or https:// url" style="flex:1;min-width:12em" required>
+          <input id="mcpargs" placeholder="arguments (space separated)" style="flex:2;min-width:12em">
+          <button class="btn">Add</button></form>
+      </div></div>
   </div>
 </div>
 
@@ -959,9 +974,10 @@
   <form class="card" id="pinform">
     <div class="mark"><svg viewBox="0 0 24 24"><use href="#i-play"/></svg></div>
     <h1 id="pinhello">Welcome back</h1>
-    <p>Enter your PIN to open One Production.</p>
+    <p id="pinhint">Enter your PIN to open One Production.</p>
     <input id="pininput" type="password" inputmode="numeric" autocomplete="off" maxlength="12" aria-label="PIN">
-    <button class="btn primary">Unlock</button>
+    <button class="btn primary" id="pinunlock">Unlock</button>
+    <button class="btn" type="button" id="pingoogle" style="display:none">Sign in with Google</button>
     <div class="pmsg" id="pinmsg"></div>
   </form>
 </div>
@@ -1097,6 +1113,7 @@ async function openProject(id) {
   // attachAgent() replays everything when the user comes back
   if (state.consumer && state.consumer.pid !== id) state.consumer.cancel();
   state.current = id;
+  refreshAllow(id);
   const p = state.projects.find(x => x.id === id);
   document.querySelectorAll("#projects li").forEach(li => li.classList.toggle("active", li.dataset.id === id));
   $("#crumb").innerHTML = p ? `<span>/</span><b>${esc(p.name)}</b>` : "";
@@ -1687,14 +1704,33 @@ $("#pstart").onclick = async () => {
 const ASK_BUTTONS = {
   normal: [["deny", "Deny", "btn"], ["session", "Allow this session", "btn"], ["once", "Allow once", "btn primary"]],
   gate: [["deny", "Not now", "btn"], ["always", "Always allow", "btn"], ["once", "Allow once", "btn primary"]],
+  // R6: deletes, installs, uploads, writes outside the project - asked every time, Deny first
+  risky: [["deny", "Deny", "btn primary"], ["once", "Allow once", "btn"]],
 };
+async function refreshAllow(pid) {
+  const strip = $("#allowstrip");
+  try {
+    const d = await (await api(`/api/projects/${pid}/agent`)).json();
+    if (pid !== state.current) return;
+    const tools = d.session_allow || [];
+    strip.hidden = !tools.length;
+    strip.innerHTML = tools.length ? `<span>Allowed for this session:</span>` + tools.map(t =>
+      `<span class="chip">${esc(t.replace(/^mcp__/, "").replace(/__/g, " · "))}<button type="button" data-revoke="${esc(t)}" title="Take back - ask again">✕</button></span>`).join("") : "";
+    strip.querySelectorAll("[data-revoke]").forEach(b => b.onclick = async () => {
+      try { await api(`/api/projects/${pid}/agent/allow/${encodeURIComponent(b.dataset.revoke)}`, { method: "DELETE" }); }
+      catch (e) { toast(e.message, true); }
+      refreshAllow(pid);
+    });
+  } catch (e) { strip.hidden = true; }
+}
 function addAskCard(bubble, ev, pid) {
   const card = document.createElement("div");
   card.className = "askcard";
   card.innerHTML = `<div><b>${esc(ev.title)}</b> — needs your OK</div>
     ${ev.detail ? `<pre>${esc(ev.detail)}</pre>` : ""}
     <div class="why">Why it asks: ${esc(ev.reason)}</div>
-    <div class="row2">${ASK_BUTTONS[ev.gate ? "gate" : "normal"].map(([a, label, cls]) =>
+    ${ev.risky ? `<div class="risk">⚠ This ${esc(ev.risky)} - you'll be asked every time.</div>` : ""}
+    <div class="row2">${ASK_BUTTONS[ev.gate ? "gate" : ev.risky ? "risky" : "normal"].map(([a, label, cls]) =>
       `<button class="${cls}" data-a="${a}">${label}</button>`).join("")}</div>`;
   card.querySelectorAll("[data-a]").forEach(b => b.onclick = async () => {
     card.querySelectorAll("button").forEach(x => x.disabled = true);
@@ -1708,6 +1744,7 @@ function addAskCard(bubble, ev, pid) {
 }
 function settleAsk(card, answer) {
   card.classList.add("done");
+  if (answer === "session" && state.current) refreshAllow(state.current);
   const said = { once: "Allowed once", session: "Allowed for this session", always: "Always allowed", deny: "Denied" }[answer] || answer;
   card.querySelector(".row2").innerHTML = `<span class="verdict" style="color:var(${answer === "deny" ? "--bad" : "--ok"})">${said}</span>`;
 }
@@ -2549,7 +2586,33 @@ $("#bkkeep").onchange = () => saveBackupSettings({ keep: Number($("#bkkeep").val
 
 // ---------- system scan (R13 step 2)
 const SYS_WORD = { ok: "good", warn: "check", bad: "problem", info: "info" };
-async function openSystem() { $("#sysmodal").classList.add("open"); renderUpdates(false); await runScan(); }
+async function openSystem() { $("#sysmodal").classList.add("open"); renderUpdates(false); renderMcp(); await runScan(); }
+let mcpServers = {};
+async function renderMcp() {
+  try { mcpServers = (await (await api("/api/mcp-servers")).json()).servers || {}; } catch (e) { mcpServers = {}; }
+  const names = Object.keys(mcpServers);
+  $("#mcplist").innerHTML = names.length ? names.map(n => { const s = mcpServers[n];
+    return `<div style="display:flex;gap:8px;align-items:center"><b>${esc(n)}</b><code style="flex:1;overflow:hidden;text-overflow:ellipsis">${esc(s.url || [s.command, ...(s.args || [])].join(" "))}</code>
+      <button class="iconbtn" data-mcpdel="${esc(n)}" title="Remove">✕</button></div>`; }).join("")
+    : `<span style="color:var(--muted)">None connected.</span>`;
+  $("#mcplist").querySelectorAll("[data-mcpdel]").forEach(b => b.onclick = async () => {
+    const next = { ...mcpServers }; delete next[b.dataset.mcpdel]; await saveMcp(next);
+  });
+}
+async function saveMcp(servers) {
+  try { await api("/api/mcp-servers", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ servers }) });
+        toast("Saved - new Claude chats use it"); }
+  catch (e) { toast(e.message, true); }
+  renderMcp();
+}
+$("#mcpadd").onsubmit = async e => {
+  e.preventDefault();
+  const name = $("#mcpname").value.trim(), cmd = $("#mcpcmd").value.trim();
+  const entry = /^https?:\/\//.test(cmd) ? { type: "http", url: cmd }
+    : { type: "stdio", command: cmd, args: $("#mcpargs").value.trim() ? $("#mcpargs").value.trim().split(/\s+/) : [] };
+  await saveMcp({ ...mcpServers, [name]: entry });
+  $("#mcpname").value = $("#mcpcmd").value = $("#mcpargs").value = "";
+};
 async function runScan() {
   $("#sysagain").disabled = true;
   $("#sysbody").innerHTML = `<div class="navempty">Looking at this PC…</div>`;
@@ -2596,7 +2659,17 @@ function renderProfile(p) {
     <div class="psect"><h4>Name</h4><p>Shown in the corner.</p>
       <div class="pform"><input class="wide" id="pname" maxlength="40" placeholder="Your name" value="${esc(p.name)}">
         <button class="btn" id="psave">Save</button></div></div>
-    <div class="psect">${pinPart}<div class="pmsg" id="pmsg"></div></div>`;
+    <div class="psect">${pinPart}<div class="pmsg" id="pmsg"></div></div>
+    <div class="psect"><h4>Google sign-in ${p.google && p.google.configured ? "is on" : "(optional)"}</h4>
+      <p>Open One Production by signing in with Google - with your own Google Cloud OAuth client (type <b>Desktop app</b>).
+         Only the emails you list get in. This is separate from your Claude / Codex sign-ins.</p>
+      <div class="pform" style="display:grid;gap:6px">
+        <input class="wide" id="gclient" placeholder="Client ID (….apps.googleusercontent.com)" value="${esc((p.google || {}).client_id || "")}">
+        <input class="wide" id="gsecret" type="password" placeholder="${p.google && p.google.configured ? "Client secret (saved - leave empty to keep)" : "Client secret"}">
+        <input class="wide" id="gallowed" placeholder="Allowed emails, comma separated" value="${esc(((p.google || {}).allowed || []).join(", "))}">
+        <label><input type="checkbox" id="grequired" ${p.google && p.google.required ? "checked" : ""}> Ask for Google sign-in every time One Production starts</label>
+        <div><button class="btn" id="gsave">Save</button> ${p.google && p.google.configured ? `<button class="btn" id="gremove">Turn off</button>` : ""}</div>
+      </div><div class="pmsg" id="gmsg"></div></div>`;
   const msg = (t, ok) => { $("#pmsg").textContent = t; $("#pmsg").className = "pmsg " + (ok ? "ok" : "bad"); };
   const post = async (url, body) => (await api(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })).json();
   $("#psave").onclick = async () => {
@@ -2617,6 +2690,17 @@ function renderProfile(p) {
     try { renderProfile(await post("/api/profile/pin", { current: $("#pcur").value, new: null })); toast("PIN removed"); }
     catch (e) { msg(e.message); }
   };
+  $("#gsave").onclick = async () => {
+    try {
+      renderProfile(await (await api("/api/profile/google", { method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ client_id: $("#gclient").value.trim(), client_secret: $("#gsecret").value || null,
+                               allowed: $("#gallowed").value.split(",").map(x => x.trim()).filter(Boolean), required: $("#grequired").checked }) })).json());
+      toast("Google sign-in saved");
+    } catch (e) { $("#gmsg").textContent = e.message; $("#gmsg").className = "pmsg bad"; }
+  };
+  if ($("#gremove")) $("#gremove").onclick = async () => {
+    renderProfile(await (await api("/api/profile/google", { method: "DELETE" })).json()); toast("Google sign-in turned off");
+  };
   if ($("#plock")) $("#plock").onclick = async () => {
     await post("/api/profile/lock", {});
     $("#profmodal").classList.remove("open"); showPinLock(p);
@@ -2630,11 +2714,37 @@ let afterUnlock = null;
 function showPinLock(p, then) {
   if (then) afterUnlock = then;
   if (p && p.name) $("#pinhello").textContent = `Welcome back, ${p.name}`;
+  const google = !!(p && p.google && p.google.configured), pin = !p || p.has_pin;
+  $("#pingoogle").style.display = google ? "" : "none";
+  $("#pininput").style.display = $("#pinunlock").style.display = pin ? "" : "none";
+  $("#pinhint").textContent = pin && google ? "Enter your PIN, or sign in with Google." : pin ? "Enter your PIN to open One Production."
+                                                                                       : "Sign in with Google to open One Production.";
   $("#pinlock").classList.add("open");
   $("#pinmsg").textContent = "";
   $("#pininput").value = "";
   setTimeout(() => $("#pininput").focus(), 30);
 }
+$("#pingoogle").onclick = async () => {
+  const b = $("#pingoogle");
+  b.disabled = true; $("#pinmsg").textContent = "Finish the sign-in in the browser tab that opened…";
+  try {
+    const s = await (await api("/api/profile/google/start", { method: "POST" })).json();
+    window.open(s.url, "_blank", "noopener");
+    for (let i = 0; i < 300; i++) {
+      await new Promise(r => setTimeout(r, 1000));
+      const st = await (await api(`/api/profile/google/status?state=${encodeURIComponent(s.state)}`)).json();
+      if (st.status === "done") {
+        $("#pinlock").classList.remove("open"); renderProfChip(st.profile);
+        const then = afterUnlock; afterUnlock = null;
+        if (then) await then();
+        return;
+      }
+      if (st.status === "failed") { $("#pinmsg").textContent = st.error; return; }
+    }
+    $("#pinmsg").textContent = "The sign-in timed out - try again.";
+  } catch (e) { $("#pinmsg").textContent = e.message; }
+  finally { b.disabled = false; }
+};
 $("#pinform").onsubmit = async e => {
   e.preventDefault();
   try {

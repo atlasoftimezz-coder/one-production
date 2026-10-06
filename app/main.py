@@ -27,6 +27,7 @@ from .knowledge import Knowledge
 from .knowledge_api import mount as mount_knowledge
 from .resolve import Resolve
 from . import resolve_mcp
+from . import mcp_servers
 from .resolve_api import mount as mount_resolve
 from .gates_api import Gates, mount as mount_gates
 from .editor import Editor
@@ -35,6 +36,7 @@ from .animation import Animation
 from .packaging import Packaging
 from .stock import Stock, StockError
 from .fusion import Fusion
+from .insights import InsightError, Insights, parse_lessons
 from . import handoff
 from .accounts import DEFAULT_SWITCH, DEFAULT_WARN, PROVIDERS, SAME_SERVICE_SWITCHING, SUBSCRIPTIONS, \
     AccountError, Accounts
@@ -49,6 +51,7 @@ from .modules import ENGINE_DIR, Modules
 from .setup import SetupState, drives
 from .backups import BackupError, Backups, Busy
 from .profile import Profile, ProfileError, Throttled
+from .google_signin import GoogleSignIn, SignInError
 from .agent.claude_agent import ClaudeAgent
 from .agent.codex_agent import CodexAgent
 from .agent.runs import Runs
@@ -60,7 +63,7 @@ from .agent.studio import INSTRUCTIONS as STUDIO_INSTRUCTIONS, Studio
 from .chat import SYSTEM, build_prompt, ndjson, reply_events
 from .config import Settings
 from .providers.anthropic_api import AnthropicAPI
-from .providers.base import Fail, RateLimit, Text, Usage
+from .providers.base import Fail, RateLimit, Text, Usage, run_with_retries
 from .providers.claude_cli import ClaudeCLI
 from .providers.codex_cli import CodexCLI
 from .providers.demo import Demo
@@ -208,8 +211,24 @@ class ChainingIn(BaseModel):
     allow_chaining: bool
 
 
+class GoogleIn(BaseModel):
+    client_id: str
+    client_secret: str | None = None
+    allowed: list[str] = []
+    required: bool = False
+
+
+class McpServersIn(BaseModel):
+    servers: dict
+
+
 class RenderedIn(BaseModel):
     video: str
+
+
+class InsightsIn(BaseModel):
+    retention: str
+    account: str | None = None
 
 
 class InstallIn(BaseModel):
@@ -283,7 +302,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
                login_console: bool | None = None, voice_transport=None, agent_client=None,
                codex_transport=None, backup_delay: float = 120, backup_tick: float = 3600,
                restart=None, gpu_probe=None, tune_script: Path | None = None, relaunch=None,
-               updater: Updater | None = None, ytdlp=None, stock_transport=None) -> FastAPI:
+               updater: Updater | None = None, ytdlp=None, stock_transport=None, google_transport=None) -> FastAPI:
     if login_console is None:
         login_console = settings.login_console
     token = token or secrets.token_urlsafe(32)
@@ -303,9 +322,11 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
     packaging = Packaging(store, settings.data_dir, gates)
     stock = Stock(store, transport=stock_transport)
     fusion = Fusion(store, settings.data_dir, resolve, settings)
+    insights = Insights(store, settings.data_dir, learning)
     runs = Runs()
     backups = Backups(settings.data_dir, store, redact)
     profile = Profile(settings.data_dir)
+    google = GoogleSignIn(profile, transport=google_transport)
     modules = Modules(settings, settings.data_dir)
     installer = Installer()
     setup_state = SetupState(settings.data_dir, store, accounts)
@@ -315,7 +336,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
     migration = migrate(settings.data_dir)
     SAMPLES = Path(__file__).resolve().parent.parent / "samples" / "getting-started"
     claude_agent = ClaudeAgent(settings.claude_cmd, settings.data_dir, client_factory=agent_client,
-                               api_key_of=Accounts.api_key, extra_mcp=lambda: resolve_mcp.for_agent(settings))
+                               api_key_of=Accounts.api_key, extra_mcp=lambda: mcp_servers.for_agent(settings))
     codex_agent = CodexAgent(settings.codex_cmd, transport_factory=codex_transport)
     work = settings.data_dir / "cache" / "run"          # empty cwd: CLIs pick up no project files
     providers = {
@@ -378,7 +399,8 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
 
     app = FastAPI(title="One Production", version=__version__, lifespan=lifespan,
                   docs_url=None, redoc_url=None, openapi_url=None)
-    OPEN_WHEN_LOCKED = {("GET", "/api/profile"), ("POST", "/api/profile/unlock")}
+    OPEN_WHEN_LOCKED = {("GET", "/api/profile"), ("POST", "/api/profile/unlock"),
+                        ("POST", "/api/profile/google/start"), ("GET", "/api/profile/google/status")}
 
     @app.middleware("http")
     async def pin_lock(request, call_next):
@@ -905,6 +927,21 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
                                  if st["key_set"] else "Add your free Pexels key to switch it on."))
         return {"modules": mods, "gpu": gpu}
 
+    @app.get("/api/mcp-servers")
+    def mcp_list() -> dict:
+        """The owner's outside MCP servers for Claude chats (every call asks; write/exec asks every time)."""
+        return {"servers": mcp_servers.check(getattr(settings, "mcp_servers", None) or {})}
+
+    @app.put("/api/mcp-servers")
+    def mcp_save(body: McpServersIn) -> dict:
+        try:
+            clean = mcp_servers.check(body.servers)
+        except mcp_servers.McpError as e:
+            raise HTTPException(400, str(e))
+        settings.mcp_servers = clean
+        save_setting("mcp_servers", clean)
+        return {"servers": clean}
+
     @app.get("/api/terms")
     def terms_state() -> dict:
         """The terms check (plan R8): verdicts per provider and whether chaining is in effect."""
@@ -1183,6 +1220,29 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
         except ProfileError as e:
             raise HTTPException(403, str(e))
 
+    @app.put("/api/profile/google")
+    def google_setup(body: GoogleIn) -> dict:
+        """The owner's own Google OAuth desktop client + allowed emails (R7)."""
+        try:
+            return google.configure(body.client_id, body.client_secret, body.allowed, body.required)
+        except SignInError as e:
+            raise HTTPException(400, str(e))
+
+    @app.delete("/api/profile/google")
+    def google_remove() -> dict:
+        return google.remove()
+
+    @app.post("/api/profile/google/start")
+    def google_start() -> dict:
+        try:
+            return google.start()
+        except SignInError as e:
+            raise HTTPException(400, str(e))
+
+    @app.get("/api/profile/google/status")
+    def google_status(state: str) -> dict:
+        return google.status(state)
+
     @app.post("/api/profile/lock")
     def lock_now() -> dict:
         return profile.lock()
@@ -1324,6 +1384,14 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
         if not runs.answer(pid, body.id, body.answer):
             raise HTTPException(404, "that question is no longer waiting")
         return {"ok": True}
+
+    @app.delete("/api/projects/{pid}/agent/allow/{tool}")
+    def agent_revoke(pid: str, tool: str) -> dict:
+        """Take back an "Allow this session" (they live in memory only and are gone after a restart)."""
+        _project(pid)
+        allowed = runs.session_allow.get(pid, set())
+        allowed.discard(tool)
+        return {"session_allow": sorted(allowed)}
 
     @app.post("/api/projects/{pid}/agent/stop")
     def agent_stop(pid: str) -> dict:
@@ -1715,6 +1783,59 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
         store.append_message(pid, "user", f"Rendered video: {body.video}", episode=True)
         run.task = asyncio.get_running_loop().create_task(episode_work(pid, ep, run, ep.resume(body.video)))
         return StreamingResponse(follow(run), media_type="application/x-ndjson", headers={"Cache-Control": "no-store"})
+
+    # ---------------------------------------------------------------- learning loop (P12)
+    def insight_account(wanted: str | None) -> dict | None:
+        """The owner's pick, else the first signed-in account with room today; None = rule-based lessons."""
+        for a in accounts.list():
+            if wanted and a["id"] != wanted:
+                continue
+            if a["enabled"] and a["status"] == "ok" and a["provider"] in ("claude", "codex", "anthropic_api") and not over_cap(a):
+                return a
+        return None
+
+    @app.post("/api/projects/{pid}/insights")
+    async def retention_insights(pid: str, body: InsightsIn) -> dict:
+        """Audience retention of the published episode -> drops mapped to chapter / shot / words ->
+        at most 3 lesson CANDIDATES (approve or forget them in Knowledge and learning)."""
+        _project(pid)
+        try:
+            report = insights.analyse(pid, body.retention)
+        except InsightError as e:
+            raise HTTPException(400, str(e))
+        if not report["drops"]:
+            return {"report": report, "lessons": [], "drafted_by": None,
+                    "note": "No clear drop after the intro - nothing to learn from this curve."}
+        lessons, source, note = [], "rules", ""
+        acc = insight_account(body.account)
+        if acc:
+            parts, usage, error, windows = [], None, None, None
+            async for ev in run_with_retries(providers[acc["provider"]], acc, insights.prompt(report), acc.get("model"), effort_of(acc)):
+                if isinstance(ev, Text):
+                    parts.append(ev.text)
+                elif isinstance(ev, Usage):
+                    usage = ev
+                elif isinstance(ev, RateLimit):
+                    windows = ev.windows
+                    accounts.record_rate_limit(acc["id"], ev.windows, ev.status)
+                elif isinstance(ev, Fail):
+                    error = ev
+            ledger.record_call(account=acc["id"], provider=acc["provider"], project=pid, usage=usage,
+                               outcome="error" if error else "ok", err_kind=error.kind if error else None, windows=windows)
+            lessons = [] if error else parse_lessons("".join(parts))
+            if lessons:
+                source = acc["provider"]
+            else:
+                note = f"The AI ({acc.get('label') or acc['provider']}) " + (f"failed: {error.message}" if error else "gave no usable lessons")                        + " - plain rule-based lessons instead."
+        else:
+            note = "No signed-in account with room today - plain rule-based lessons instead."
+        if not lessons:
+            lessons = insights.fallback(report)
+        try:
+            saved = insights.save_candidates(pid, report, lessons, source)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        return {"report": report, "lessons": saved, "drafted_by": source, "note": note}
 
     @app.get("/api/projects/{pid}/episode")
     def episode_state(pid: str) -> dict:

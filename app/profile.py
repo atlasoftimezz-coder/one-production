@@ -6,7 +6,8 @@ nothing but "unlock" works until the PIN is entered. "Lock now" locks it again.
 
     profile.json   {"name": ..., "pin": {"salt": hex, "hash": hex}}   - never the PIN itself
     5 wrong PINs   -> unlocking pauses for a minute (and doubles after each further miss)
-Google sign-in comes later (P12).
+Google sign-in (P12, app/google_signin.py) is a second way in: profile.json keeps its client ID,
+the allowed emails and whether it is required at start - never a token.
 """
 from __future__ import annotations
 
@@ -60,13 +61,37 @@ class Profile:
     def has_pin(self) -> bool:
         return bool(self._load().get("pin"))
 
+    def google_config(self) -> dict:
+        return dict(self._load().get("google") or {})
+
+    def set_google(self, cfg: dict | None) -> dict:
+        with self._lock:
+            d = self._load()
+            if cfg:
+                d["google"] = cfg
+            else:
+                d.pop("google", None)
+            self._save(d)
+        return self.public()
+
     @property
     def locked(self) -> bool:
-        return self.has_pin and not self.unlocked
+        return (self.has_pin or bool(self.google_config().get("required"))) and not self.unlocked
+
+    def unlock_external(self, who: str) -> dict:
+        """Unlocked by a verified Google sign-in (google_signin.py did the checks)."""
+        with self._lock:
+            self.fails, self.blocked_until, self.unlocked = 0, 0.0, True
+            self.signed_in = who
+        return self.public()
 
     def public(self) -> dict:
         d = self._load()
-        return {"name": d.get("name") or "", "has_pin": bool(d.get("pin")), "locked": self.locked}
+        g = d.get("google") or {}
+        return {"name": d.get("name") or "", "has_pin": bool(d.get("pin")), "locked": self.locked,
+                "google": {"configured": bool(g.get("client_id")), "required": bool(g.get("required")),
+                           "client_id": g.get("client_id") or "", "allowed": list(g.get("allowed") or [])},
+                "signed_in": getattr(self, "signed_in", "")}
 
     def set_name(self, name: str) -> dict:
         with self._lock:
@@ -129,4 +154,5 @@ class Profile:
 
     def lock(self) -> dict:
         self.unlocked = False
+        self.signed_in = ""
         return self.public()

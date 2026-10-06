@@ -67,6 +67,8 @@ class Settings(BaseModel):
     # Plan D7/R8: the owner's wish to move work between two logins of the SAME service at a limit.
     # Only takes effect where the terms check (app/terms.json) allows it - on 2026-10-06 nowhere.
     allow_chaining: bool = False
+    # Outside MCP servers for Claude chats (app/mcp_servers.py), e.g. a local OS server. Every call asks.
+    mcp_servers: dict = {}
 
     @field_validator("host")
     @classmethod

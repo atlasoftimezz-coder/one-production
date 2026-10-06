@@ -152,6 +152,42 @@ def describe(tool: str, tool_input: dict, root: Path) -> tuple[str, str]:
 _WRAPPER = re.compile(r'^\s*"?[^"]*?(powershell|pwsh|cmd)(\.exe)?"?\s+(-NoProfile\s+)?(-Command|/c|/C)\s+(.*)$', re.I | re.S)
 
 
+# Plan R6: deletes, installs and network uploads are asked EVERY time ("default deny"), and so are file
+# writes outside the project and write/exec tools of outside MCP servers - "Allow this session"
+# never covers them. These patterns only ever add caution: a miss still asks (the tool asks anyway).
+_DELETE = re.compile(r"(?i)(^|[\s;&|(])(rm|rmdir|rd|del|erase|Remove-Item|ri|Clear-Content|Clear-RecycleBin|format|diskpart|shred)"
+                     r"(?=\s|$)|\bgit\s+clean\b|\bgit\s+reset\s+--hard\b")
+_INSTALL = re.compile(r"(?i)\b(pip3?|python\s+-m\s+pip|uv\s+pip|uv\s+tool)\s+install\b|\bnpm\s+(i|install|add|ci)\b|\b(pnpm|yarn)\s+(add|install)\b"
+                      r"|\b(winget|choco|scoop|apt|apt-get|brew)\s+install\b|\bmsiexec\b|\bInstall-(Module|Package|Script)\b"
+                      r"|\b(cargo|go)\s+install\b|\bsetup\.exe\b")
+_UPLOAD = re.compile(r"(?i)\bcurl\b[^|;&]*(\s-T\s|--upload-file|\s-F\s|--form\b|\s(-d|--data|--data-binary)\s+@)"
+                     r"|\bInvoke-(WebRequest|RestMethod)\b[^|;&]*-Method\s+(Post|Put|Patch)|\b(scp|sftp|ftp|rsync)\b"
+                     r"|\bgit\s+push\b|\baws\s+s3\s+(cp|sync|mv)\b|\bgsutil\s+(cp|rsync)\b|\baz\s+storage\b")
+_MCP_RISKY = re.compile(r"(?i)(write|edit|delete|remove|move|rename|create|exec|run|start|kill|terminate|install|upload|send|set_)")
+
+
+def risky(tool: str, tool_input: dict, root: Path) -> str | None:
+    """Why this action must be asked every time (no session allowance), or None."""
+    if tool in SHELL:
+        cmd = unwrap_shell(str(tool_input.get("command") or tool_input.get("code") or ""))
+        if _DELETE.search(cmd):
+            return "deletes files"
+        if _INSTALL.search(cmd):
+            return "installs software"
+        if _UPLOAD.search(cmd):
+            return "sends files over the network"
+        return None
+    if tool in WRITES:
+        return "writes outside the project folder" if any(not inside(p, root) for p in paths_of(tool_input)) else None
+    if tool.startswith("mcp__") and not tool.startswith("mcp__studio__"):
+        server, _, name = tool[5:].partition("__")
+        if server == resolve_mcp.SERVER:           # Resolve's run_script is sandboxed (no files); only its deletes
+            return "deletes files in DaVinci Resolve's LUT folder" if name.startswith("delete") else None
+        if _MCP_RISKY.search(name):
+            return "changes files or runs programs through an outside tool"
+    return None
+
+
 def unwrap_shell(command: str) -> str:
     """'"...powershell.exe" -Command "Get-ChildItem"' -> 'Get-ChildItem', for display only."""
     m = _WRAPPER.match(command or "")

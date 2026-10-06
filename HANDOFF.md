@@ -12,7 +12,26 @@ phase log and the plan, checks the PC, runs the last gate and reports before tou
 
 ---
 
-## Current continuation checkpoint - Claude, 2026-10-06 (late): Fusion F2-F4 built
+## Current continuation checkpoint - Claude, 2026-10-06 (night): P12 built
+
+**P12** (owner: "do this ... 8. P12: terms check, Google sign-in, learning loop"). Plan and
+results: `docs/P12-plan.md`; manual checklist `docs/gates/P12-manual.md` (pending).
+- **Terms (R8):** `app/terms.json` + `app/terms.py`; `accounts.switch_allowed` keeps same-service
+  chaining off (Claude and Codex "not_allowed" on 2026-10-06). Open owner question: should heavy
+  unattended runs use an API key?
+- **R6:** `policy.risky()` - deletes / installs / uploads / outside writes / outside-MCP write-exec
+  always get a card, never a session allowance. Allowances: memory only, chips + revoke
+  (`DELETE /api/projects/{pid}/agent/allow/{tool}`). Outside MCP servers: `app/mcp_servers.py`,
+  `settings.mcp_servers`, `GET/PUT /api/mcp-servers`.
+- **R7:** `app/google_signin.py` (PKCE + loopback + tokeninfo, owner's own Desktop client, secret
+  in Credential Manager). `profile.locked` = PIN or required Google.
+- **Learning loop:** `app/insights.py` + `POST /api/projects/{pid}/insights` + "Learn from a
+  published video" in Knowledge and learning. Retention CSV -> cliffs -> chapter / shot / words ->
+  max 3 lesson candidates (AI or rule-based) -> owner approves.
+- **Still open:** F5 (one real Fusion episode - needs the owner: GPU voiceover, Resolve open, cards);
+  research workers (NexLev / vidIQ access) and Storyblocks (paid key) parked; 3D model source.
+
+## Earlier checkpoint - Claude, 2026-10-06 (late): Fusion F2-F4 built
 
 **Fusion episodes.** Owner, in order:
 - "Animation, motion graphics should done in davinci fusion page not drawing";

@@ -57,3 +57,15 @@ tests on purpose-changed behaviour (Stock no longer "Phase 2") and showed browse
 the real Credential Manager - every test now uses an in-memory keyring. Real (free): Pexels search,
 fetch of a 1080p clip + photo, and that clip through render + video gate. Not run for real: dispatch
 with real accounts. Manual: `gates/P11-manual.md` - pending.
+
+P12 (2026-10-06, Claude; owner: "do this ... 8. P12: terms check, Google sign-in, learning loop").
+Plan `P12-plan.md`. Built: terms check (R8, chaining off - Claude and Codex "not allowed"), risky
+actions always ask with no session allowance + memory-only allowances with revoke + outside MCP
+servers (R6), optional Google sign-in with the owner's own Desktop OAuth client (R7), and the
+post-publish learning loop (retention CSV -> cliffs mapped to chapter / Fusion shot / words -> max 3
+lesson candidates, owner approves). AUTO items: chaining disabled while terms say "not allowed";
+risky action always prompts; "allow for session" gone after restart. `check.bat P12`: **PASS
+476/477** (incl. P0-P11; 1 skip = opt-in real GPU test). The first gate run hung after 30 min with
+no output and was stopped; a direct pytest run (476 passed, 10 min) and a second gate run with a
+180 s hang dump both passed - cause not found, watch for it. Not run for real: Google sign-in
+against Google, a real retention export. Manual: `gates/P12-manual.md` - pending.

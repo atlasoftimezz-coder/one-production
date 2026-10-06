@@ -109,9 +109,26 @@ async function refreshLearning() {
   const lessons = data.lessons.filter(l => ['active','candidate'].includes(l.state));
   $('#learningpanel').innerHTML = `<h3>Directions and learned methods</h3><p>Explicit directions are reused automatically. Worker suggestions wait here for review; verified methods include evidence. Current chat instructions take precedence.</p>
     <form id="learningform" style="display:grid;gap:8px"><label>Title <input id="learningtitle" maxlength="100" required></label><label>Direction <textarea id="learningtext" maxlength="3000" required placeholder="e.g. Use restrained transitions and keep captions clear of faces."></textarea></label><label>Remember for <select id="learningscope"><option value="project">This project</option><option value="channel">This channel</option><option value="global">All projects</option></select></label><button class="btn" id="learningsave">Remember direction</button></form>
+    <form id="insightform" style="display:grid;gap:8px;border-top:1px solid var(--line);padding-top:12px;margin-top:12px"><strong>Learn from a published video</strong><p>Upload the episode's audience-retention export (YouTube Studio &gt; Analytics &gt; Advanced mode &gt; Audience retention &gt; Export &gt; CSV) to this project, pick it here. The steepest drops become suggested lessons below; nothing is used until you approve one.</p><label>Retention file <select id="insightfile"></select></label><button class="btn" id="insightgo">Find the drops</button><p id="insightnote"></p></form>
     <div id="learninglist">${lessons.map(l => `<article style="border-top:1px solid var(--line);padding:12px 0"><strong>${esc(l.title)}</strong><p>${esc(l.state)} · ${esc(l.scope)} · ${esc(l.kind)}</p><p style="white-space:pre-wrap">${esc(l.text)}</p><details><summary>Evidence</summary><pre style="white-space:pre-wrap">${esc(JSON.stringify(l.evidence,null,2))}</pre></details>${l.state === 'candidate' ? '<button class="btn" data-lesson="' + l.id + '" data-learning-action="approve">Use as my guidance</button>' : '<button class="btn" data-correct="' + l.id + '">Correct</button>'} <button class="btn" data-lesson="${l.id}" data-learning-action="forget">Forget</button></article>`).join('') || '<p>No saved directions yet.</p>'}</div>`;
   correctingLesson = '';
   $('#learningscope').value = data.default_scope;
+  try {
+    const csv = (await (await api('/api/projects/' + encodeURIComponent(knowledgeProject) + '/files')).json()).filter(f => f.name.toLowerCase().endsWith('.csv'));
+    $('#insightfile').innerHTML = csv.map(f => `<option>${esc(f.name)}</option>`).join('') || '<option value="">No CSV in this project yet</option>';
+  } catch (e) { $('#insightfile').innerHTML = '<option value="">Files unavailable</option>'; }
+  $('#insightform').onsubmit = async e => {
+    e.preventDefault();
+    if (!$('#insightfile').value) { toast('Upload the retention CSV to this project first', true); return; }
+    $('#insightgo').disabled = true; $('#insightnote').textContent = 'Reading the curve...';
+    try {
+      const r = await (await api('/api/projects/' + encodeURIComponent(knowledgeProject) + '/insights', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({retention:$('#insightfile').value})})).json();
+      const where = r.report.drops.map(d => `${d.at} (${d.from}% → ${d.to}%${d.chapter ? ', ' + d.chapter : ''})`).join('; ');
+      await refreshLearning();
+      $('#insightnote').textContent = (where ? 'Drops: ' + where + '. ' + r.lessons.length + ' suggested lesson(s) below.' : '') + (r.note ? ' ' + r.note : '');
+    } catch (error) { toast(error.message, true); $('#insightnote').textContent = ''; }
+    finally { $('#insightgo').disabled = false; }
+  };
   $('#learningform').onsubmit = async e => {
     e.preventDefault();
     try {

@@ -20,7 +20,7 @@ Owner, 2026-10-06: "do this: ... P12: terms check, Google sign-in, learning loop
 - Used by the chat switch offer, team mode and dev dispatch.
 - `GET/PATCH /api/terms`. Tests: `tests/p12/test_terms.py`.
 
-## 2. OS-level actions always prompt (R6)
+## 2. OS-level actions always prompt (R6) - done
 
 - `policy.risky(tool, input, root)` returns what is dangerous about an action that already asks:
   - deletes: rm, del, rmdir, Remove-Item, `git clean`, `git reset --hard`, format;
@@ -42,7 +42,7 @@ Owner, 2026-10-06: "do this: ... P12: terms check, Google sign-in, learning loop
   - None of their tools is known to the policy, so every call asks. Write/exec ones are risky.
   - `GET/PUT /api/mcp-servers`, and a small list in System.
 
-## 3. Google sign-in (R7)
+## 3. Google sign-in (R7) - done
 
 - Optional app login with Google, on top of (or instead of) the PIN.
 - The owner supplies their own Google Cloud OAuth **desktop** client ID (and secret, kept in
@@ -55,25 +55,39 @@ Owner, 2026-10-06: "do this: ... P12: terms check, Google sign-in, learning loop
      the app unlocks.
 - Nothing is stored except the client secret (Credential Manager) and the allowed list
   (settings). Tokens are dropped after the check.
-- Tests use a stand-in Google: authorize + token endpoints via httpx MockTransport and an
-  unsigned-JWT path for tests only. The real check uses Google's tokeninfo endpoint to verify the
-  ID token.
+- Code: `app/google_signin.py` (PKCE, one-shot loopback listener, token exchange, tokeninfo check of
+  audience / issuer / verified email / expiry / allowed list); `app/profile.py` (`locked` = PIN or
+  required Google sign-in). Routes: `PUT/DELETE /api/profile/google`, `POST
+  /api/profile/google/start`, `GET /api/profile/google/status` (the last two work while locked).
+- Tests (`tests/p12/test_google.py`): a stand-in Google (httpx MockTransport for the token and
+  tokeninfo endpoints); the "browser" calls the loopback redirect. Wrong state, another app's
+  token, unverified or expired email, refused code and strangers all stay locked.
 
-## 4. Post-publish learning loop
+## 4. Post-publish learning loop - done
 
-- After an episode is published, the owner imports YouTube Studio's audience-retention export
-  (CSV: video position vs. audience watch ratio) for it.
-- `app/insights.py` (no AI) finds:
-  - the steepest drops and long flat decays;
-  - the time of each, mapped to the script section and the Fusion shot playing at that moment
-    (from `fusion.json`, the shot list and the voiceover subtitles).
-- The master turns them into at most 3 concrete, testable lessons for the next scripts and
-  visuals. Each is saved as a **learning candidate** (`learning.propose`, kind `insight`,
-  channel scope).
-- The owner approves (it becomes an active direction) or rejects it in Knowledge and learning.
-  Nothing is applied without approval.
-- Tests: synthetic retention CSV, drop detection and mapping, the candidate saved, approve/reject
-  over the API.
+- The owner uploads YouTube Studio's audience-retention export (Analytics > Advanced mode >
+  Audience retention > Export > CSV) to the project and picks it in **Knowledge and learning >
+  Learn from a published video**.
+- `app/insights.py` (no AI):
+  - reads the CSV with flexible headers: position as %, seconds or m:ss; retention as % or 0-1;
+    prefers the "absolute" retention column over "relative";
+  - finds at most 3 cliffs: points lost per 10 s of video, after the first 15 s, at least
+    1.5 points / 10 s and twice the curve's median slope (a steady slope is not a lesson), 20 s apart;
+  - maps each to the chapter (episode bundle `metadata.json`), the Fusion shot (`fusion.json`) and
+    the words spoken then (voiceover subtitles); the report is saved to
+    `<episode folder>/insights/retention-<time>.json`.
+- `POST /api/projects/{pid}/insights {retention, account?}`: one plain AI call (the owner's pick, else
+  the first signed-in Claude / Codex / API account with room today) turns the report into at most 3
+  concrete lessons (JSON). No account, an AI failure or an unusable answer -> plain rule-based
+  lessons, and the reply says why.
+- Each lesson is saved as a **candidate** (`learning.save(kind='candidate', evidence={'type':
+  'retention_insight', report, drop, drafted_by})`, the project's default scope). A forgotten lesson
+  is never brought back by a new analysis.
+- The owner approves ("Use as my guidance") or forgets it in Knowledge and learning. Nothing is used
+  until approved.
+- Tests (`tests/p12/test_insights.py`): CSV formats, drop detection, mapping to chapter / shot /
+  words, AI-drafted candidates (stand-in Claude), approve + forget, the rule-based fallback, a flat
+  curve, missing episode / file.
 
 ## Gate
 

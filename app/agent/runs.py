@@ -82,7 +82,8 @@ class Runs:
             if not need:
                 return True, ""
             reason = f"{need['label']} uses {need['uses']}"
-        elif tool in self.session_allow.get(run.pid, set()):
+        risk = policy.risky(tool, tool_input, run.root) if verdict == "ask" else None
+        if verdict == "ask" and not risk and tool in self.session_allow.get(run.pid, set()):
             return True, ""
         if run.stopped:
             return False, "stopped by the user"
@@ -91,7 +92,7 @@ class Runs:
         fut = asyncio.get_running_loop().create_future()
         run.pending[ask_id] = fut
         card = {"t": "ask", "id": ask_id, "tool": tool, "title": title, "detail": detail, "reason": reason,
-                "gate": verdict == "gate"}
+                "gate": verdict == "gate", "risky": risk, "allow_session": verdict == "ask" and not risk}
         run.asks[ask_id] = card
         run.emit(card)
         try:
@@ -101,6 +102,8 @@ class Runs:
         finally:
             run.pending.pop(ask_id, None)
             run.asks.pop(ask_id, None)
+        if answer == "session" and (risk or verdict == "gate"):
+            answer = "once"                          # R6: a risky action is allowed once, never for the session
         run.emit({"t": "asked", "id": ask_id, "answer": answer})
         if answer == "session":
             self.session_allow.setdefault(run.pid, set()).add(tool)

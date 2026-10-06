@@ -104,7 +104,7 @@ class ClaudeAgent:
         if extra["instructions"]:
             # swap the plan-only Resolve rule out: appending an override next to "you never run
             # Resolve yourself" was not enough - the agent kept the old rule (real check, 2026-10-06)
-            if RESOLVE_RULE in instructions:
+            if resolve_mcp.SERVER in extra["servers"] and RESOLVE_RULE in instructions:
                 instructions = instructions.replace(RESOLVE_RULE, extra["instructions"])
             else:
                 instructions = instructions + "\n\n" + extra["instructions"]

@@ -6,7 +6,8 @@ import app.profile as profile_mod
 
 def test_no_pin_means_no_lock(client):
     p = client.get("/api/profile").json()
-    assert p == {"name": "", "has_pin": False, "locked": False}
+    assert {k: p[k] for k in ("name", "has_pin", "locked")} == {"name": "", "has_pin": False, "locked": False}
+    assert p["google"]["configured"] is False
     assert client.get("/api/projects").status_code == 200
     assert client.patch("/api/profile", json={"name": "Sam"}).json()["name"] == "Sam"
 
