@@ -43,7 +43,8 @@ PLAN = {'title': 'Rough cut', 'settings': {'timelineFrameRate': '25', 'timelineR
 
 
 def enable(c):
-    assert c.patch('/api/resolve', json={'enabled': True}).json() == {'enabled': True}
+    r = c.patch('/api/resolve', json={'enabled': True}).json()
+    assert r['enabled'] is True and r['mcp'] is False          # the MCP switch is separate and stays off
 
 
 def test_owner_runs_reviewed_plan_on_a_new_project_and_it_becomes_a_verified_recipe(rc):

@@ -60,6 +60,10 @@ class Settings(BaseModel):
     # resolve_runner replaces the helper (tests use a stand-in Resolve).
     resolve_enabled: bool = False
     resolve_runner: str | None = None
+    # Resolve's own MCP server (ResolveMCP.exe) for the Claude studio agent - the owner's switch.
+    # resolve_mcp_cmd overrides where ResolveMCP.exe is (tests use a stand-in).
+    resolve_mcp: bool = False
+    resolve_mcp_cmd: str | None = None
 
     @field_validator("host")
     @classmethod
@@ -106,6 +110,8 @@ def _env_overrides() -> dict:
         out["resolve_enabled"] = v.strip().lower() not in ("0", "false", "no", "off")
     if v := os.environ.get("ONEPROD_RESOLVE_RUNNER"):
         out["resolve_runner"] = v
+    if v := os.environ.get("ONEPROD_RESOLVE_MCP_CMD"):
+        out["resolve_mcp_cmd"] = v
     return out
 
 

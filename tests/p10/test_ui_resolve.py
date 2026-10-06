@@ -19,6 +19,8 @@ def test_resolve_plans_in_headless_chrome(tmp_path, monkeypatch):
     monkeypatch.setenv("FAKE_RESOLVE_STATE", str(tmp_path / "resolve.json"))
     for k in ("FAKE_RESOLVE_DOWN", "FAKE_RESOLVE_FAIL", "FAKE_RESOLVE_VERSION", "ONEPROD_RESOLVE_ENABLED"):
         monkeypatch.delenv(k, raising=False)
+    (tmp_path / "ResolveMCP.exe").write_bytes(b"MZ stand-in")          # found, never started by this test
+    monkeypatch.setenv("ONEPROD_RESOLVE_MCP_CMD", str(tmp_path / "ResolveMCP.exe"))
     proc, port, token = _start(tmp_path)
     threading.Thread(target=lambda: list(proc.stdout), daemon=True).start()
     try:

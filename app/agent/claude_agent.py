@@ -19,7 +19,7 @@ from ..providers.base import Fail, Usage, classify_status, classify_text
 from ..providers.cli import resolve
 from . import policy
 from .runs import Run, Runs
-from .studio import Studio, call
+from .studio import RESOLVE_RULE, Studio, call
 
 ISOLATION = {"CLAUDE_CODE_DISABLE_CLAUDE_MDS": "1", "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1"}
 
@@ -45,8 +45,12 @@ def _sdk():
 
 class ClaudeAgent:
     def __init__(self, command: str | None, data_dir: Path, *, client_factory: Callable | None = None,
-                 api_key_of: Callable[[dict], str | None] | None = None):
+                 api_key_of: Callable[[dict], str | None] | None = None,
+                 extra_mcp: Callable[[], dict] | None = None):
         self.command = command
+        # The owner's switched-on outside MCP servers (DaVinci Resolve's own, resolve_mcp.for_agent):
+        # {"servers": {...}, "disallowed": [...], "instructions": str}, read at every turn.
+        self.extra_mcp = extra_mcp or (lambda: {"servers": {}, "disallowed": [], "instructions": ""})
         self.data_dir = data_dir
         self.client_factory = client_factory       # tests pass a fake client
         self.api_key_of = api_key_of
@@ -80,7 +84,7 @@ class ClaudeAgent:
                 return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
                                                "permissionDecisionReason": locked}}
             verdict, reason = policy.decide(name, inp, run.root)
-            decision = "allow" if verdict == "allow" else "ask"
+            decision = verdict if verdict in ("allow", "deny") else "ask"
             return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": decision,
                                            "permissionDecisionReason": reason}}
 
@@ -90,9 +94,18 @@ class ClaudeAgent:
                 return sdk.PermissionResultAllow(updated_input=tool_input)
             return sdk.PermissionResultDeny(message=message or "not allowed", interrupt=run.stopped)
 
+        extra = self.extra_mcp()
+        if extra["instructions"]:
+            # swap the plan-only Resolve rule out: appending an override next to "you never run
+            # Resolve yourself" was not enough - the agent kept the old rule (real check, 2026-10-06)
+            if RESOLVE_RULE in instructions:
+                instructions = instructions.replace(RESOLVE_RULE, extra["instructions"])
+            else:
+                instructions = instructions + "\n\n" + extra["instructions"]
         opts = sdk.ClaudeAgentOptions(
             cli_path=claude_exe(self.command), cwd=str(run.root), env=self.env(account),
-            setting_sources=[], strict_mcp_config=True, mcp_servers={"studio": server},
+            setting_sources=[], strict_mcp_config=True, mcp_servers={**extra["servers"], "studio": server},
+            disallowed_tools=list(extra["disallowed"]),
             system_prompt={"type": "preset", "preset": "claude_code", "append": instructions},
             permission_mode="default", can_use_tool=can_use_tool,
             hooks={"PreToolUse": [sdk.HookMatcher(matcher=None, hooks=[pre_tool])]},

@@ -14,6 +14,46 @@ phase log and the plan, checks the PC, runs the last gate and reports before tou
 
 ## Current continuation checkpoint - Claude, 2026-10-06
 
+**Later that day: DaVinci Resolve from inside One Production.** Owner: "I cant access davinci
+inside one production, I have turned on davinci claude mcp and configured" → "can you fix to
+access davinci resolve from one production?" (plan approved; the owner chose "card every time"
+and allowed real tests in project **new2** only).
+
+- **Root cause.** The studio agent is isolated on purpose: its own `CLAUDE_CONFIG_DIR`,
+  `setting_sources=[]` and `strict_mcp_config=True`, with only the `studio` MCP. So the owner's
+  user-scope MCP in `~/.claude.json` (`DaVinci Resolve` → `C:\Program Files\Blackmagic
+  Design\DaVinci Resolve\ResolveMCP.exe`) never reaches it. Its instructions also said "you
+  never run Resolve yourself".
+- **Fix: `app/resolve_mcp.py` plus the switch `resolve_mcp`** (Resolve panel → "Let the AI use
+  DaVinci Resolve's own MCP"; `PATCH /api/resolve {"mcp": bool}`; `ONEPROD_RESOLVE_MCP_CMD`
+  for tests).
+  - When the switch is on, `ClaudeAgent` gets the `davinci` stdio server and
+    `disallowed_tools=[mcp__davinci__run_script_unsafe]`.
+  - `studio.RESOLVE_RULE` is **swapped** for `resolve_mcp.INSTRUCTIONS`. Appending an override
+    next to the old rule failed in a real test: the agent kept refusing.
+  - The saved session key becomes `<account>|resolve-mcp`, so switching starts a fresh session.
+    Resuming the old session also kept the refusal (real test).
+  - Policy:
+    - the 7 read-only tools are allowed;
+    - run_script, launch_resolve and the LUT/DCTL write/delete tools get an approval card with
+      the full script (`describe`);
+    - run_script_unsafe gets the new verdict **deny**, which `Runs.permit` and the Claude
+      PreToolUse hook honour.
+  - **Claude accounts only.** Codex app-server MCP calls have no approval step the app can
+    hold, so Codex keeps the plan route.
+- **Resolve on this PC is now Studio 21.1.0.17** (was 21.0.0.47).
+- The runner's frame-rate readback is fixed (`resolve_runner.same_setting`: 30.0 == "30"). It
+  had failed 3 of the owner's plans.
+- **Real test done** in project new2 on an in-process instance on the real data folder; the
+  owner's running app was not touched, and the settings file was not changed.
+  - status and search_scripting_api ran with no card;
+  - a read-only `run_script` appeared on a card and was approved once;
+  - it returned "Studio 21.1.0.17, New Project 1, 0 timelines";
+  - nothing in Resolve was changed.
+- The owner must **restart One Production** and tick the switch (manual step 9 in
+  `docs/gates/P10-knowledge-manual.md`). Tests: `tests/p10/test_resolve_mcp.py` (4) and the
+  extended `test_ui_resolve`.
+
 **Where it stands:** P11 and Pexels stock footage are built. The full gate result is
 `check.bat P11` = **410 passed, 0 failed, 1 opt-in GPU skip**. Nothing has been pushed. Owner, 2026-10-06: "i dont have story
 block api key so for now we can use pexel stock footage api ... continue on phase 11". Plan:

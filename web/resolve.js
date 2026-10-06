@@ -8,6 +8,8 @@ resolveModal.innerHTML = `<div class="modal wide" role="dialog" aria-label="DaVi
   <div style="padding:20px;max-height:75vh;overflow:auto;display:grid;gap:18px">
     <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><label><input type="checkbox" id="resolveenabled"> Let One Production control DaVinci Resolve Studio</label><button class="btn" id="resolvecheck">Check Resolve</button></div>
     <p id="resolvestatus" aria-live="polite">Needs the paid Resolve Studio running, with Preferences &gt; System &gt; General &gt; External scripting using set to Local.</p>
+    <div style="display:grid;gap:4px"><label><input type="checkbox" id="resolvemcp"> Let the AI use DaVinci Resolve's own MCP (Claude accounts; every change asks you first)</label>
+      <p id="resolvemcpinfo" style="margin:0;opacity:.8"></p></div>
     <div id="resolveplans" aria-live="polite"></div>
     <details><summary>Add a plan yourself (JSON)</summary><form id="resolveadd" style="display:grid;gap:8px;margin-top:8px"><textarea id="resolveplanjson" rows="8" required placeholder='{"title":"Rough cut","operations":[{"op":"import_media","files":["vo.wav"]},{"op":"create_timeline","name":"Main"},{"op":"append_clips","files":["vo.wav"]}]}'></textarea><button class="btn">Check and add plan</button></form></details>
   </div></div>`;
@@ -25,6 +27,7 @@ $('#resolvebtn').onclick = async () => {
     // read the switch before showing it, so a quick click can't be overwritten by a late answer
     const data = await (await api('/api/resolve')).json();
     $('#resolveenabled').checked = data.enabled;
+    showResolveMcp(data);
     resolveModal.classList.add('open');
     await refreshResolve();
   } catch (e) { toast(e.message, true); }
@@ -34,6 +37,23 @@ $('#resolveenabled').onchange = async () => {
   try {
     await api('/api/resolve', {method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({enabled:$('#resolveenabled').checked})});
     toast($('#resolveenabled').checked ? 'Resolve control on' : 'Resolve control off');
+  } catch (e) { toast(e.message, true); }
+};
+
+function showResolveMcp(data) {
+  $('#resolvemcp').checked = !!data.mcp;
+  $('#resolvemcp').disabled = !data.mcp_exe && !data.mcp;
+  $('#resolvemcpinfo').textContent = data.mcp_exe
+    ? (data.mcp ? 'On: in Claude chats the AI can read Resolve freely; scripts and LUT changes show you the code first. Full-PC scripts are never allowed.'
+                : 'Found ' + data.mcp_exe + '.')
+    : 'ResolveMCP.exe not found - it comes with DaVinci Resolve Studio 21.1 or newer.';
+}
+
+$('#resolvemcp').onchange = async () => {
+  try {
+    const r = await (await api('/api/resolve', {method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({mcp:$('#resolvemcp').checked})})).json();
+    showResolveMcp(r);
+    toast(r.mcp ? 'Resolve MCP on for Claude chats' : 'Resolve MCP off');
   } catch (e) { toast(e.message, true); }
 };
 

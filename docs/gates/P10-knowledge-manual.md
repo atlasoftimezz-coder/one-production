@@ -24,6 +24,15 @@ make a NEW project in a "One Production (disposable)" folder. Save your open Res
 - [ ] **8. Learned.** **Knowledge and learning** lists a verified method (kind "recipe", Resolve
   version, evidence with the run). Delete the disposable project in Resolve when done if you like.
 
+- [ ] **9. Resolve's own MCP (Claude accounts).** First close One Production, then start it again
+  with `start.bat`, so it runs the new code. Open **Resolve plans** → tick **Let the AI use DaVinci Resolve's own
+  MCP**. The line under it shows where `ResolveMCP.exe` is. In a Claude chat ask "check Resolve and
+  tell me the open project and how many timelines it has". A status check runs without asking; the
+  script appears on an approval card with its full code - **Approve once**. The answer matches
+  Resolve. Then ask for something that changes Resolve (e.g. a new timeline in a NEW project) and
+  check the card shows what it will do before you approve. Scripts with full PC access are never offered.
+  The script-only check was done for real on 2026-10-06 in project new2 (Resolve 21.1.0.17).
+
 Covered by the automatic tests only (stand-in Resolve): unsupported operations (render, scripts),
 paths outside the project, version too old / plan needs a newer version, Resolve updated between
 review and run, media changed after review, a failed Resolve call (no recipe), Resolve not answering,

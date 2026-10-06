@@ -194,6 +194,12 @@ try:
         js("document.querySelector('#resolvebtn').click()")
         check("resolve panel opens", wait_for("document.querySelector('#resolvemodal').classList.contains('open')"))
         check("resolve control starts off", js("document.querySelector('#resolveenabled').checked") is False)
+        check("resolve MCP switch starts off and shows the exe it found",
+              js("document.querySelector('#resolvemcp').checked") is False
+              and js("document.querySelector('#resolvemcpinfo').innerText.includes('ResolveMCP.exe')"))
+        js("document.querySelector('#resolvemcp').click()")
+        check("resolve MCP turns on and says changes ask first",
+              wait_for("document.querySelector('#resolvemcpinfo').innerText.includes('show you the code first')", 5))
         js("document.querySelector('#resolveenabled').click()")
         time.sleep(0.4)
         js("document.querySelector('#resolvecheck').click()")

@@ -26,6 +26,7 @@ from .learning_api import mount as mount_learning
 from .knowledge import Knowledge
 from .knowledge_api import mount as mount_knowledge
 from .resolve import Resolve
+from . import resolve_mcp
 from .resolve_api import mount as mount_resolve
 from .gates_api import Gates, mount as mount_gates
 from .editor import Editor
@@ -303,7 +304,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
     migration = migrate(settings.data_dir)
     SAMPLES = Path(__file__).resolve().parent.parent / "samples" / "getting-started"
     claude_agent = ClaudeAgent(settings.claude_cmd, settings.data_dir, client_factory=agent_client,
-                               api_key_of=Accounts.api_key)
+                               api_key_of=Accounts.api_key, extra_mcp=lambda: resolve_mcp.for_agent(settings))
     codex_agent = CodexAgent(settings.codex_cmd, transport_factory=codex_transport)
     work = settings.data_dir / "cache" / "run"          # empty cwd: CLIs pick up no project files
     providers = {
@@ -1166,6 +1167,12 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
     def sessions_file(pid: str) -> Path:
         return store.project_dir(pid) / "agent-sessions.json"
 
+    def session_key(acc: dict) -> str:
+        """A Claude session started without Resolve's MCP keeps its plan-only habit when resumed
+        (real check, 2026-10-06), so switching the MCP on or off starts a fresh session."""
+        on = acc["provider"] != "codex" and resolve_mcp.for_agent(settings)["servers"]
+        return acc["id"] + ("|resolve-mcp" if on else "")
+
     def agent_session(pid: str, acc_id: str) -> str | None:
         f = sessions_file(pid)
         return (json.loads(f.read_text(encoding="utf-8")) if f.exists() else {}).get(acc_id)
@@ -1208,7 +1215,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
             run = runs.start(pid, root)
         except RuntimeError as e:
             raise HTTPException(409, str(e))
-        sid = agent_session(pid, acc["id"])
+        sid = agent_session(pid, session_key(acc))
         files, voices, presets, jobs = await studio_state(pid)
         instructions = STUDIO_INSTRUCTIONS + "\n\n" + actions.context(files, voices, presets, jobs)
         instructions += "\n\n" + learning.instructions(pid, message)
@@ -1245,7 +1252,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
                 meta["interrupted"] = err.interrupted
                 run.emit({"t": "error", "kind": err.kind, "message": err.message, "interrupted": err.interrupted})
             store.append_message(pid, "assistant", res["text"], **meta)
-            save_agent_session(pid, acc["id"], res.get("session_id"))
+            save_agent_session(pid, session_key(acc), res.get("session_id"))
             ledger.record_call(account=acc["id"], provider=acc["provider"], project=pid, usage=usage,
                                outcome="error" if err else "ok", err_kind=err.kind if err else None,
                                windows=res["windows"], role="agent")

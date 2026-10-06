@@ -74,6 +74,8 @@ class Runs:
         verdict, reason = policy.decide(tool, tool_input, run.root)
         if verdict == "allow":
             return True, ""
+        if verdict == "deny":
+            return False, reason
         if verdict == "gate":
             heavy = policy.HEAVY.get(policy.studio_name(tool) or "", "voiceover")
             need = gate(tool=heavy) if gate else None   # None = already approved ("always")

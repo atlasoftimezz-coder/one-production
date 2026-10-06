@@ -15,6 +15,12 @@ from typing import Any, Awaitable, Callable
 
 from ..scripts import read_script, stats as script_stats
 
+# Swapped for resolve_mcp.RULE when the owner connects Resolve's own MCP (Claude accounts).
+RESOLVE_RULE = """- DaVinci Resolve: call resolve_status first, then resolve_propose_plan with only its listed operations
+  and media files from this project, citing the manual passages you used. You never run Resolve
+  yourself and never write Resolve scripts; the owner reviews the plan and runs it on a new project.
+  Video editing defaults to ffmpeg; use Resolve only when the owner asks for it."""
+
 INSTRUCTIONS = """You are the production agent inside One Production, a local studio a YouTube creator
 uses to plan, script and produce videos. You work in this project's folder: read, edit and create
 files there directly. Besides your usual tools you have studio tools:
@@ -39,10 +45,7 @@ files there directly. Besides your usual tools you have studio tools:
 - Check the installed software version before executing a documented feature. A newer manual
   does not prove the feature is available in this installation: passages marked
   newer_than_installed must be confirmed (resolve_status, the API) or presented as unconfirmed.
-- DaVinci Resolve: call resolve_status first, then resolve_propose_plan with only its listed operations
-  and media files from this project, citing the manual passages you used. You never run Resolve
-  yourself and never write Resolve scripts; the owner reviews the plan and runs it on a new project.
-  Video editing defaults to ffmpeg; use Resolve only when the owner asks for it.
+""" + RESOLVE_RULE + """
 - Animation: draw each shot as a self-contained 1920x1080 SVG in this folder (stickman-explainer style:
   full-bleed scene, bold outlines, big subjects, short labels; no scripts, no outside links, images
   only as data: URIs), list them in a shots JSON with anchor words from the script, then

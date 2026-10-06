@@ -3,6 +3,17 @@
 What changed in each version, in plain words. "Check for updates" shows the newest section.
 
 ## Unreleased - P10 production engine, knowledge, learning and Resolve; P11 stock footage
+- **DaVinci Resolve's own MCP in Claude chats**: in **Resolve plans**, tick "Let the AI use
+  DaVinci Resolve's own MCP". It needs Resolve Studio 21.1 or newer, which ships
+  `ResolveMCP.exe`.
+  - The AI can check Resolve and look up its scripting API on its own.
+  - Every script and every LUT change appears on an approval card with the full code before it
+    runs. Scripts with full access to your PC are never allowed.
+  - Before, an MCP set up in your own Claude Code never reached One Production, because its AI
+    runs separately from your personal setup.
+  - Works with Claude accounts only.
+- Resolve plans no longer fail with "timelineFrameRate reads back as 30.0" (Resolve 21.1
+  reports the frame rate as a number).
 - **Stock footage from Pexels**: add your free Pexels key under System → Set up / modules →
   Stock footage. The key is kept in Windows Credential Manager. The AI can then search and fetch
   free Pexels clips and photos into the project's `stock/` folder, and each one is credited in

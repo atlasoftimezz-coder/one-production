@@ -15,6 +15,8 @@ import os
 import re
 from pathlib import Path
 
+from .. import resolve_mcp
+
 READS = {"Read", "Glob", "Grep", "LS", "NotebookRead"}
 WRITES = {"Write", "Edit", "MultiEdit", "NotebookEdit"}
 SHELL = {"Bash", "PowerShell", "BashOutput", "KillShell", "KillBash", "REPL"}
@@ -63,7 +65,13 @@ def paths_of(tool_input: dict) -> list[str]:
 
 
 def decide(tool: str, tool_input: dict, root: Path) -> tuple[str, str]:
-    """('allow' | 'ask' | 'gate', reason shown on the card)."""
+    """('allow' | 'ask' | 'gate' | 'deny', reason shown on the card)."""
+    if tool in resolve_mcp.DENY:
+        return "deny", "runs a script with full access to your PC - One Production never allows it"
+    if tool in resolve_mcp.LOOK:
+        return "allow", "reads from DaVinci Resolve (status, documentation, lists); changes nothing"
+    if tool.startswith(f"mcp__{resolve_mcp.SERVER}__"):
+        return "ask", "runs code in DaVinci Resolve or changes its LUT files - read it before you say yes"
     s = studio_name(tool)
     if s in STUDIO_LOOK:
         return "allow", "looks only"
@@ -100,6 +108,12 @@ def describe(tool: str, tool_input: dict, root: Path) -> tuple[str, str]:
             return str(Path(p).resolve().relative_to(Path(root).resolve()))
         except (ValueError, OSError):
             return p
+    if tool.startswith(f"mcp__{resolve_mcp.SERVER}__"):
+        name = tool[len(f"mcp__{resolve_mcp.SERVER}__"):]
+        texts = [v for v in tool_input.values() if isinstance(v, str)]
+        if name.startswith("run_script"):        # the owner reads the whole script before saying yes
+            return "Run a script in DaVinci Resolve", max(texts, key=len, default="")[:4000]
+        return "Resolve: " + name.replace("_", " "), ", ".join(f"{k}={str(v)[:80]}" for k, v in tool_input.items())[:300]
     s = studio_name(tool)
     if s == "render_edit":
         return "Render video", str(tool_input.get("edit", ""))

@@ -34,6 +34,14 @@ def connect():
     return resolve, ''
 
 
+def same_setting(read, want: str) -> bool:
+    """Resolve 21.1 reads timelineFrameRate "30" back as 30.0: compare numbers as numbers."""
+    try:
+        return float(read) == float(want)
+    except (TypeError, ValueError):
+        return str(read) == str(want)
+
+
 def probe(resolve) -> dict:
     pm = resolve.GetProjectManager()
     current = pm.GetCurrentProject() if pm else None
@@ -75,7 +83,7 @@ def execute(resolve, spec: dict) -> dict:
         done.append('create_project')
         for key, value in spec['settings'].items():
             need(project.SetSetting(key, value), f'Resolve refused setting {key}={value}.')
-            need(str(project.GetSetting(key)) == value, f'Setting {key} reads back as {project.GetSetting(key)!r}.')
+            need(same_setting(project.GetSetting(key), value), f'Setting {key} reads back as {project.GetSetting(key)!r}.')
         checks['settings'] = dict(spec['settings'])
         pool = project.GetMediaPool()
         items, timeline, appended, markers, timelines = {}, None, 0, 0, 0
