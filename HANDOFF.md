@@ -1,7 +1,7 @@
 # One Production — handoff
 
 Read this first when picking the project up in a new session. It holds the context of the chat
-that built it (2026-10-03 → 2026-10-05, Claude and Codex): what it is, how it's built, every decision and why, where
+that built it (2026-10-03 → 2026-10-06, Claude and Codex): what it is, how it's built, every decision and why, where
 each phase stands, verified facts about the tools, the owner's preferences, and the traps already
 hit. The master plan is `docs/PLAN.txt`; progress is `docs/phase-log.md`; changes are
 `docs/CHANGELOG.md`.
@@ -13,6 +13,23 @@ phase log and the plan, checks the PC, runs the last gate and reports before tou
 ---
 
 ## Current continuation checkpoint - Claude, 2026-10-06
+
+**State at the end of 2026-10-06:**
+- **Built:** everything up to and including P11.
+- **Extras today:** Pexels stock footage, and DaVinci Resolve's own MCP inside Claude chats.
+- **Last commit:** `85af852`.
+- **Gate:** `check.bat P11` = **414 passed, 0 failed, 1 opt-in GPU skip**.
+- **Nothing has been pushed.** Every commit after `bb716e1` (P9 onward) is local only.
+- **The owner's running One Production still runs old code.** They need to restart it
+  (`start.bat`) and tick the Resolve MCP switch.
+- **Left to build:** P12. Storyblocks and research workers wait for keys and accounts.
+- **Manual checks still waiting on the owner:** P7 Part B, P8, P9, P10 part 1, P10
+  knowledge/Resolve (now with step 9 for the MCP), P10 production and P11.
+- **Owner's requests today, in order:**
+  1. "Pexels instead of Storyblocks ... continue on phase 11".
+  2. "can't access davinci inside one production ... find the root cause and fix".
+  3. "give the architecture" (answered in chat; now in §3).
+  4. "update handoff".
 
 **Later that day: DaVinci Resolve from inside One Production.** Owner: "I cant access davinci
 inside one production, I have turned on davinci claude mcp and configured" → "can you fix to
@@ -54,8 +71,8 @@ and allowed real tests in project **new2** only).
   `docs/gates/P10-knowledge-manual.md`). Tests: `tests/p10/test_resolve_mcp.py` (4) and the
   extended `test_ui_resolve`.
 
-**Where it stands:** P11 and Pexels stock footage are built. The full gate result is
-`check.bat P11` = **410 passed, 0 failed, 1 opt-in GPU skip**. Nothing has been pushed. Owner, 2026-10-06: "i dont have story
+**Earlier that day: P11 + Pexels.** P11 and Pexels stock footage were built and committed
+(`873b9f6`, `check.bat P11` = 410 passed, 0 failed, 1 opt-in GPU skip). Nothing has been pushed. Owner, 2026-10-06: "i dont have story
 block api key so for now we can use pexel stock footage api ... continue on phase 11". Plan:
 `docs/P11-plan.md`. Manual checklist: `docs/gates/P11-manual.md`, pending.
 
@@ -305,6 +322,42 @@ Voice module shows "ready — your own voice app" and nothing is installed by th
 
 ## 3. Architecture (app/)
 
+Overview (2026-10-06):
+
+```
+Browser UI (web/index.html + knowledge.js, resolve.js, episode.js)
+   |  127.0.0.1 only; Host/Origin + session token (security/guard.py); optional PIN (profile.py)
+   v
+FastAPI app - main.py create_app() wires every service + route
+   |- Chat & agents   agent/runs.py (one live run per project, cards, Stop)
+   |                  agent/policy.py   allow / ask (card) / gate (heavy job) / deny
+   |                  agent/claude_agent.py  Claude logins + API keys (Agent SDK); MCP servers:
+   |                       "studio" (our tools) + "davinci" (ResolveMCP.exe, only when switched on)
+   |                  agent/codex_agent.py   Codex logins (codex app-server; studio tools only)
+   |                  agent/studio.py   studio tools: voice, knowledge, learning, Resolve plans,
+   |                       gates, editor, animation, packaging, Pexels stock
+   |                  agent/team.py (P9) / scriptflow.py (Script Studio) / episode.py (episode run)
+   |- Accounts/usage  accounts.py (no secrets; keys in Credential Manager; per-login profile dirs)
+   |                  providers/ (plain chat) · usage.py (ledger, usage_pct) · handoff.py · models.py
+   |- Production      voice.py (vo-app over HTTP, R12 GPU gate via tools.py) · animation.py (SVG ->
+   |                  PNG via Chrome/Edge; shots may be stock files) · stock.py (Pexels) · editor.py
+   |                  (ffmpeg) · gates.py (measured checks) · packaging.py · competitors.py + faceless.py
+   |- Resolve         A. plans: resolve.py validates a fixed op list -> owner runs -> resolve_runner.py
+   |                     (own process) builds a NEW project; a passing run -> verified recipe
+   |                  B. MCP: resolve_mcp.py gives ResolveMCP.exe to Claude chats; reads free,
+   |                     run_script / LUT changes need a card, run_script_unsafe denied
+   |- Knowledge       knowledge.py (SQLite FTS5 manuals, page citations) · learning.py (directions,
+   |                  verified recipes)
+   '- Platform        storage.py · backups.py · system.py · modules.py + installer.py + setup.py ·
+                      update.py + migrate.py · diagnostics.py · config.py
+Outside the app: dev/dispatch.py (P11, building One Production itself) · voice/ (engine copy that
+ships to friends; the studio PC uses its own vo-app).
+Data: %LOCALAPPDATA%\OneProduction (projects, profiles, usage.sqlite, knowledge, logs);
+Credential Manager (API keys, Pexels key); %APPDATA%\OneProduction\settings.json.
+```
+
+Module by module:
+
 ```
 main.py          create_app(): every route; reply pipeline (chat + agent); switching; voice; backups;
                  setup/modules/install; updates; diagnostics; sample project; shortcuts
@@ -319,7 +372,8 @@ accounts.py      registry accounts.json (no secrets); API keys in Windows Creden
 providers/       plain-chat path: claude_cli.py (claude -p stream-json), codex_cli.py (codex exec --json),
                  anthropic_api.py (SSE), base.py (error classes limit/transient/auth/fatal, retries
                  only before the first token), demo.py
-agent/           P5 agent mode: policy.py (free inside project, ask outside), runs.py (one live run per
+agent/           P5 agent mode: policy.py (free inside project, ask outside; verdicts allow / ask /
+                 gate / deny), runs.py (one live run per
                  project, replayable events, approval futures, Stop), studio.py (studio tools:
                  list_voices, script_stats, make_voiceover, voiceover_status), claude_agent.py
                  (Claude Agent SDK), codex_agent.py (codex app-server JSON-RPC)
@@ -337,7 +391,7 @@ tools.py         R12 heavy-job gate: Approvals (once / always / revoke)
 backups.py       zip + manifest + sha256, keep 14, redacted text, restore via trash, daily ticker
 system.py        read-only PC scan (Windows, RAM, disks, GPU via nvidia-smi, ffmpeg, CLIs, …)
 profile.py       optional PIN (scrypt), lock middleware returns 423
-modules.py       module registry (core / voice gpu|cpu|off / Phase-2 greyed)
+modules.py       module registry (core / voice gpu|cpu|off / Phase-2 greyed; stock = Pexels key on/off)
 installer.py     voice install recipe + resumable sha256 downloads + Installer (one OK per item)
 setup.py         wizard state (setup.json), drives list
 update.py        Updater (manifest, download, unpack beside, switch, rollback, keep 2)
@@ -349,8 +403,16 @@ gates.py         P10 numeric stage gates (voice / video / package); gates_api.py
 editor.py        P10 ffmpeg editor (edit list -> mp4), editor_api.py (+ animation/package routes)
 animation.py     P10 SVG shots -> PNG (local Chrome/Edge) -> timed edit list; packaging.py upload bundle
 resolve.py       P10 constrained Resolve adapter (plans, owner execution); resolve_runner.py the fixed helper
+                 (same_setting: numbers compared as numbers)
+resolve_mcp.py   Resolve's own MCP (ResolveMCP.exe) for Claude chats: find_exe, for_agent (server,
+                 disallowed run_script_unsafe, instructions that replace studio.RESOLVE_RULE), status
+stock.py         Pexels search / fetch (key in Credential Manager, files -> files/stock/ + CREDITS.md);
+                 agent/stock_tools.py = stock_search / stock_fetch
+security/memkeyring.py  in-memory keyring, used only by the test suite (PYTHON_KEYRING_BACKEND)
 knowledge.py     P10 document library (SQLite FTS5); learning.py scoped directions + verified recipes
 agent/episode.py P10 episode run (stages + gates on the team machinery)
+dev/dispatch.py  P11 dev orchestration (not shipped): pick Claude/Codex by rules + headroom floor,
+                 coder in a git worktree, cross-model read-only review -> dev/reviews/<task>.md
 voice/           engine.py, pipeline.py, server.py, make_srt.py, config.py, tune.py, static/
 ```
 
@@ -423,6 +485,26 @@ voice/           engine.py, pipeline.py, server.py, make_srt.py, config.py, tune
   ffmpeg edits. Numeric gates decide every stage; the master reviews only the creative stages;
   voice and edit stages have no AI turn (Claude's call, recorded in `docs/P10-production-plan.md`).
   Renders are a new heavy job `video_render` (approval card / episode dialog tick).
+- **P11 dispatch** (owner, 2026-10-06: "continue on phase 11").
+  - It is a dev tool and is never shipped.
+  - It uses only the first signed-in account per service (D7) and never API keys.
+  - Floors: 20 % of usage left to code, 10 % to review (`dev/dispatch.json`).
+  - The coder runs unattended but only inside its own worktree.
+  - The reviewer can't edit anything.
+- **Stock = Pexels** (owner, 2026-10-06: "i dont have story block api key so for now we can use
+  pexel stock footage api").
+  - The key lives in Credential Manager, and the AI never sees it.
+  - `stock_search` / `stock_fetch` run without a card. That was Claude's call: one fixed site,
+    the owner's own key, files only into `stock/`. The owner may want a card instead.
+  - Storyblocks is still not built.
+- **Resolve MCP** (owner, 2026-10-06: "can you fix to access davinci resolve from one production?").
+  - The owner chose an approval card for every script and LUT change. Read-only Resolve tools
+    run without asking. `run_script_unsafe` (full PC access) is never offered.
+  - The switch is off by default and covers Claude accounts only. Codex can't hold an approval
+    step for MCP calls.
+  - This deliberately widens the earlier "workers only propose" Resolve decision: with the switch
+    on, the AI drives Resolve directly, and the owner approves each change. The plan route stays
+    for Codex and for reviewable multi-step edits.
 - **Package**: zip with the official embeddable Python 3.12.10 (sha256 pinned in
   `build_package.py`); launcher `One Production.cmd` is never rewritten by updates (cmd.exe reads
   batch files while running). Update hosting is **not chosen yet** (shared folder / web / GitHub).
@@ -442,14 +524,14 @@ voice/           engine.py, pipeline.py, server.py, make_srt.py, config.py, tune
 | P8 Package + updates + support | **built, manual pending** (a friend installs from zero, voices the sample) | d89fc06 |
 | P9 Orchestrator + model/effort toggles | **built, manual pending** (`docs/gates/P9-manual.md`) | see git log |
 | P10 part 1 Script Studio (competitors → FacelessOS script → Opus review loop; FacelessOS bundled) | **built, manual pending** (`docs/gates/P10-manual.md`) | 2964239 + FacelessOS-bundle commit |
-| P10 knowledge + learning + Resolve adapter | **built, manual pending** (`docs/gates/P10-knowledge-manual.md`) | fd0c0e6 … e79e8e7 |
+| P10 knowledge + learning + Resolve adapter (+ Resolve MCP switch, frame-rate fix, 2026-10-06) | **built, manual pending** (`docs/gates/P10-knowledge-manual.md`, now 9 steps) | fd0c0e6 … e79e8e7, 85af852 |
 | P10 rest: numeric gates, ffmpeg editor, animation, packaging, episode run | **built, manual pending** (`docs/gates/P10-production-manual.md`: watch one full real episode) | 0b71ed8 … cfd9d04 |
-| P11 Dev orchestration (dispatch.py, cross-model code review) + Pexels stock | **built, manual pending** (`docs/gates/P11-manual.md`) | see git log 2026-10-06 |
+| P11 Dev orchestration (dispatch.py, cross-model code review) + Pexels stock | **built, manual pending** (`docs/gates/P11-manual.md`) | 873b9f6 |
 | P12 Terms check, Google sign-in, learning loop | later | — |
 
-Last gate: `check.bat P10` (see `docs/gates/P10-auto.md`; the 1 skip is the opt-in real-GPU test).
+Last gate: `check.bat P11` = 414 passed, 0 failed, 1 skip (`docs/gates/P11-auto.md`; the skip is the opt-in real-GPU test).
 Remaining to build: **P12** (research workers wait for the owner's NexLev / vidIQ access; Storyblocks for a paid key). Manual checks waiting on the user: P7 Part B,
-P8 friend test, P9 team mode, P10 part 1 Script Studio, P10 knowledge/Resolve, P10 production (one real episode).
+P8 friend test, P9 team mode, P10 part 1 Script Studio, P10 knowledge/Resolve, P10 production (one real episode), P11.
 Version **0.10.0** in `app/version.py`; everything since is under "Unreleased" in the changelog (bump the
 version when the owner wants a release / package). Note: P10 part 1 was built before P9's manual sign-off, at the
 user's request ("can you create a plan for this" → plan approved). The user's habit: "if everything is fine start the next phase" — keep going
@@ -469,7 +551,8 @@ after a green gate, but report honestly which manual items they haven't confirme
   a PreToolUse hook applies the policy instantly ("allow" / "ask"), `can_use_tool` waits for the
   user's card (no hook timeout). Background chores use Haiku — report the model with the most
   output tokens.
-- **Codex 0.157.1**: `exec --json` has no limits in its stream; session files
+- **Codex 0.157.1** (now **0.160.0** on the studio PC, 2026-10-06; `exec --json --sandbox
+  read-only|workspace-write -` unchanged): `exec --json` has no limits in its stream; session files
   `CODEX_HOME/sessions/**/rollout-*.jsonl` (written only without `--ephemeral`) hold exact
   primary 300-min / secondary 10080-min `used_percent` + `resets_at`. **`codex app-server`**
   (JSON-RPC, experimental API on): thread/start (cwd, sandbox `workspace-write`, approvalPolicy
@@ -501,9 +584,31 @@ after a green gate, but report honestly which manual items they haven't confirme
   fetch anything (an outside `href` just shows a broken-image icon). Edge works the same.
 - **Pitch**: the app's own estimator (`media.median_f0`, numpy) read synthetic voices at 85-300 Hz
   within 0.3 semitone and a rubberband +6-semitone shift as 6.2; the P4 real test used librosa pyin.
-- **DaVinci Resolve 21.0.0.47** installed; external scripting is Studio-only and needs
-  Preferences → System → General → External scripting = Local. `AppendToTimeline` had a fix in
-  20.3.2 (API CHANGELOG), so the adapter needs 20.3.2+ for it. Not yet tried live from the app.
+- **DaVinci Resolve Studio 21.1.0.17** installed since 2026-10-06; it was 21.0.0.47 before.
+  - External scripting is Studio-only and needs Preferences → System → General → External
+    scripting = Local. `AppendToTimeline` had a fix in 20.3.2 (API CHANGELOG), so the adapter
+    needs 20.3.2+ for it.
+  - Live runs from the app (owner, 2026-10-06, project new1): 1 passed and 3 failed on the
+    frame-rate readback (`GetSetting` returns 30.0 for "30"); now fixed.
+  - **ResolveMCP.exe** (`C:\Program Files\Blackmagic Design\DaVinci Resolve\`) is an MCP
+    server over stdio, newline JSON-RPC, protocol 2024-11-05, serverInfo `davinci_resolve` 21.1.
+    Its tools:
+    - read only: get_resolve_status, get_whats_new, get_scripting_api, search_scripting_api,
+      get_scripting_docs, list_dctls, list_luts;
+    - changes: run_script (sandboxed Python 3.14 + Resolve API), launch_resolve, update_dctl,
+      generate_lut, delete_dctl, delete_lut;
+    - full PC access: run_script_unsafe.
+    Its instructions tell the client to call get_whats_new because 21.1 is newer than model
+    training.
+  - The owner also has it in their own Claude Code (`~/.claude.json` user-scope `DaVinci Resolve`).
+- **Pexels API** (2026-10-06, the owner's key): `Authorization: <key>`.
+  - Endpoints: `/videos/search` (size=medium = Full HD), `/v1/search`, `/videos/videos/<id>`,
+    `/v1/photos/<id>`.
+  - The key's `X-Ratelimit-Limit` is 25,000. Video pages carry their description in the URL slug.
+  - Video files come from `videos.pexels.com`. Photos are `images.pexels.com/...jpeg` and take
+    `?auto=compress&cs=tinysrgb&w=2560`.
+  - A real 1080p clip is h264 with a second data stream; the editor ignores it and the video
+    gate passed.
 - **Real manual import**: the 4,351-page Resolve 21.1 PDF indexes in 65.7 s (`tools/manual_probe.py`).
 
 ## 7. Voiceover pipeline (what the voice module wraps)
@@ -539,6 +644,8 @@ user's voice toward a benchmark — that produced a "different person" once).
   cost a little real usage — done several times with the user's go-ahead.
 - The user often sends screenshots of what looks wrong; fix it, add a regression test, report.
 - Windows-native everything; the user's friends will each install their own copy.
+- Real tests touching their live tools only where they allow it (2026-10-06: Resolve tests "in
+  new2 project for test purpose"). Read-only first; never switch or change their open Resolve project.
 
 ## 9. Testing conventions
 
@@ -554,9 +661,21 @@ user's voice toward a benchmark — that produced a "different person" once).
   `FAKE_RESOLVE_STATE / DOWN / FAIL / VERSION`), `tests\p10\media_fixtures.py` (synthetic voice,
   mastering, SRT, test-pattern videos with black frames / late audio, PNGs - all via numpy + ffmpeg),
   `tests\p10\test_episode.py` `Deps` (p9 Deps + the real gates/animation/editor/packaging).
+- P11 / 2026-10-06 additions:
+  - `tests\p11` (dispatch against a throwaway git repo). The fake CLI's `FAKE_WRITE="path=text"`
+    makes an editing run write a file. `FAKE_MODE_CLAUDE` / `FAKE_MODE_CODEX` set the mode for one
+    CLI only, and `FAKE_CODEX_REPLY` sets Codex's answer.
+  - `tests\p10\test_stock.py` uses a stand-in Pexels (httpx MockTransport; `create_app(...,
+    stock_transport=)`).
+  - `tests\p10\test_resolve_mcp.py` uses a stand-in `ResolveMCP.exe` (`resolve_mcp_cmd` /
+    `ONEPROD_RESOLVE_MCP_CMD`) and the P5 `FakeAgent`, which now also records `mcp_config` and
+    `disallowed`.
+- **Keyring**: `tests\conftest.py` points `PYTHON_KEYRING_BACKEND` at
+  `app.security.memkeyring.MemoryKeyring`, so every test and every server a test starts runs
+  without the real Credential Manager.
 - Browser: `tools\ui_drive.py` drives the user's installed Chrome headless over DevTools; sections
   switched on by `UI_DRIVE_ACCOUNTS / SWITCH / VOICE / AGENT / P6 / SETUP / P8 / P9 / P10 / KNOWLEDGE /
-  RESOLVE / EPISODE`. Fresh data folders open the setup wizard, so the driver presses "Finish later"
+  RESOLVE / EPISODE` (SETUP checks the Pexels key field; RESOLVE checks the MCP switch). Fresh data folders open the setup wizard, so the driver presses "Finish later"
   first. Every browser test must drain the server's stdout in a thread (see §10).
 - Media tests skip without ffmpeg; animation/episode tests skip without Chrome/Edge.
 - Opt-in real GPU test: `ONEPROD_GPU_TESTS=1 ONEPROD_REAL_SCRIPT=… ONEPROD_REAL_VOICE=human_ref48.wav`
@@ -605,6 +724,19 @@ user's voice toward a benchmark — that produced a "different person" once).
   `PYTHON_KEYRING_BACKEND=app.security.memkeyring.MemoryKeyring` for the whole run, so no test can see
   the owner's saved Pexels key (found because the stock UI check saw it). `cmdkey /list` showed no
   leaked test entries.
+- **Appending an override doesn't beat a base rule** (2026-10-06, real Resolve test).
+  - With "you never run Resolve yourself" still in the studio instructions, an appended
+    "this replaces the earlier rule" was ignored, and the agent refused `run_script`.
+  - Swap the rule's text out instead (`studio.RESOLVE_RULE`).
+  - A **resumed** Claude session also kept its earlier refusal. Changing what an agent may do
+    needs a fresh session, so the session key now includes `|resolve-mcp`.
+- A pydantic request model defined *inside* `create_app` (with `from __future__ import
+  annotations`) is not resolved by FastAPI, which treats the body as a query and answers 422.
+  Keep request models at module level.
+- A `str.replace` inserted through a Bash heredoc put an unescaped `'` into a single-quoted Python
+  string (stock_tools.py) - one more reason to edit with the Edit tool.
+- MCP stdio probing from Python: read stdout in a thread. A plain `readline()` loop hung once;
+  the threaded reader got `initialize` + `tools/list` from ResolveMCP.exe at once.
 - `git grep` before publishing: the repo contains fake test keys (`sk-ant-api03-GOODgood…`,
   AWS's `AKIAIOSFODNN7EXAMPLE`) on purpose — they test the redaction.
 
@@ -619,8 +751,15 @@ user's voice toward a benchmark — that produced a "different person" once).
    knowledge/Resolve (`docs/gates/P10-knowledge-manual.md`) and P10 production
    (`docs/gates/P10-production-manual.md`) - all use real accounts. The real AI loops (Script Studio,
    episode visuals/packaging) have only run with stand-ins; competitor captions and the real manual
-   import were checked for real (free). Live Resolve has never been driven from the app.
-   Next build: P12. P11 manual: `docs/gates/P11-manual.md`.
+   import were checked for real (free).
+   - Live Resolve from the app: the owner ran plans (project new1, 1 passed and 3 failed on the
+     frame-rate bug, now fixed). A read-only Resolve MCP script ran for real in new2.
+   - Scripts that CHANGE Resolve through the MCP are untested for real; watch the first card.
+   - Next build: P12. P11 manual: `docs/gates/P11-manual.md`.
+5a. The owner must restart One Production and tick "Let the AI use DaVinci Resolve's own MCP"
+   (manual step 9). The MCP does not reach Codex accounts.
+5d. dispatch.py has never run with real accounts (that's the P11 manual check). Its review
+   prompt may need tuning after the owner reads the first 2 review files.
 5b. Not built: Storyblocks (no key; Pexels is used instead, 2026-10-06) and research workers.
 5c. Episode cost is untested: the visuals worker draws roughly one SVG per 3 s of video; watch Usage
    on the first real run. The bundle hard-links the video (no extra disk), but backups with media on (the default) zip it twice.
