@@ -5,6 +5,7 @@
 Special video ids:  NOCAPTION01 (no captions)   RATELIMIT01 (429 the first time)
                     GONEGONE001 (video unavailable)   AUTOCAPS001 (rolling auto captions)
 FAKE_YTDLP_LOG = file: every command line is appended (tests count calls).
+FAKE_YTDLP_VIDEO = file: without --skip-download it is "downloaded" as <id>.mp4 (TOOLONG0001: nothing).
 """
 import json
 import os
@@ -67,3 +68,8 @@ else:
         for n, line in enumerate([s.strip() + "." for s in (sentence * 20).split(". ") if s.strip()][:59]))
     vtt += "00:00:59.000 --> 00:01:00.000\n[Music]\n\n"
 Path(f"{vid}.en.vtt").write_text(vtt, encoding="utf-8")
+if "--skip-download" not in args:            # style probe: the "downloaded" video is FAKE_YTDLP_VIDEO
+    src = os.environ.get("FAKE_YTDLP_VIDEO")
+    if vid == "TOOLONG0001" or not src:
+        sys.exit(0)                          # yt-dlp skips a --match-filter miss without an error
+    Path(f"{vid}.mp4").write_bytes(Path(src).read_bytes())

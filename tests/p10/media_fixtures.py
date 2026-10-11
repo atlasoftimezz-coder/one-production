@@ -63,6 +63,35 @@ def video(path: Path, audio: Path, seconds: float, *, black_at: float | None = N
     return path
 
 
+def cut_video(path: Path, lengths: list[float], *, hits: bool = True, bed: bool = True, rate: int = 48000) -> Path:
+    """A 'competitor' video with cuts exactly at the sums of `lengths`: each shot a different source,
+    a quiet tone under everything (a music bed) and a click on every cut (an SFX hit)."""
+    sources = ['smptebars', 'color=c=0xC02020', 'testsrc2', 'color=c=0x2040FF', 'rgbtestsrc', 'color=c=0x20A040']
+    seconds = sum(lengths)
+    t = np.arange(int(seconds * rate)) / rate
+    sig = 0.03 * np.sin(2 * np.pi * 220 * t) if bed else np.zeros_like(t)
+    if hits:
+        for c in np.cumsum(lengths)[:-1]:
+            i = int(c * rate)
+            n = int(0.04 * rate)
+            sig[i:i + n] += 0.8 * np.exp(-np.arange(n) / (0.008 * rate)) * np.sign(np.sin(2 * np.pi * 1500 * np.arange(n) / rate))
+    wav = path.with_suffix('.wav')
+    with wave.open(str(wav), 'wb') as w:
+        w.setnchannels(1); w.setsampwidth(2); w.setframerate(rate)
+        w.writeframes((np.clip(sig, -1, 1) * 32767).astype('<i2').tobytes())
+    args = []
+    for n, length in enumerate(lengths):
+        src = sources[n % len(sources)]
+        args += ['-f', 'lavfi', '-i', f'{src}{":" if "=" in src else "="}size=640x360:rate=30:duration={length}']
+    args += ['-i', wav]
+    chain = ''.join(f'[{n}:v]setsar=1,format=yuv420p[v{n}];' for n in range(len(lengths)))
+    chain += ''.join(f'[v{n}]' for n in range(len(lengths))) + f'concat=n={len(lengths)}:v=1:a=0[v]'
+    ff(*args, '-filter_complex', chain, '-map', '[v]', '-map', f'{len(lengths)}:a', '-c:v', 'libx264', '-preset',
+       'ultrafast', '-c:a', 'aac', '-b:a', '128k', '-t', seconds, path)
+    wav.unlink()
+    return path
+
+
 def png(path: Path, width: int, height: int) -> Path:
     raw = b''.join(b'\x00' + b'\x80\x40\x20' * width for _ in range(height))
     chunk = lambda kind, data: struct.pack('>I', len(data)) + kind + data + struct.pack('>I', zlib.crc32(kind + data))

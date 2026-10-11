@@ -58,7 +58,9 @@ from .agent.runs import Runs
 from .agent.team import Team, TeamConfig
 from .agent.scriptflow import ScriptConfig, ScriptRun
 from .agent.episode import EpisodeConfig, EpisodeRun
-from . import competitors, faceless
+from .agent.style_learn import StyleRun
+from . import competitors, faceless, style_probe
+from .styles import StyleError, Styles, brief as style_brief
 from .agent.studio import INSTRUCTIONS as STUDIO_INSTRUCTIONS, Studio
 from .chat import SYSTEM, build_prompt, ndjson, reply_events
 from .config import Settings
@@ -70,7 +72,7 @@ from .providers.demo import Demo
 from .security.guard import GuardMiddleware
 from .security.redact import redact, register_secret
 from .scripts import SUPPORTED as SCRIPT_TYPES, read_script, stats as script_stats
-from .media import duration as media_duration
+from .media import duration as media_duration, find_ffmpeg as media_find_ffmpeg
 from .storage import NotFound, Store
 from .tools import Approvals, TOOLS
 from .usage import RANGES, Ledger, range_start, usage_pct as shared_usage_pct
@@ -151,6 +153,21 @@ class ScriptRunIn(BaseModel):
     notes: str = ""
     links_text: str = ""
     links_file: str | None = None            # a competitor list saved in the project (any format)
+
+
+class StyleRunIn(BaseModel):
+    links_text: str
+    name: str = ""
+    per_channel: int = 3                     # a channel link: its N most viewed recent uploads
+    keep_video: bool = False                 # keep the downloaded working copies (cache) after measuring
+
+
+class StylePatchIn(BaseModel):
+    name: str | None = None
+
+
+class StyleApproveIn(BaseModel):
+    scope: str = "project"                   # project | channel | global (learning store scopes)
 
 
 class EpisodeIn(BaseModel):
@@ -1685,6 +1702,132 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
             return {"running": True, "script": live.snapshot()}
         f = store.project_dir(pid) / "script.json"
         return {"running": False, "script": json.loads(f.read_text(encoding="utf-8")) if f.exists() else None}
+
+    # ---------------------------------------------------------------- Competitor styles (2026-10-11)
+    styles = Styles(settings.data_dir, store)
+    app.state.styles = styles
+    # downloads take longer than caption reads; a test's stand-in yt-dlp command is kept
+    StyleYtDlp = competitors.YtDlp(ytdlp.command, timeout=1800) if isinstance(ytdlp, competitors.YtDlp) else ytdlp
+
+    @app.get("/competitors.js")
+    def competitors_script():
+        return FileResponse(WEB_DIR / "competitors.js", media_type="text/javascript")
+
+    @app.post("/api/projects/{pid}/style")
+    async def start_style(pid: str, body: StyleRunIn) -> StreamingResponse:
+        """Watch competitor videos (download, measure, keyframes) and learn their editing style."""
+        _project(pid)
+        links = competitors.find_links(body.links_text or "")
+        if not links["items"]:
+            raise HTTPException(400, "paste at least one YouTube video or channel link")
+        if not any(a["provider"] in ("claude", "anthropic_api") for a in team_accounts()):
+            raise HTTPException(400, "learning a style needs a Claude or API-key account (it looks at the frames)")
+        ffmpeg = media_find_ffmpeg(settings.data_dir)
+        if not ffmpeg:
+            raise HTTPException(400, "ffmpeg is needed to measure the videos - install it under Set up / modules")
+        name = (body.name or "").strip()[:60] or f"Style {time.strftime('%Y-%m-%d %H%M')}"
+        try:
+            run = runs.start(pid, store.files_dir(pid))
+        except RuntimeError as e:
+            raise HTTPException(409, str(e))
+        deps = team_deps(pid)
+        cache = settings.data_dir / "cache" / "style"
+        deps.files_dir = lambda: store.files_dir(pid)
+        deps.cache_dir = lambda: cache
+        deps.uploads = lambda item, work: ytdlp.uploads(item, work)
+        deps.download = lambda vid, work: style_probe.download(StyleYtDlp, vid, work, ffmpeg)
+        deps.analyse = lambda video, out, text, meta: style_probe.analyse(ffmpeg, video, out, text, meta)
+        deps.combine = style_probe.combine
+        deps.styles = styles
+        cfg = TeamConfig.from_dict(team_settings())
+        sr = StyleRun(pid, name, links["items"], run, deps, cfg, state_file=store.project_dir(pid) / "style.json",
+                      per_channel=max(1, min(10, int(body.per_channel or 3))), keep_video=body.keep_video)
+        teams[pid] = sr
+        store.append_message(pid, "user", f"Learn the editing style \"{name}\" from {len(links['items'])} link(s)", style=True)
+
+        async def work():
+            snap = await sr.go()
+            r = snap["result"]
+            text = (f"Style \"{name}\" learned from {len(snap['videos'])} video(s): {r.get('summary', '')}" if snap["state"] == "done"
+                    else f"Style learning stopped: {r.get('why') or snap['state']}")
+            store.append_message(pid, "assistant", text, style={"id": snap["id"], "state": snap["state"], "result": r,
+                                                                 "videos": snap["videos"], "problems": snap["problems"]})
+            runs.finish(run)
+            run.emit({"t": "done"})
+
+        run.task = asyncio.get_running_loop().create_task(work())
+        return StreamingResponse(follow(run), media_type="application/x-ndjson", headers={"Cache-Control": "no-store"})
+
+    @app.get("/api/projects/{pid}/style")
+    def style_run_state(pid: str) -> dict:
+        _project(pid)
+        live = teams.get(pid)
+        if isinstance(live, StyleRun) and runs.busy(pid):
+            return {"running": True, "style": live.snapshot()}
+        f = store.project_dir(pid) / "style.json"
+        return {"running": False, "style": json.loads(f.read_text(encoding="utf-8")) if f.exists() else None}
+
+    @app.get("/api/styles")
+    def list_styles() -> list[dict]:
+        out = []
+        for e in styles.list():
+            item = dict(e)
+            if e["available"]:
+                try:
+                    p = styles.profile(e["id"])
+                    item["summary"] = p.get("summary", "")
+                    item["measured"] = p.get("measured") or {}
+                except (StyleError, OSError, ValueError):
+                    item["available"] = False
+            out.append(item)
+        return out
+
+    @app.get("/api/styles/{style_id}")
+    def get_style(style_id: str) -> dict:
+        try:
+            e = styles.get(style_id)
+            return {**e, "profile": styles.profile(style_id), "numbers": styles.numbers(style_id)}
+        except (StyleError, OSError, ValueError) as err:
+            raise HTTPException(404, str(err))
+
+    @app.patch("/api/styles/{style_id}")
+    def rename_style(style_id: str, body: StylePatchIn) -> dict:
+        try:
+            if body.name is not None and body.name.strip():
+                return styles.update(style_id, name=body.name.strip()[:60])
+            return styles.get(style_id)
+        except StyleError as err:
+            raise HTTPException(404, str(err))
+
+    @app.post("/api/styles/{style_id}/approve")
+    def approve_style(style_id: str, body: StyleApproveIn) -> dict:
+        """The owner read the profile and agrees: it becomes guidance every agent sees (learning store)."""
+        try:
+            e = styles.get(style_id)
+            profile = styles.profile(style_id)
+        except (StyleError, OSError, ValueError) as err:
+            raise HTTPException(404, str(err))
+        try:
+            lesson = learning.save(e["project"], f"Editing style: {e['name']}", style_brief(profile), scope=body.scope,
+                                   evidence={"type": "style_profile", "style": style_id, "owner_approved": True},
+                                   supersedes=e.get("lesson") or "")
+        except ValueError as err:
+            raise HTTPException(400, str(err))
+        return styles.update(style_id, lesson=lesson["id"], scope=body.scope)
+
+    @app.delete("/api/styles/{style_id}")
+    def delete_style(style_id: str) -> dict:
+        try:
+            e = styles.get(style_id)
+        except StyleError as err:
+            raise HTTPException(404, str(err))
+        if e.get("lesson"):
+            try:
+                learning.change_state(e["project"], e["lesson"], "forget")
+            except ValueError:
+                pass
+        styles.remove(style_id)
+        return {"removed": style_id}
 
     # ---------------------------------------------------------------- Episode run (P10)
     def episode_deps(pid: str):
