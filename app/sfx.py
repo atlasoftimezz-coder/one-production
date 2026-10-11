@@ -2,9 +2,9 @@
 
 Checked against Epidemic Sound's OpenAPI spec (partner-content-api.epidemicsound.com/docs/spec.json,
 read 2026-10-11):
-    GET https://api.epidemicsound.com/v0/sound-effects/search?term=&limit=&offset=&sort=
+    GET https://partner-content-api.epidemicsound.com/v0/sound-effects/search?term=&limit=&offset=&sort=
         {"soundEffects": [{"id": uuid, "title", "added", "length": seconds, "images"}], "pagination", "links"}
-    GET https://api.epidemicsound.com/v0/sound-effects/{id}/download?format=mp3&quality=normal|high
+    GET https://partner-content-api.epidemicsound.com/v0/sound-effects/{id}/download?format=mp3&quality=normal|high
         {"url", "expires"}    (normal = 128 kbps, enough under a voiceover)
     Header "Authorization: Bearer epidemic_live_..." (+ "x-partner-user-id": a stable anonymous id)
 
@@ -32,7 +32,7 @@ import keyring
 from .accounts import KEYRING_SERVICE
 
 KEY_NAME = "epidemic"
-API = "https://api.epidemicsound.com"
+API = "https://partner-content-api.epidemicsound.com"     # the spec's "servers" entry (2026-10-11)
 MAX_BYTES = 30 * 1024 * 1024
 UUID = re.compile(r"^[0-9a-fA-F-]{32,40}$")
 

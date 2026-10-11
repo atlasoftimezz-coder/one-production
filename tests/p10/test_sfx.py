@@ -23,7 +23,7 @@ def epidemic(request: httpx.Request) -> httpx.Response:
     HITS.append(str(request.url))
     if request.url.host == "cdn.epidemic.test":
         return httpx.Response(200, content=MP3.get("bytes", b"ID3" + b"\x00" * 1024))
-    if request.url.host != "api.epidemicsound.com":
+    if request.url.host != "partner-content-api.epidemicsound.com":
         return httpx.Response(599)
     if request.headers.get("Authorization") != f"Bearer {KEY}":
         return httpx.Response(401, json={"message": "unauthorized"})
