@@ -26,7 +26,8 @@ STAGES = (("watch", "Watch the videos"), ("learn", "Learn the style"))
 CLAUDE_FAMILY = ["claude", "anthropic_api"]        # it must look at images
 LEARN_NOTE = ("You are the EDITING-STYLE ANALYST in One Production. You study competitor videos the owner chose "
               "so new episodes can be edited with the same craft and rhythm - never copying their branding, "
-              "characters, logos, exact layouts or wording.")
+              "characters, logos, exact layouts or wording. Use only Read (files and images) and Write - never run "
+              "commands or scripts (each one would stop and wait for the owner); the app checks the JSON for you.")
 
 
 class StyleRun(Team):

@@ -303,7 +303,7 @@ def analyse(ffmpeg: str, video: Path, out: Path, text: str = "", meta: dict | No
     p.update(beats=len(beat_shots) - 1, beats_per_min=b["cuts_per_min"], beat_median=b["shot_median"],
              beat_p10=b["shot_p10"], beat_p90=b["shot_p90"], first_30s_beats_per_min=b["first_30s_cuts_per_min"],
              beats_per_minute_curve=b["cuts_per_minute_curve"],
-             continuous=bool(p["cuts_per_min"] is not None and p["cuts_per_min"] < 3 and (b["cuts_per_min"] or 0) >= 10))
+             continuous=bool(p["cuts_per_min"] is not None and p["cuts_per_min"] < 3 and (b["cuts_per_min"] or 0) >= 6))
     result = {"video": dict(meta or {}), "seconds": round(seconds, 2), "size": f"{vs.get('width')}x{vs.get('height')}",
               "fps": vs.get("avg_frame_rate"), "pace": p, "cuts": cuts, "beats": beats,
               "picture": picture(small, shots), "sound": sound(ffmpeg, video, beat_shots, seconds),
