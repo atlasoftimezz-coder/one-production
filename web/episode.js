@@ -126,12 +126,21 @@ function renderEpisode(bubble, d, pid, prev) {
     ${(d.flags || []).length ? `<div class="epflags"><b>To check in your review (${d.flags.length})</b>${d.flags.map(f =>
         `<div class="tnote">${esc(f.stage)}: ${esc(f.why)}</div>`).join('')}</div>` : ''}
     ${d.draft && d.state === 'done' && (d.vo || {}).video ? `<div class="tnote">Draft video: <b>${esc(d.vo.video)}</b> · Resolve project: ${esc(d.vo.resolve_project || '')}</div>` : ''}
+    ${['needs_you', 'stopped'].includes(d.state) && (d.result || {}).stage ? `<div class="tpause"><span style="flex:1">Stopped at ${esc(d.result.stage)}: ${esc(d.result.why || '')}</span>
+      <button class="btn" data-retry>Try this stage again</button></div>` : ''}
     ${d.state === 'waiting_render' ? `<div class="tpause eprender" style="flex-wrap:wrap;gap:8px"><span style="flex:1 1 100%">Render the "Episode" timeline of Resolve project
       "${esc((d.result || {}).project || '')}" (Deliver page: H.264, 1920x1080, 60 fps) into this project's folder, then pick it:</span>
       <select data-video style="flex:1"><option value="">Loading videos…</option></select><button class="btn" data-rendered>Check and package</button></div>` : ''}`;
   const r = t.el.querySelector('[data-resume]');
   if (r) r.onclick = async () => { r.disabled = true; try { await api(`/api/projects/${pid}/team/resume`, { method: 'POST' }); } catch (e) { toast(e.message, true); } };
   t.el.querySelectorAll('[data-report]').forEach(b => b.onclick = () => episodeReport(pid, b.dataset.report));
+  const retry = t.el.querySelector('[data-retry]');
+  if (retry) retry.onclick = async () => {
+    if (state.busy === pid) return toast('Something is already running in this project', true);
+    retry.disabled = true;
+    addMsg('user', `Try the ${d.result.stage} stage again`);
+    await consumeReply(() => api(`/api/projects/${pid}/episode/retry`, { method: 'POST' }), null);
+  };
   const pick = t.el.querySelector('[data-video]');
   if (pick) episodeVideos(pid, pick, t.el.querySelector('[data-rendered]'));
   if (d.final) {

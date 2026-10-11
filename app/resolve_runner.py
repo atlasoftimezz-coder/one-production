@@ -313,7 +313,9 @@ def render_start(resolve, spec: dict) -> dict:
         need(project.SetRenderSettings({'SelectAllFrames': True, 'TargetDir': spec['target_dir'], 'CustomName': spec['name'],
                                         'FormatWidth': int(spec.get('width', 1920)), 'FormatHeight': int(spec.get('height', 1080)),
                                         'FrameRate': float(spec.get('fps', 60)), 'ExportVideo': True, 'ExportAudio': True,
-                                        'VideoQuality': 'High', 'AudioCodec': 'aac', 'AudioSampleRate': 48000}),
+                                        # no VideoQuality: Resolve 21.1 refuses it for mp4/H.264 ("High" and 0 both
+                                        # false - measured on the owner's first real draft, 2026-10-11)
+                                        'AudioCodec': 'aac', 'AudioSampleRate': 48000}),
              'Resolve refused the render settings.')
         job = need(project.AddRenderJob(), 'Resolve could not add the render job.')
         need(project.StartRendering([job]), 'Resolve could not start the render.')

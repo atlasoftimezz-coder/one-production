@@ -58,7 +58,7 @@ from .agent.codex_agent import CodexAgent
 from .agent.runs import Runs
 from .agent.team import Team, TeamConfig
 from .agent.scriptflow import ScriptConfig, ScriptRun
-from .agent.episode import EpisodeConfig, EpisodeRun
+from .agent.episode import STAGES as EPISODE_STAGES, EpisodeConfig, EpisodeRun
 from .agent.style_learn import StyleRun
 from . import competitors, faceless, style_probe
 from .styles import StyleError, Styles, brief as style_brief
@@ -1997,6 +1997,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
         store.append_message(pid, "assistant", text, episode={
             "id": snap["id"], "state": snap["state"], "stages": snap["stages"], "result": snap["result"],
             "master": snap["master"], "spec": {"name": ep.spec["name"], "script": ep.spec["script"]},
+            "draft": snap.get("draft"), "flags": snap.get("flags") or [], "vo": snap.get("vo") or {}, "final": snap.get("final") or "",
             "tasks": [{k: t[k] for k in ("id", "title", "status", "pins", "rounds", "tokens", "why", "handoffs")} for t in snap["tasks"]]})
         runs.finish(run)
         run.emit({"t": "done"})
@@ -2028,6 +2029,27 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
         teams[pid] = ep
         store.append_message(pid, "user", f"Rendered video: {body.video}", episode=True)
         run.task = asyncio.get_running_loop().create_task(episode_work(pid, ep, run, ep.resume(body.video)))
+        return StreamingResponse(follow(run), media_type="application/x-ndjson", headers={"Cache-Control": "no-store"})
+
+    @app.post("/api/projects/{pid}/episode/retry")
+    async def episode_retry(pid: str):
+        """A stopped episode tries its stopped stage again, keeping everything before it (owner's first real
+        draft, 2026-10-11: the render failed after 37 finished shots - redo the render, not the shots)."""
+        _project(pid)
+        state_file = store.project_dir(pid) / "episode.json"
+        snap = json.loads(state_file.read_text(encoding="utf-8")) if state_file.exists() else None
+        stage = ((snap or {}).get("result") or {}).get("stage")
+        if not snap or snap.get("state") not in ("needs_you", "stopped") or stage not in [s for s, _ in EPISODE_STAGES]:
+            raise HTTPException(409, "no stopped episode to try again")
+        try:
+            run = runs.start(pid, store.files_dir(pid))
+        except RuntimeError as e:
+            raise HTTPException(409, str(e))
+        ep = EpisodeRun.from_snapshot(pid, snap, run, episode_deps(pid), EpisodeConfig.from_dict({**team_settings(), **(snap.get("config") or {})}),
+                                      state_file=state_file)
+        teams[pid] = ep
+        store.append_message(pid, "user", f"Try the {stage} stage again", episode=True)
+        run.task = asyncio.get_running_loop().create_task(episode_work(pid, ep, run, ep.go(stage)))
         return StreamingResponse(follow(run), media_type="application/x-ndjson", headers={"Cache-Control": "no-store"})
 
     # ---------------------------------------------------------------- learning loop (P12)

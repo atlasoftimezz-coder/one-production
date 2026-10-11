@@ -145,6 +145,28 @@ def test_only_impossible_steps_stop_a_draft(tmp_path, setup):
     assert snap["state"] == "needs_you" and snap["result"]["stage"] == "edit" and "disk full" in snap["result"]["why"]
 
 
+def test_a_failed_render_is_retried_without_redoing_the_shots(tmp_path, setup):
+    """Owner's first real draft (2026-10-11): 37 shots built, then Resolve refused the render settings."""
+    store, pid = setup
+    deps = Deps(tmp_path, store, pid, render_fails=True)
+    snap = run(make(tmp_path, store, pid, deps).go())
+    assert snap["state"] == "needs_you" and snap["result"]["stage"] == "edit"
+    built = list(deps.auto_ran)
+    deps.render_fails = False
+    saved = json.loads((tmp_path / "episode.json").read_text(encoding="utf-8"))
+    again = EpisodeRun.from_snapshot(pid, saved, Run(pid, store.files_dir(pid)), deps, EpisodeConfig(poll=0.01),
+                                     state_file=tmp_path / "episode.json")
+    done = run(again.go(saved["result"]["stage"]))
+    assert done["state"] == "done" and done["draft"] and status(done)["edit"] == "passed"
+    assert deps.auto_ran == built                                              # no shot was scripted again
+    assert done["flags"] == snap["flags"]
+
+
+def test_retry_route_needs_a_stopped_episode(client):
+    pid = client.post("/api/projects", json={"name": "Ep"}).json()["id"]
+    assert client.post(f"/api/projects/{pid}/episode/retry").status_code == 409
+
+
 def test_no_style_chosen_falls_back_to_the_script_alone(tmp_path, setup):
     store, pid = setup
     deps = Deps(tmp_path, store, pid)
