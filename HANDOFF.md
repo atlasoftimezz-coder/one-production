@@ -36,7 +36,9 @@ phase log and the plan, checks the PC, runs the last gate and reports before tou
     shows on the first message. `/usage` prints only a cost summary for token logins, so their
     meters fill from `rate_limit_event`s in replies.
   - Routes `PUT` / `DELETE /api/accounts/{id}/token`; `POST /api/accounts` takes `oauth_token`.
-    UI: "Sign-in token" box on the Claude tile, "Use a token" / "Remove token" on Claude cards.
+    UI (owner: "claude login and codex login is different ... we have seperate tab right"): its own
+    4th tile "Claude OAuth token" (`data-prov="claude_token"`, saved as provider `claude` + token);
+    the Claude login tile is unchanged. "Use a token" / "Remove token" on Claude cards.
   - Tests: `tests/p2/test_token_login.py`; the fake CLI honours `CLAUDE_CODE_OAUTH_TOKEN`.
   - Gate after both changes: `check.bat P12` = **482 passed, 0 failed, 1 opt-in GPU skip**.
   - Not verified with a real token yet. Decision D2 still holds: use only your own

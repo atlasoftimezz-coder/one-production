@@ -746,6 +746,8 @@
           <b>Codex login</b><small>Your ChatGPT subscription. Opens Codex's own sign-in.</small></button>
         <button class="tile" data-prov="anthropic_api"><div class="plogo" style="background:#7c8cff">API</div>
           <b>Anthropic API key</b><small>Pay per use. Kept in Windows Credential Manager.</small></button>
+        <button class="tile" data-prov="claude_token"><div class="plogo" style="background:#d97757">C</div>
+          <b>Claude OAuth token</b><small>Your Claude subscription, from claude setup-token. No sign-in window.</small></button>
       </div>
       <form class="addform" id="addform">
         <div id="addtitle" style="font-weight:700"></div>
@@ -753,7 +755,7 @@
         <input id="addlabel" maxlength="60" placeholder="e.g. Main Claude, Work, Aditya's own">
         <div id="keyrow"><label for="addkey">API key</label>
           <input id="addkey" type="password" autocomplete="off" placeholder="sk-ant-…"></div>
-        <div id="tokrow"><label for="addtoken">Sign-in token (optional)</label>
+        <div id="tokrow"><label for="addtoken">OAuth token</label>
           <input id="addtoken" type="password" autocomplete="off" placeholder="sk-ant-oat… from: claude setup-token"></div>
         <div class="note" id="addnote"></div>
         <div class="row2"><button type="button" class="btn" id="addcancel">Cancel</button>
@@ -2056,29 +2058,31 @@ async function startLogin(id) {
 let addProvider = null;
 document.querySelectorAll(".tile").forEach(t => t.onclick = () => {
   addProvider = t.dataset.prov;
-  const api_ = addProvider === "anthropic_api";
+  const api_ = addProvider === "anthropic_api", tok = addProvider === "claude_token";
   $("#addtitle").textContent = { claude: "Add a Claude login", codex: "Add a Codex login",
-                                 anthropic_api: "Add an Anthropic API key" }[addProvider];
+                                 anthropic_api: "Add an Anthropic API key",
+                                 claude_token: "Add a Claude OAuth token" }[addProvider];
   $("#keyrow").style.display = api_ ? "" : "none";
-  $("#tokrow").style.display = addProvider === "claude" ? "" : "none";
+  $("#tokrow").style.display = tok ? "" : "none";
   $("#addnote").textContent = api_
     ? "The key is checked with a free request, then stored in Windows Credential Manager — never in a file."
+    : tok ? "Run claude setup-token while signed in to your own Claude subscription and paste the line that" +
+            " starts with sk-ant-oat. It is kept in Windows Credential Manager — never in a file."
     : "Continue opens " + (addProvider === "claude" ? "Claude" : "Codex") +
-      "'s own sign-in window. Sign in with whichever email this account uses; this page updates by itself." +
-      (addProvider === "claude" ? " Or paste a sign-in token: run claude setup-token while signed in to your own" +
-        " Claude subscription. It is kept in Windows Credential Manager." : "");
-  $("#addgo").textContent = api_ ? "Check and save" : "Continue to sign-in";
+      "'s own sign-in window. Sign in with whichever email this account uses; this page updates by itself.";
+  $("#addgo").textContent = api_ || tok ? "Check and save" : "Continue to sign-in";
   $("#addform").classList.add("open"); $("#addlabel").focus();
 });
 $("#addcancel").onclick = () => { $("#addform").classList.remove("open"); $("#addkey").value = ""; $("#addtoken").value = ""; };
 $("#addform").onsubmit = async e => {
   e.preventDefault();
   const go = $("#addgo"); go.disabled = true;
-  const token = addProvider === "claude" ? $("#addtoken").value.trim() : "";
+  const token = addProvider === "claude_token" ? $("#addtoken").value.trim() : "";
+  if (addProvider === "claude_token" && !token) { toast("Paste the OAuth token first", true); go.disabled = false; return; }
   try {
     const acc = await (await api("/api/accounts", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ provider: addProvider, label: $("#addlabel").value, api_key: $("#addkey").value || null,
-                             oauth_token: token || null }) })).json();
+      body: JSON.stringify({ provider: addProvider === "claude_token" ? "claude" : addProvider, label: $("#addlabel").value,
+                             api_key: $("#addkey").value || null, oauth_token: token || null }) })).json();
     $("#addform").classList.remove("open"); $("#addkey").value = ""; $("#addtoken").value = ""; $("#addlabel").value = "";
     await loadAccounts();
     if (token) toast(acc.status === "ok" ? "Sign-in token saved" : "Token saved, but: " + (acc.reason || "not ready"), acc.status !== "ok");

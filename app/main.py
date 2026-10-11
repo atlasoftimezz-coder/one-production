@@ -677,8 +677,8 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
         token = (body.oauth_token or "").strip()
         if body.provider == "anthropic_api":
             if (body.api_key or "").strip().startswith(TOKEN_PREFIX):
-                raise HTTPException(400, "That is a Claude sign-in token, not an API key. Add a "
-                                         "Claude login instead and paste it in the sign-in token box.")
+                raise HTTPException(400, "That is a Claude sign-in token (OAuth), not an API key. Use the "
+                                         "\"Claude OAuth token\" tile instead.")
             check = await providers["anthropic_api"].check_key((body.api_key or "").strip())
             if not check["ok"]:
                 raise HTTPException(400, f"That API key didn't work: {check['reason']}")

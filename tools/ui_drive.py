@@ -266,8 +266,16 @@ try:
         check("Codex login signs in", add_cli("codex", "My Codex"))
         check("API key tile asks for key", js("document.querySelector('.tile[data-prov=\"anthropic_api\"]').click(); getComputedStyle(document.querySelector('#keyrow')).display") != "none")
         check("API key tile has no token box", js("getComputedStyle(document.querySelector('#tokrow')).display") == "none")
-        check("Claude tile offers a sign-in token", js("document.querySelector('.tile[data-prov=\"claude\"]').click(); getComputedStyle(document.querySelector('#tokrow')).display") != "none"
+        check("Claude login tile has no token box", js("document.querySelector('.tile[data-prov=\"claude\"]').click(); getComputedStyle(document.querySelector('#tokrow')).display") == "none")
+        check("OAuth token tile asks for the token", js("document.querySelector('.tile[data-prov=\"claude_token\"]').click(); getComputedStyle(document.querySelector('#tokrow')).display") != "none"
+              and js("getComputedStyle(document.querySelector('#keyrow')).display") == "none"
               and "setup-token" in (js("document.querySelector('#addnote').innerText") or ""))
+        js("document.querySelector('#addlabel').value='Token Claude'; document.querySelector('#addtoken').value='sk-ant-oat01-"
+           + "UIdriveFAKEtoken" * 5 + "'; document.querySelector('#addform').requestSubmit()")
+        check("OAuth token tile adds a ready Claude account", wait_for(
+            "[...document.querySelectorAll('.acc')].some(a=>a.innerText.includes('Token Claude') && a.querySelector('.stat.ok') && a.innerText.includes('sign-in token'))", 15),
+            (js("[...document.querySelectorAll('.acc')].map(a=>a.innerText.split('\\n').slice(0,3).join(' ')).join(' | ')") or "")[:300])
+        js("document.querySelector('.tile[data-prov=\"claude\"]').click()")
         check("Claude cards offer 'Use a token'", js("[...document.querySelectorAll('.acc')].some(a=>a.innerText.includes('Main Claude') && a.querySelector('[data-act=token]'))"))
         js("document.querySelector('#addcancel').click()")
         shot("09-accounts-signed-in")
