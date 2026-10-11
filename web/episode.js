@@ -50,8 +50,10 @@ async function episodeStyles() {
   try {
     const items = (await (await api('/api/styles')).json()).filter(s => s.available);
     $('#ep_styles').innerHTML = items.length
-      ? items.map(s => `<label><input type="checkbox" value="${esc(s.id)}" ${s.lesson ? 'checked' : ''}> ${esc(s.name)}
-          <span class="epnote">${s.measured && s.measured.pace ? esc(`${s.measured.pace.cuts_per_min} cuts/min, shot ${s.measured.pace.shot_median} s`) : ''}</span></label>`).join('')
+      ? items.map(s => { const p = (s.measured || {}).pace || {};
+          const nums = p.beats_per_min != null ? `${p.beats_per_min} visible changes/min, every ${p.beat_median} s` : (p.cuts_per_min != null ? `${p.cuts_per_min} cuts/min` : '');
+          return `<label><input type="checkbox" value="${esc(s.id)}" ${s.lesson ? 'checked' : ''}> ${esc(s.name)}
+          <span class="epnote">${esc([nums, `${(s.videos || []).length} video(s)`, `learned in ${s.project}`].filter(Boolean).join(' · '))}</span></label>`; }).join('')
       : '<span class="epnote">No styles yet - paste competitor links in the Competitors tab first (optional).</span>';
   } catch (e) { $('#ep_styles').textContent = e.message; }
 }
@@ -74,6 +76,12 @@ $('#episodebtn').onclick = async () => {
     episodePre = null;
     episodeHeavy();
     episodeModal.classList.add('open');
+    if (!voice.running && voice.configured) {               // the voice list needs the voice module running
+      $('#ep_voice').innerHTML = opt('', 'Starting the voice module…');
+      api('/api/voice/start', { method: 'POST' }).then(r => r.json()).then(v => {
+        $('#ep_voice').innerHTML = v.voices.filter(x => !x.startsWith('_upload_')).map(x => opt(x, x)).join('') || opt('', 'No voices found');
+      }).catch(e => { $('#ep_voice').innerHTML = opt('', 'Voice module did not start'); toast(e.message, true); });
+    }
     await episodeStyles();
     try { episodePre = await (await api(`/api/projects/${pid}/episode/preflight`)).json(); } catch (e) { episodePre = null; }
     episodeHeavy();
