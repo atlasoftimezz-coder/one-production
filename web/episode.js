@@ -126,8 +126,10 @@ function renderEpisode(bubble, d, pid, prev) {
     ${(d.flags || []).length ? `<div class="epflags"><b>To check in your review (${d.flags.length})</b>${d.flags.map(f =>
         `<div class="tnote">${esc(f.stage)}: ${esc(f.why)}</div>`).join('')}</div>` : ''}
     ${d.draft && d.state === 'done' && (d.vo || {}).video ? `<div class="tnote">Draft video: <b>${esc(d.vo.video)}</b> · Resolve project: ${esc(d.vo.resolve_project || '')}</div>` : ''}
-    ${['needs_you', 'stopped'].includes(d.state) && (d.result || {}).stage ? `<div class="tpause"><span style="flex:1">Stopped at ${esc(d.result.stage)}: ${esc(d.result.why || '')}</span>
-      <button class="btn" data-retry>Try this stage again</button></div>` : ''}
+    ${['needs_you', 'stopped'].includes(d.state) && (d.result || {}).stage ? `<div class="tpause" style="flex-wrap:wrap;gap:8px"><span style="flex:1 1 100%">Stopped at ${esc(d.result.stage)}: ${esc(d.result.why || '')}</span>
+      <button class="btn" data-retry>Try this stage again</button>
+      ${d.result.stage === 'edit' ? `<span style="flex:1 1 100%">…or you rendered it in Resolve yourself: put the file in this project and pick it</span>
+        <select data-video style="flex:1"><option value="">Loading videos…</option></select><button class="btn" data-rendered>Check and package</button>` : ''}</div>` : ''}
     ${d.state === 'waiting_render' ? `<div class="tpause eprender" style="flex-wrap:wrap;gap:8px"><span style="flex:1 1 100%">Render the "Episode" timeline of Resolve project
       "${esc((d.result || {}).project || '')}" (Deliver page: H.264, 1920x1080, 60 fps) into this project's folder, then pick it:</span>
       <select data-video style="flex:1"><option value="">Loading videos…</option></select><button class="btn" data-rendered>Check and package</button></div>` : ''}`;

@@ -2021,7 +2021,9 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
             ep.run = run
         else:
             snap = json.loads(state_file.read_text(encoding="utf-8")) if state_file.exists() else None
-            if not snap or snap.get("state") != "waiting_render":
+            # also a draft stopped at its render: the owner rendered in Resolve themselves (2026-10-11)
+            stopped_at_render = bool(snap) and snap.get("state") in ("needs_you", "stopped") and (snap.get("result") or {}).get("stage") == "edit"
+            if not snap or (snap.get("state") != "waiting_render" and not stopped_at_render):
                 runs.finish(run)
                 raise HTTPException(409, "no episode is waiting for its render")
             ep = EpisodeRun.from_snapshot(pid, snap, run, episode_deps(pid), EpisodeConfig.from_dict({**team_settings(), **(snap.get("config") or {})}),

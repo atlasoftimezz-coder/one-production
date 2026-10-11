@@ -167,6 +167,20 @@ def test_retry_route_needs_a_stopped_episode(client):
     assert client.post(f"/api/projects/{pid}/episode/retry").status_code == 409
 
 
+def test_a_draft_stopped_at_its_render_takes_the_owners_own_render(client, monkeypatch):
+    """The owner rendered the timeline in Resolve while the draft was stopped at the render stage."""
+    pid = client.post("/api/projects", json={"name": "Ep"}).json()["id"]
+    client.post(f"/api/projects/{pid}/files", files={"files": ("r.mp4", b"0")})
+    state = client.app.state                                                     # write a stopped draft snapshot
+    proj = client.data_dir / "projects" / pid
+    snap = {"kind": "episode", "id": "x", "state": "needs_you", "spec": {"name": "Ep", "script": "s.md", "draft": True},
+            "stages": [], "result": {"stage": "visuals", "why": "x"}, "vo": {}, "config": {}}
+    (proj / "episode.json").write_text(json.dumps(snap), encoding="utf-8")
+    r = client.post(f"/api/projects/{pid}/episode/render", json={"video": "r.mp4"})
+    assert r.status_code == 409                                                  # stopped somewhere else: no
+    assert state is not None
+
+
 def test_no_style_chosen_falls_back_to_the_script_alone(tmp_path, setup):
     store, pid = setup
     deps = Deps(tmp_path, store, pid)
