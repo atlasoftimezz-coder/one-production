@@ -16,35 +16,59 @@ KEY = "epidemic_live_TestKey0123456789abcdef"
 WHOOSH = "0b7e5c3a-1111-4c4c-9a9a-0123456789ab"
 CLICK = "1c8f6d4b-2222-4d4d-8b8b-0123456789ab"
 HITS: list[str] = []
-MP3 = {}
+CALLS: list[dict] = []
+
+
+def sse(obj) -> httpx.Response:
+    return httpx.Response(200, headers={"content-type": "text/event-stream", "mcp-session-id": "s1"},
+                          text=f"event: message\ndata: {json.dumps(obj)}\n\n")
+
+
+def tool_text(rid, data=None, errors=None):
+    body = {"data": data} if data is not None else {"errors": errors, "data": None}
+    return sse({"jsonrpc": "2.0", "id": rid, "result": {"content": [{"type": "text", "text": json.dumps(body)}],
+                                                        "isError": bool(errors)}})
 
 
 def epidemic(request: httpx.Request) -> httpx.Response:
+    """Stand-in for Epidemic's MCP server, shaped like the real one measured on 2026-10-11."""
     HITS.append(str(request.url))
-    if request.url.host == "cdn.epidemic.test":
-        return httpx.Response(200, content=MP3.get("bytes", b"ID3" + b"\x00" * 1024))
-    if request.url.host != "partner-content-api.epidemicsound.com":
+    if request.url.host == "audiocdn.epidemicsound.com":
+        return httpx.Response(200, content=b"ID3" + b"\x00" * 1024)
+    if str(request.url) != "https://www.epidemicsound.com/a/mcp-service/mcp":
         return httpx.Response(599)
     if request.headers.get("Authorization") != f"Bearer {KEY}":
         return httpx.Response(401, json={"message": "unauthorized"})
-    assert request.headers.get("x-partner-user-id")
-    path = request.url.path
-    if path == "/v0/sound-effects/search":
-        if request.url.params.get("term") == "toomany":
+    assert "text/event-stream" in request.headers.get("Accept", "")
+    msg = json.loads(request.content)
+    if msg["method"] == "initialize":
+        return sse({"jsonrpc": "2.0", "id": msg["id"], "result": {"protocolVersion": "2025-03-26", "capabilities": {"tools": {}}}})
+    if msg["method"] == "notifications/initialized":
+        return httpx.Response(202)
+    assert request.headers.get("Mcp-Session-Id") == "s1"
+    name, args = msg["params"]["name"], msg["params"]["arguments"]
+    CALLS.append({"name": name, "args": args})
+    if name == "SearchSoundEffects":
+        if not isinstance(args.get("query"), dict):
+            return tool_text(msg["id"], errors=[{"message": "Unexpected error occurred"}])
+        if args["query"]["term"] == "toomany":
             return httpx.Response(429)
-        return httpx.Response(200, json={"soundEffects": [
-            {"id": WHOOSH, "title": "Whoosh fast", "added": "2024-01-01T00:00:00Z", "length": 1},
-            {"id": CLICK, "title": "Long ambience", "added": "2024-01-01T00:00:00Z", "length": 40}],
-            "pagination": {"limit": 10, "page": 1}, "links": {}})
-    if path.startswith("/v0/sound-effects/") and path.endswith("/download"):
-        assert request.url.params.get("format") == "mp3"
-        return httpx.Response(200, json={"url": f"https://cdn.epidemic.test/{path.split('/')[3]}.mp3", "expires": "x"})
+        nodes = [{"soundEffect": {"id": WHOOSH, "title": "Whoosh fast", "audioFile": {"durationInMilliseconds": 1200},
+                                  "tags": [{"displayName": "whoosh"}]}},
+                 {"soundEffect": {"id": CLICK, "title": "Long ambience", "audioFile": {"durationInMilliseconds": 40000}, "tags": []}}]
+        if (args.get("filter") or {}).get("duration"):
+            nodes = [n for n in nodes if n["soundEffect"]["audioFile"]["durationInMilliseconds"] <= args["filter"]["duration"]["max"]]
+        return tool_text(msg["id"], {"soundEffects": {"nodes": nodes, "meta": {"total": 2}}})
+    if name == "DownloadSoundEffect":
+        assert args["options"] == {"fileType": "MP3"}
+        return tool_text(msg["id"], {"soundEffectDownload": {"assetUrl": f"https://audiocdn.epidemicsound.com/audiofiles/mp3/{args['id']}.mp3?exp=1"}})
     return httpx.Response(404)
 
 
 @pytest.fixture
 def svc(tmp_path):
     HITS.clear()
+    CALLS.clear()
     store = Store(tmp_path / "data")
     pid = store.create_project("S")["id"]
     return X.Sfx(store, tmp_path / "data", transport=httpx.MockTransport(epidemic)), pid, store
@@ -57,9 +81,9 @@ def test_key_is_checked_then_kept_in_the_credential_store(svc, memory_keyring):
     with pytest.raises(X.SfxError, match="refused the key"):
         s.set_key("epidemic_live_WrongKey123456")
     st = s.set_key(" " + KEY + " ")
-    assert st["key_set"] and st["key_hint"] == "…" + KEY[-4:] and "prototyping" in st["licence_note"]
+    assert st["key_set"] and st["key_hint"] == "…" + KEY[-4:] and "your own Epidemic Sound plan" in st["licence_note"]
     assert memory_keyring.store[("OneProduction", "epidemic")] == KEY
-    assert KEY not in json.dumps(st) and KEY not in (s.state_file.read_text(encoding="utf-8"))
+    assert KEY not in json.dumps(st) and (not s.state_file.exists() or KEY not in s.state_file.read_text(encoding="utf-8"))
     assert not s.remove_key()["key_set"]
 
 
@@ -79,7 +103,8 @@ def test_search_then_fetch_once_and_reuse(svc, memory_keyring):
     other = store.create_project("T")["id"]
     b = s.fetch(other, WHOOSH, "Whoosh fast")                     # another episode: no second download
     assert b["downloaded"] is False and s.status()["downloads"] == 1
-    assert sum("/download" in h for h in HITS) == 1
+    assert sum(c["name"] == "DownloadSoundEffect" for c in CALLS) == 1
+    assert sum("audiocdn" in h for h in HITS) == 1
     credits = (store.files_dir(pid) / "sfx" / "CREDITS.md").read_text(encoding="utf-8")
     assert "Epidemic Sound" in credits and "Whoosh fast" in credits
     assert s.search("whoosh")["results"][0]["cached"] is True
