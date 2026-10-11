@@ -154,6 +154,18 @@ def test_no_style_chosen_falls_back_to_the_script_alone(tmp_path, setup):
     assert "stock_search" not in plan                                       # no Pexels key: no footage
 
 
+def test_preflight_and_route_checks(client):
+    pid = client.post("/api/projects", json={"name": "Ep"}).json()["id"]
+    pre = client.get(f"/api/projects/{pid}/episode/preflight").json()
+    ids = {c["id"]: c for c in pre["checks"]}
+    assert pre["ready"] is False and not ids["switches"]["ok"] and not ids["claude"]["ok"]
+    assert ids["pexels"]["optional"] and ids["sfx"]["optional"]
+    client.post(f"/api/projects/{pid}/files", files={"files": ("s.md", b"## A\nHello there.")})
+    r = client.post(f"/api/projects/{pid}/episode", json={"name": "E", "script": "s.md", "voice": "v", "draft": True,
+                                                         "styles": ["gone"]})
+    assert r.status_code == 400
+
+
 def test_with_a_pexels_key_the_plan_may_use_footage(tmp_path, setup):
     store, pid = setup
     deps = Deps(tmp_path, store, pid)

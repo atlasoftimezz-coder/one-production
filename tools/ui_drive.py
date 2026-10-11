@@ -245,6 +245,18 @@ try:
         check("scripts listed (not gate reports)", wait_for("[...document.querySelectorAll('#ep_script option')].some(o=>o.value==='notes.txt')"))
         check("music offers project audio", "voice.mp3" in (js("[...document.querySelectorAll('#ep_music option')].map(o=>o.value).join()") or ""))
         check("heavy work listed", "DaVinci Resolve" in (js("document.querySelector('#ep_heavy').innerText") or ""))
+        check("a draft is the default and says shot scripts run without a card and Resolve renders",
+              js("document.querySelector('#ep_draft').checked") is True
+              and wait_for("document.querySelector('#ep_heavy').innerText.includes('without a card') && "
+                           "document.querySelector('#ep_heavy').innerText.includes('Resolve renders the draft')", 5))
+        check("preflight says what is missing before the run",
+              wait_for("document.querySelector('#ep_heavy li.bad') && document.querySelector('#ep_heavy').innerText.includes('Claude')", 15),
+              (js("document.querySelector('#ep_heavy').innerText") or "")[:300])
+        check("style picker points to the Competitors tab", "Competitors tab" in (js("document.querySelector('#ep_styles').innerText") or ""))
+        js("document.querySelector('#ep_draft').click()")
+        check("without the draft switch you approve each script and render yourself",
+              "render the timeline yourself" in (js("document.querySelector('#ep_heavy').innerText") or ""))
+        js("document.querySelector('#ep_draft').click()")
         check("no size or burn-in controls (Fusion is 1080p60)", js("!document.querySelector('#ep_size') && !document.querySelector('#ep_burn')"))
         js("document.querySelector('#ep_name').value='Ep 1'; document.querySelector('#episodeform').requestSubmit()")
         check("start refused until heavy work is OK'd", wait_for("document.querySelector('#toast').textContent.includes('OK for this episode')"))

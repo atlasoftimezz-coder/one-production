@@ -3,6 +3,24 @@
 What changed in each version, in plain words. "Check for updates" shows the newest section.
 
 ## Unreleased - P10 production engine, knowledge, learning and Resolve; P11 stock footage; P12 safety and learning
+- **Competitors tab**: paste competitor videos or channels. One Production downloads a small copy
+  of each video (for measuring only, deleted afterwards), measures every cut, the pictures and the
+  sound, and the AI looks at the frames and writes the editing style down: pacing, kinds of shots,
+  text, colour, motion and sound. "Use as guidance" makes it something every AI in the project
+  follows.
+- **Make a draft (no stops)**: the episode dialog now makes the whole video in one go for your
+  first review.
+  - The AI designs a new look and its own animation helpers for this script in the competitor
+    style you pick, with shots paced like that channel.
+  - It builds every shot in Resolve's Fusion page. Shot scripts for the episode's own shots run
+    without a card; anything else still asks.
+  - It can add Pexels footage under the graphics and Epidemic Sound effects on the cuts.
+  - Resolve renders the draft into your project, and the app packages it.
+  - Failed checks become notes in a review report instead of "needs you". The draft stops only
+    when going on is impossible.
+- **Sound effects**: add your Epidemic Sound API key under Set up / modules. Every effect is
+  downloaded once and reused. Epidemic's free API plan is for prototyping only; use a plan that
+  covers YouTube.
 - **Claude OAuth token**: a separate "Claude OAuth token" tile under Add an account (Claude login
   still opens the browser sign-in, as before). Run `claude setup-token` while signed in to your own
   Claude subscription and paste the `sk-ant-oat…` line there, or press "Use a token" on an

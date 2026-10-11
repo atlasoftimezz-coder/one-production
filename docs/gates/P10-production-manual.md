@@ -76,6 +76,27 @@ voice):
 
 **Not built yet:** Storyblocks (no key) and research workers. Pexels stock works.
 
+## Draft episode (2026-10-11): competitor style, no stops
+
+Do this once with a 30-second script first, then with a 3-minute one.
+
+- [ ] **D1. Learn a style.** Top bar → **Competitors** → paste one competitor video → Watch and
+  learn. When it finishes, open "See what it learned". Do the contact sheets show that video, and
+  does the profile describe how it is edited? Press **Use as guidance**.
+- [ ] **D2. Keys (optional).** Set up / modules: Pexels key and Epidemic Sound key. Read the
+  Epidemic licence note; your plan must cover YouTube.
+- [ ] **D3. Start a draft.** Make an episode → "Make a draft with no stops" stays ticked → tick
+  the style → every required line in the list shows ✓ → OK → Start.
+- [ ] **D4. No cards for shots.** While the visuals run, no approval card should appear for
+  `begin("shot-…")` scripts. Each script that ran is in `work/<name>/scripts/`.
+- [ ] **D5. The render.** Resolve's Deliver page renders by itself into `work/<name>/draft-….mp4`.
+  Your other Resolve projects are untouched.
+- [ ] **D6. Watch the draft.** Is the pacing close to the competitor? Is the footage under the
+  graphics where you expected it? Are the sound effects on the cuts at a sensible level (A3 in
+  Resolve)?
+- [ ] **D7. Review report.** The chat shows the stages, amber "check" items and a report. Do the
+  flagged points match what you saw?
+
 ## Sign-off
 
 All boxes ticked → write **"P10 production approved"**. Anything odd → the number and what you saw.

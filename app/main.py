@@ -1917,6 +1917,27 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
         deps.poll = 2.0
         return deps
 
+    @app.get("/api/projects/{pid}/episode/preflight")
+    async def episode_preflight(pid: str) -> dict:
+        """What a draft needs, checked before it starts (so nothing is missing half-way)."""
+        _project(pid)
+        checks = []
+        ready, why = fusion.ready()
+        checks.append({"id": "switches", "ok": ready, "text": "Resolve control and the Resolve MCP switch are on" if ready else why})
+        live = await asyncio.to_thread(resolve.probe) if ready else {"available": False, "reason": "not checked"}
+        checks.append({"id": "resolve", "ok": bool(live.get("available")),
+                       "text": f"{live.get('product', 'Resolve')} {live.get('version', '')} is open" if live.get("available")
+                       else (live.get("reason") or "Open DaVinci Resolve Studio")})
+        claude = [a for a in team_accounts() if a["provider"] in ("claude", "anthropic_api")]
+        checks.append({"id": "claude", "ok": bool(claude),
+                       "text": f"{len(claude)} Claude account(s) for the visuals" if claude
+                       else "Add a Claude login, Claude OAuth token or API key - the visuals need Claude (Resolve's MCP)"})
+        checks.append({"id": "pexels", "ok": bool(stock.key()), "optional": True,
+                       "text": "Pexels key set: footage can be used" if stock.key() else "No Pexels key: graphics only (optional)"})
+        checks.append({"id": "sfx", "ok": bool(sfx.key()), "optional": True,
+                       "text": "Epidemic Sound key set: sound effects" if sfx.key() else "No Epidemic Sound key: no sound effects (optional)"})
+        return {"checks": checks, "ready": all(c["ok"] for c in checks if not c.get("optional"))}
+
     @app.post("/api/projects/{pid}/episode")
     async def start_episode(pid: str, body: EpisodeIn):
         _project(pid)

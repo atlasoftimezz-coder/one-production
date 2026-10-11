@@ -12,6 +12,85 @@ phase log and the plan, checks the PC, runs the last gate and reports before tou
 
 ---
 
+## Checkpoint - Claude, 2026-10-11 (later): Competitors tab + draft episodes
+
+**Owner, 2026-10-11:**
+- "if we started on one editing for 3 mins means automatically should done voiceover, animation,
+  motiongraphics, SFX, and [clips] from pexels ... some times it saying needs you. first it should
+  draft completely for first level of review."
+- Then: "First i need a competitor tab ... it should see the video literally it should learn the
+  editing style ... for every script New animation should be created ... not always templated".
+- Choices on 2026-10-11:
+  - shot scripts run without cards in a draft, but only inside the episode's own project;
+  - the app renders the draft;
+  - SFX come from the owner's **Epidemic Sound API key**;
+  - a draft starts from a finished script.
+- Plan: `C:\Users\Work\.claude\plans\actually-current-woeking-model-deep-magpie.md` (outside the
+  repo). Its content is summarised here.
+
+**Built (commits `6424169`, `6801dd4`, `1969a36`, `fa7f9d4` + the UI commit):**
+- **Competitors tab** (`app/style_probe.py`, `app/styles.py`, `app/agent/style_learn.py`,
+  `web/competitors.js`; routes `/api/projects/{pid}/style`, `/api/styles[...]`).
+  - yt-dlp downloads a working copy (<=720p, <=20 min, deleted after measuring).
+  - ffmpeg + numpy measure cuts, picture and sound. One keyframe per shot plus 4x4 contact sheets
+    land in `files/style/<slug>/<video id>/`.
+  - One Claude turn LOOKS at the sheets and writes `profile.json`. The app adds the measured
+    numbers itself (medians by code).
+  - Profiles are listed in `data_dir/style/index.json`, usable from any project. "Use as
+    guidance" saves `styles.brief()` as an owner direction in the learning store.
+- **Draft episodes** (`spec["draft"]`, `spec["styles"]`).
+  - Failed gates and doubts become flags (stage `passed_with_notes`, `snapshot()["flags"]`).
+  - Visuals run in fresh turns:
+    - a plan turn: art direction from the profiles, the episode's own `motion.py`, shots paced to
+      the competitor's median shot length and hook cut rate, optional Pexels footage and
+      `sfx.json`, then `fusion_setup`;
+    - shot turns of `episode.BATCH` = 10;
+    - a check turn plus one master look.
+  - Resolve renders the draft (`resolve_runner.render_start` / `render_status`); then the video
+    gate and the package. The final master call writes a draft review report.
+  - Hard stops only:
+    - the script can't be read;
+    - the voiceover failed;
+    - Resolve is not ready;
+    - no Resolve project after the retries;
+    - the render failed.
+- **Card-free own shots**: `fusion.ShotScripts` + `ClaudeAgent.can_use_tool` +
+  `Team.prepare_sub`.
+  - A draft visuals turn runs a kit script without a card only when every `begin("shot-NNN")`
+    names this episode's shots.
+  - The script is completed with the kit, `motion.py` (marker `from ep_motion import *`) and a
+    guard that the episode's project is open.
+  - Each script that ran is saved to `work/<ep>/scripts/`. LUT/DCTL tools still ask;
+    `run_script_unsafe` stays blocked.
+- **Stock on the timeline**: a shot with `"stock"` + `"from"`.
+  - The plan checks the clip's length and nudges the cut to whole source frames
+    (`fusion.whole_source_frames`).
+  - The runner swaps the empty Fusion clip for the footage plus a Fusion comp.
+  - Kit v2 `S.media()`.
+- **SFX**: `app/sfx.py` + `sfx_tools`, key `OneProduction` / `epidemic`.
+  - Endpoints were taken from Epidemic's OpenAPI spec.
+  - Shared cache `data_dir/cache/sfx`; downloads are counted.
+  - `sfx.json` is timed and pre-gained by `Fusion.sfx_plan`, then placed on A3.
+- **UI**: draft switch (default on), style picker and a preflight list
+  (`/api/projects/{pid}/episode/preflight`) in the episode dialog; amber "check" stages and a
+  flag list in the panel.
+
+**Verified only with stand-ins - verify for real with the owner (ask first):**
+1. The Resolve calls for the render (`SetRenderSettings`, `AddRenderJob`,
+   `StartRendering([job])`, `GetRenderJobStatus`). They are taken from the 21.1 API stubs.
+2. The stock swap (`DeleteClips` + `AppendToTimeline` video at `recordFrame` with a source range,
+   then `AddFusionComp`).
+3. `AddTrack('audio', 'stereo')` and the A3 placement.
+
+Try these in "One Production (disposable)" first. Real tests not done yet:
+- the Epidemic key and its download URL host;
+- one competitor video through the Competitors tab;
+- a 30-s draft, then a 3-min draft.
+
+**Trap hit:** the PC crashed or lost power on 2026-10-11 and `.git/refs/heads/main` became 41 zero
+bytes ("fatal: your current branch appears to be broken"). Fixed with `git update-ref` to the last
+reflog commit; `git fsck` was clean. The broken file is kept in the session scratchpad.
+
 ## Checkpoint - Claude, 2026-10-10/11: /handoff run, Claude sign-in tokens
 
 - **/handoff on 2026-10-10** ran on the studio PC itself (all paths in §2 exist; tools match §6).
