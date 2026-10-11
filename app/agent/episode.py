@@ -58,9 +58,12 @@ class EpisodeConfig(TeamConfig):
 VISUALS_NOTE = ("You are the MOTION DESIGNER in One Production's episode run. You make every shot in DaVinci Resolve's "
                 "Fusion page by script (no drawings, no image models). Every episode gets its own art direction, chosen "
                 "so this script's ideas are as easy as possible to understand; never fall back to a generic template look. "
-                "Quality bar: 1080p 60 fps, eased motion with motion blur, clean type, nothing overlapping or cut off.")
+                "Quality bar: 1080p 60 fps, eased motion with motion blur, clean type, nothing overlapping or cut off. "
+                "Use only the file tools (Read, Glob, Grep, Write, Edit), the studio tools and Resolve's MCP - never run "
+                "shell commands: each one stops the run and waits for the owner.")
 PACKAGER_NOTE = ("You are the PACKAGER in One Production's episode run. You write what the upload needs: honest, "
-                 "specific titles and a description that matches the video, tags, and a thumbnail drawn as SVG.")
+                 "specific titles and a description that matches the video, tags, and a thumbnail drawn as SVG. "
+                 "Use only the file tools and the studio tools - never run shell commands (each one waits for the owner).")
 CLAUDE_ACCOUNTS = ["claude", "anthropic_api"]      # Resolve's MCP reaches Claude Code only (resolve_mcp.py)
 
 
