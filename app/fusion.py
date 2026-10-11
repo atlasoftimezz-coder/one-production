@@ -21,7 +21,7 @@ import time
 from pathlib import Path
 
 from . import fusion_kit, media
-from .animation import MIN_SHOT, anchor_times
+from .animation import MIN_SHOT, anchor_times, word_times, words
 from .fusion_kit import FONTS, KIT_VERSION
 from .resolve import at_least
 from .storage import NotFound
@@ -138,6 +138,36 @@ def frames_of(starts: list[float], seconds: float, fps: int = FPS) -> list[tuple
     return [(a, b - a) for a, b in zip(cuts, cuts[1:])]
 
 
+SFX_MAX = 300
+SFX_GAIN = (-40.0, 0.0)
+
+
+def check_sfx(spec) -> list[dict]:
+    """sfx.json: [{"file": "sfx/...", "shot": "shot-003" | "anchor": "words", "offset_s", "gain_db"}]."""
+    items = spec.get('sfx') if isinstance(spec, dict) else spec
+    if not isinstance(items, list):
+        raise FusionError('sfx.json must be a list (or {"sfx": [...]}).')
+    if len(items) > SFX_MAX:
+        raise FusionError(f'At most {SFX_MAX} sound effects.')
+    out = []
+    for n, s in enumerate(items, 1):
+        if not isinstance(s, dict):
+            raise FusionError(f'Sound effect {n} must be an object.')
+        f = str(s.get('file') or '').replace('\\', '/')
+        if not f.startswith('sfx/') or Path(f).suffix.lower() not in ('.mp3', '.wav'):
+            raise FusionError(f'Sound effect {n}: "file" must be a file in sfx/ (from sfx_fetch).')
+        if not (s.get('shot') or s.get('anchor')):
+            raise FusionError(f'Sound effect {n} needs "shot" (it plays on that cut) or "anchor" (words from the subtitles).')
+        try:
+            offset = float(s.get('offset_s') or 0)
+            gain = float(s.get('gain_db') if s.get('gain_db') is not None else -18)
+        except (TypeError, ValueError):
+            raise FusionError(f'Sound effect {n}: offset_s and gain_db must be numbers.') from None
+        out.append({'file': f, 'shot': str(s.get('shot') or '') or None, 'anchor': str(s.get('anchor') or '') or None,
+                    'offset_s': max(-5.0, min(5.0, offset)), 'gain_db': max(SFX_GAIN[0], min(SFX_GAIN[1], gain))})
+    return out
+
+
 def whole_source_frames(timed: list[tuple[int, int]], rates: list[float], fps: int = FPS) -> list[tuple[int, int]]:
     """A stock shot of a 30 fps clip on the 60 fps timeline needs an even frame count (25 fps: a multiple
     of 12, 24 fps: of 5), or Resolve can't fill it exactly. Such a shot's end cut moves to the nearest
@@ -179,8 +209,46 @@ class Fusion:
         except ValueError as exc:
             raise FusionError(f'{name} is not valid JSON: {exc}') from None
 
+    def sfx_plan(self, pid: str, sfx_name: str, ffmpeg: str, shots: list[dict], cues: list[dict], seconds: float,
+                 work: Path) -> list[dict]:
+        """Time every effect (on its shot's cut or at its words, plus offset) and pre-gain it to a 48 kHz wav,
+        so the timeline needs no level automation."""
+        timed = word_times(cues)
+        tokens = [w for w, _ in timed]
+        starts = {s['name']: s['start'] / FPS for s in shots}
+        out_dir = work / 'sfx'
+        if out_dir.exists():
+            shutil.rmtree(out_dir, ignore_errors=True)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        placed, problems = [], []
+        for n, s in enumerate(check_sfx(self._json(pid, sfx_name)), 1):
+            if s['shot']:
+                if s['shot'] not in starts:
+                    problems.append(f'sound effect {n}: there is no {s["shot"]}')
+                    continue
+                at = starts[s['shot']]
+            else:
+                target = words(s['anchor'])
+                hit = next((i for i in range(len(tokens) - len(target) + 1) if target and tokens[i:i + len(target)] == target), None)
+                if hit is None:
+                    problems.append(f'sound effect {n}: "{s["anchor"]}" is not in the subtitles')
+                    continue
+                at = timed[hit][1]
+            at = max(0.0, min(seconds - 0.05, at + s['offset_s']))
+            src = self._file(pid, s['file'])
+            dst = out_dir / f'{n:03d}.wav'
+            r = media.run([ffmpeg, '-y', '-hide_banner', '-v', 'error', '-i', str(src), '-af',
+                           f"volume={s['gain_db']}dB,alimiter=limit=0.89", '-ar', '48000', '-ac', '2', str(dst)], 120)
+            if r.returncode:
+                problems.append(f'sound effect {n}: {s["file"]} could not be read')
+                continue
+            placed.append({'path': str(dst), 'frame': int(round(at * FPS)), 'file': s['file']})
+        if problems:
+            raise FusionError('Sound effects: ' + '; '.join(problems[:8]))
+        return placed
+
     def plan(self, pid: str, shots_name: str, art_name: str, voiceover: str, subtitles: str, music: str = '',
-             name: str = 'Episode') -> dict:
+             name: str = 'Episode', sfx_name: str = '') -> dict:
         """Validate and time everything; the runner spec (absolute paths) - no Resolve involved."""
         art = check_art(self._json(pid, art_name))
         shots = check_shots(self._json(pid, shots_name))
@@ -217,18 +285,20 @@ class Fusion:
                                       f"{shot['from']:g} s, the shot needs {frames / FPS:.1f} s - start earlier or pick a longer clip.")
                 shot = {**shot, 'stock_path': str(clip)}
             out.append({'name': f'shot-{n:03d}', 'start': start, 'frames': frames, **shot})
+        sfx = self.sfx_plan(pid, sfx_name, ffmpeg, out, cues, seconds,
+                            (self.store.files_dir(pid) / shots_name).parent) if sfx_name else []
         stamp = time.strftime('%Y%m%d-%H%M%S')
         return {'project_name': f'{name[:60]} - One Production {stamp}', 'timeline': 'Episode', 'fps': FPS,
                 'width': WIDTH, 'height': HEIGHT, 'voiceover': str(vo),
-                'music': str(self._file(pid, music)) if music else '', 'style': art, 'shots': out,
+                'music': str(self._file(pid, music)) if music else '', 'style': art, 'shots': out, 'sfx': sfx,
                 'kit_version': KIT_VERSION, 'seconds': round(seconds, 3)}
 
     def setup(self, pid: str, shots_name: str, art_name: str, voiceover: str, subtitles: str, music: str = '',
-              name: str = 'Episode') -> dict:
+              name: str = 'Episode', sfx_name: str = '') -> dict:
         ok, why = self.ready()
         if not ok:
             raise FusionError(why)
-        spec = self.plan(pid, shots_name, art_name, voiceover, subtitles, music, name)
+        spec = self.plan(pid, shots_name, art_name, voiceover, subtitles, music, name, sfx_name)
         live = self.resolve.probe()
         if not live.get('available'):
             raise FusionError(live.get('reason') or 'Resolve did not answer.')
@@ -240,6 +310,7 @@ class Fusion:
             raise FusionError('Resolve: ' + (answer.get('error') or answer.get('reason') or 'the build failed'))
         state = {k: spec[k] for k in ('project_name', 'timeline', 'fps', 'width', 'height', 'seconds', 'kit_version')}
         state.update(shots=[{k: s[k] for k in SHOT_KEYS if k in s} for s in spec['shots']],
+                     sfx=[{'file': s['file'], 'frame': s['frame']} for s in spec['sfx']],
                      style=spec['style'], created=time.time(), shots_file=shots_name)
         state_name = str(Path(shots_name).with_name('fusion.json').as_posix())
         target = self.store.files_dir(pid) / state_name
@@ -249,7 +320,8 @@ class Fusion:
                 'seconds': spec['seconds'], 'shots': [{'name': s['name'], 'start_s': round(s['start'] / FPS, 2),
                                                       'seconds': round(s['frames'] / FPS, 2), 'idea': s['idea'],
                                                       **({'stock': s['stock']} if s.get('stock') else {})}
-                                                     for s in spec['shots']]}
+                                                     for s in spec['shots']],
+                'sfx': [{'file': s['file'], 'at_s': round(s['frame'] / FPS, 2)} for s in spec['sfx']]}
 
     def render_start(self, pid: str, state_name: str, out_name: str) -> dict:
         """Draft: Resolve renders the episode timeline to out_name (a project file, .mp4)."""

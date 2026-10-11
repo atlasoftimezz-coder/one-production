@@ -365,6 +365,7 @@ class EpisodeRun(Team):
         s, b = self.spec, self.base
         shot, hook = self.pace_target()
         music = f' music="{s["music"]}"' if s.get("music") else ""
+        sfx = getattr(self.deps, "sfx_ready", lambda: False)()
         lines = [f"Plan the visuals of the episode \"{s['name']}\" (DaVinci Resolve Fusion, 1080p, 60 fps). This turn plans "
                  "and sets up the project; other turns script the shots.",
                  f"Script: {s['script']}. Voiceover: {self.vo['wav']} ({self.vo.get('seconds', 0):.0f} s). Subtitles with the "
@@ -387,8 +388,14 @@ class EpisodeRun(Team):
                     "half of the shots), find a Pexels video with stock_search, download it with stock_fetch, and give that "
                     "shot \"stock\": \"stock/<file>.mp4\" and \"from\": seconds into the clip; the shot's graphics then go over "
                     "the footage." if getattr(self.deps, "stock_ready", lambda: False)() else ""),
-                 f"4. Call fusion_setup with shots=\"{b}/shots.json\" art=\"{b}/art.json\" voiceover=\"{self.vo['wav']}\" "
-                 f"subtitles=\"{self.vo['srt']}\"{music} name=\"{s['name']}\". Fix whatever it reports and call it again.",
+                 *([f"4. Sound effects, following the style's sound rules (which kinds, how often, on which cuts): "
+                    "sfx_search and sfx_fetch a small set (every download counts against the owner's Epidemic Sound plan - "
+                    f"reuse one effect for every similar moment), then write {b}/sfx.json [{{\"file\": \"sfx/...\", \"shot\": "
+                    "\"shot-NNN\" (plays on that cut) or \"anchor\": \"words from the subtitles\", \"offset_s\": 0, \"gain_db\": "
+                    "-18}]. Keep them under the voice: never more than one per cut."] if sfx else []),
+                 f"{5 if sfx else 4}. Call fusion_setup with shots=\"{b}/shots.json\" art=\"{b}/art.json\" voiceover=\"{self.vo['wav']}\" "
+                 f"subtitles=\"{self.vo['srt']}\"{music}" + (f" sfx=\"{b}/sfx.json\"" if sfx else "") +
+                 f" name=\"{s['name']}\". Fix whatever it reports and call it again.",
                  "Do not script any shot in this turn. Finish with the concept in one line and the number of shots."]
         if s.get("visual_notes"):
             lines += ["", "The owner's directions for the look: " + s["visual_notes"]]

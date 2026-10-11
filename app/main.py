@@ -35,6 +35,7 @@ from .editor_api import mount as mount_editor
 from .animation import Animation
 from .packaging import Packaging
 from .stock import Stock, StockError
+from .sfx import Sfx, SfxError
 from .fusion import Fusion
 from .insights import InsightError, Insights, parse_lessons
 from . import handoff
@@ -326,7 +327,8 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
                login_console: bool | None = None, voice_transport=None, agent_client=None,
                codex_transport=None, backup_delay: float = 120, backup_tick: float = 3600,
                restart=None, gpu_probe=None, tune_script: Path | None = None, relaunch=None,
-               updater: Updater | None = None, ytdlp=None, stock_transport=None, google_transport=None) -> FastAPI:
+               updater: Updater | None = None, ytdlp=None, stock_transport=None, google_transport=None,
+               sfx_transport=None) -> FastAPI:
     if login_console is None:
         login_console = settings.login_console
     token = token or secrets.token_urlsafe(32)
@@ -345,6 +347,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
     animation = Animation(store, settings.data_dir)
     packaging = Packaging(store, settings.data_dir, gates)
     stock = Stock(store, transport=stock_transport)
+    sfx = Sfx(store, settings.data_dir, transport=sfx_transport)
     fusion = Fusion(store, settings.data_dir, resolve, settings)
     insights = Insights(store, settings.data_dir, learning)
     runs = Runs()
@@ -980,7 +983,29 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
                          needs="Your own free Pexels API key (pexels.com/api). Storyblocks needs its paid key - not built yet.",
                          detail=("Pexels key " + st["key_hint"] + " - the AI can search and fetch free Pexels clips and photos."
                                  if st["key_set"] else "Add your free Pexels key to switch it on."))
+            if m["id"] == "sfx":                    # Epidemic Sound (owner, 2026-10-11)
+                st = sfx.status()
+                m.update(state="ready" if st["key_set"] else "off", key_set=st["key_set"], key_hint=st["key_hint"],
+                         downloads=st["downloads"], licence_note=st["licence_note"],
+                         detail=(f"Epidemic Sound key {st['key_hint']} - {st['downloads']} download(s) so far, "
+                                 f"{st['cached']} effect(s) kept for reuse." if st["key_set"]
+                                 else "Add your Epidemic Sound API key to switch it on."))
         return {"modules": mods, "gpu": gpu}
+
+    @app.get("/api/sfx")
+    def sfx_status() -> dict:
+        return sfx.status()
+
+    @app.post("/api/sfx/key")
+    async def sfx_set_key(body: StockKeyIn) -> dict:
+        try:
+            return await asyncio.to_thread(sfx.set_key, body.key)
+        except SfxError as e:
+            raise HTTPException(400, str(e))
+
+    @app.delete("/api/sfx/key")
+    def sfx_remove_key() -> dict:
+        return sfx.remove_key()
 
     @app.get("/api/mcp-servers")
     def mcp_list() -> dict:
@@ -1361,7 +1386,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
         # a fresh session (new project, or another account taking over) gets the recent chat
         prompt = message if sid else build_prompt(store.history(pid), message).replace(SYSTEM + "\n\n", "", 1)
         store.append_message(pid, "user", message)
-        studio = Studio(pid, store, voice_svc, voice_jobs, tuned=tuner.for_voice, knowledge=knowledge, learning=learning, resolve=resolve, gates=gates, editor=editor, animation=animation, packaging=packaging, stock=stock, fusion=fusion,
+        studio = Studio(pid, store, voice_svc, voice_jobs, tuned=tuner.for_voice, knowledge=knowledge, learning=learning, resolve=resolve, gates=gates, editor=editor, animation=animation, packaging=packaging, stock=stock, fusion=fusion, sfx=sfx,
                         on_job=lambda job: run.emit({"t": "voicejob", "id": job["id"], "source": job["source"],
                                                      "voice": job["voice"]}))
 
@@ -1509,7 +1534,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
             files, voices, presets, jobs = await studio_state(pid)
             instructions = (STUDIO_INSTRUCTIONS + "\n\n" + actions.context(files, voices, presets, jobs)
                             + "\n\n" + note + "\n\n" + learning.instructions(pid, prompt))
-            studio = Studio(pid, store, voice_svc, voice_jobs, tuned=tuner.for_voice, knowledge=knowledge, learning=learning, resolve=resolve, gates=gates, editor=editor, animation=animation, packaging=packaging, stock=stock, fusion=fusion,
+            studio = Studio(pid, store, voice_svc, voice_jobs, tuned=tuner.for_voice, knowledge=knowledge, learning=learning, resolve=resolve, gates=gates, editor=editor, animation=animation, packaging=packaging, stock=stock, fusion=fusion, sfx=sfx,
                             on_job=lambda job: sub.emit({"t": "voicejob", "id": job["id"], "source": job["source"],
                                                          "voice": job["voice"]}))
             eff = M.effort_for(acc["provider"], model, effort, acc.get("codex_models"))
@@ -1863,6 +1888,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
             return await gates.voice(pid, VoiceCheck(job_id=jid))
 
         deps.stock_ready = lambda: bool(stock.key())
+        deps.sfx_ready = lambda: bool(sfx.key())
         deps.script_stats = script_stats_of
         deps.voice_job = voice_job_of
         deps.start_voice = start_voice_job

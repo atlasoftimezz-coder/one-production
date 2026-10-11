@@ -54,6 +54,8 @@ files there directly. Besides your usual tools you have studio tools:
 - Stock footage (when stock_search is offered): free Pexels videos and photos. Search with specific
   words and stock_fetch the few you will use. When the video uses stock, add "Stock footage: Pexels"
   and the names in stock/CREDITS.md to the description.
+- Sound effects (when sfx_search is offered): Epidemic Sound with the owner's key. Every download
+  counts against their plan: reuse one effect for all similar moments and prefer cached ones.
 - Video editing (ffmpeg, the default): write an edit list JSON in this folder (see render_edit) whose
   visuals cover the voiceover, then render_edit (asks the owner first: minutes of CPU) and follow it
   with edit_status. Every render is checked by the video gate automatically.
@@ -78,8 +80,9 @@ class Studio:
 
     def __init__(self, pid: str, store, voice_svc, voice_jobs, on_job: Callable[[dict], None],
                  tuned: Callable[[str], dict | None] | None = None, knowledge=None, learning=None, resolve=None, gates=None, editor=None, animation=None, packaging=None,
-                 stock=None, fusion=None):
+                 stock=None, fusion=None, sfx=None):
         self.stock = stock
+        self.sfx = sfx
         self.fusion = fusion
         self.knowledge = knowledge
         self.resolve = resolve
@@ -99,10 +102,12 @@ class Studio:
         from .edit_tools import tools as edit_tools
         from .stock_tools import tools as stock_tools
         from .fusion_tools import tools as fusion_tools
+        from .sfx_tools import tools as sfx_tools
         return (knowledge_tools(self) if self.knowledge else []) + (learning_tools(self) if self.learning else []) + (
             resolve_tools(self) if self.resolve else []) + (gate_tools(self) if self.gates else []) + (
             edit_tools(self) if self.editor else []) + (
             stock_tools(self) if self.stock and self.stock.key() else []) + (   # only once the owner added a key
+            sfx_tools(self) if self.sfx and self.sfx.key() else []) + (
             fusion_tools(self) if self.fusion and self.fusion.ready()[0] else []) + [   # Resolve control + MCP on
             Tool("list_voices", "List the reference voices and delivery presets available for voiceovers.",
                  {"type": "object", "properties": {}}, self.list_voices),

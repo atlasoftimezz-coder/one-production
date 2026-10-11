@@ -240,12 +240,24 @@ def fusion_build(resolve, spec: dict) -> dict:
             comp.SetData('OneProduction.shot', {k: shot.get(k) for k in ('name', 'start', 'frames', 'idea', 'anchor', 'text')}
                          | ({'stock': shot['stock']} if shot.get('stock') else {}) | {'fps': fps})
             out['shots'].append({'name': shot['name'], 'start': item.GetStart() - base, 'frames': item.GetDuration()})
+        sfx = spec.get('sfx') or []
+        need_tracks = 3 if sfx else len(media)          # A1 voice, A2 music, A3 sound effects
+        while (timeline.GetTrackCount('audio') or 0) < need_tracks:
+            need(timeline.AddTrack('audio', 'stereo'), 'Could not add an audio track.')
         for track, path in enumerate(media, 1):
             clip = imported[media.index(path)]
             placed = pool.AppendToTimeline([{'mediaPoolItem': clip, 'trackIndex': track, 'recordFrame': base, 'mediaType': 2}]) or []
             need(placed, f'Could not place {path} on audio track {track}.')
+        if sfx:
+            paths = list(dict.fromkeys(s['path'] for s in sfx))
+            clips = dict(zip(paths, pool.ImportMedia(paths) or []))
+            need(len(clips) == len(paths), f'Imported {len(clips)} of {len(paths)} sound effects.')
+            for s in sfx:
+                placed = pool.AppendToTimeline([{'mediaPoolItem': clips[s['path']], 'trackIndex': 3, 'recordFrame': base + s['frame'],
+                                                 'mediaType': 2}]) or []
+                need(placed, f'Could not place the sound effect at frame {s["frame"]}.')
         need(pm.SaveProject(), 'Resolve could not save the project.')
-        out['audio'] = [(i.GetStart() - base, i.GetDuration()) for n in (1, 2) for i in (timeline.GetItemListInTrack('audio', n) or [])]
+        out['audio'] = [(i.GetStart() - base, i.GetDuration()) for n in (1, 2, 3) for i in (timeline.GetItemListInTrack('audio', n) or [])]
         out['timeline'] = timeline.GetName()
         out['passed'] = True
     except Failed as exc:

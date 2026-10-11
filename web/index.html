@@ -2995,7 +2995,24 @@ async function stepModules() {
       ${m.id === "stock" ? `<div class="opts">${m.key_set ? `<button class="opt" id="stockdel">Remove the Pexels key</button>`
           : `<input id="stockkey" type="password" autocomplete="off" placeholder="Pexels API key" style="flex:1;min-width:12em">
              <button class="opt" id="stocksave">Check and save</button>`}</div>` : ""}
+      ${m.id === "sfx" ? `${m.licence_note ? `<p class="wnote warn">${esc(m.licence_note)}</p>` : ""}<div class="opts">${m.key_set ? `<button class="opt" id="sfxdel">Remove the Epidemic Sound key</button>`
+          : `<input id="sfxkey" type="password" autocomplete="off" placeholder="Epidemic Sound API key (epidemic_live_...)" style="flex:1;min-width:12em">
+             <button class="opt" id="sfxsave">Check and save</button>`}</div>` : ""}
     </div>`).join("");
+  const ssave = $("#sfxsave"), sdel = $("#sfxdel");
+  if (ssave) ssave.onclick = async () => {
+    ssave.disabled = true;
+    try {
+      await api("/api/sfx/key", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: $("#sfxkey").value }) });
+      toast("Epidemic Sound key saved in Windows Credential Manager");
+    } catch (e) { toast(e.message, true); }
+    stepModules();
+  };
+  if (sdel) sdel.onclick = async () => {
+    try { await api("/api/sfx/key", { method: "DELETE" }); toast("Epidemic Sound key removed"); }
+    catch (e) { toast(e.message, true); }
+    stepModules();
+  };
   const save = $("#stocksave"), del = $("#stockdel");
   if (save) save.onclick = async () => {
     save.disabled = true;

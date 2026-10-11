@@ -14,7 +14,8 @@ def tools(studio):
         try:
             return json.dumps(await asyncio.to_thread(
                 fusion.setup, pid, str(args.get('shots') or ''), str(args.get('art') or ''), str(args.get('voiceover') or ''),
-                str(args.get('subtitles') or ''), str(args.get('music') or ''), str(args.get('name') or 'Episode')))
+                str(args.get('subtitles') or ''), str(args.get('music') or ''), str(args.get('name') or 'Episode'),
+                str(args.get('sfx') or '')))
         except FusionError as exc:
             return json.dumps({'error': str(exc)})
 
@@ -30,10 +31,13 @@ def tools(studio):
                  '"#RRGGBB"}, "fonts": {"heading", "body", "mono"}, "motion", "three_d"}; shots.json = {"shots": '
                  '[{"idea", "text"}, {"anchor": "exact words from the subtitles", "idea", "text"}, ...]}. Returns each '
                  'shot\'s name (shot-001 ...) and length, and the state file for fusion_stills. Then script every shot '
-                 'with mcp__davinci__run_script using the Fusion kit.',
+                 'with mcp__davinci__run_script using the Fusion kit. A shot may carry "stock": "stock/<file>.mp4" + '
+                 '"from" (seconds) to sit on Pexels footage. sfx = optional sfx.json [{"file": "sfx/...", "shot": '
+                 '"shot-003" (on that cut) or "anchor": "words", "offset_s", "gain_db" (default -18)}], placed on A3.',
                  {'type': 'object', 'properties': {
                      'shots': {'type': 'string'}, 'art': {'type': 'string'}, 'voiceover': {'type': 'string'},
-                     'subtitles': {'type': 'string'}, 'music': {'type': 'string'}, 'name': {'type': 'string'}},
+                     'subtitles': {'type': 'string'}, 'music': {'type': 'string'}, 'name': {'type': 'string'},
+                     'sfx': {'type': 'string'}},
                   'required': ['shots', 'art', 'voiceover', 'subtitles']}, setup),
             Tool('fusion_stills', 'Export review stills (middle and end of every shot) of the episode\'s Resolve timeline into '
                  '<folder>/stills/ and list shots that are still empty. state = the fusion.json fusion_setup wrote.',

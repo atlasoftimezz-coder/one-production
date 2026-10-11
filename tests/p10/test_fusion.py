@@ -45,10 +45,16 @@ class Item:
 class Timeline:
     def __init__(self, name, fps):
         self.name, self.fps, self.video, self.audio, self.playhead = name, fps, [], {}, 0
+        self.audio_tracks = 1                            # a new Resolve timeline has one audio track
 
     def GetName(self): return self.name
     def GetStartFrame(self): return 0
-    def GetTrackCount(self, kind): return 1 if kind == "video" else len(self.audio)
+    def GetTrackCount(self, kind): return 1 if kind == "video" else self.audio_tracks
+
+    def AddTrack(self, kind, sub=None):
+        assert kind == "audio"
+        self.audio_tracks += 1
+        return True
 
     def GetItemListInTrack(self, kind, n):
         return sorted(self.video, key=lambda i: i.start) if kind == "video" else list(self.audio.get(n, []))
@@ -119,7 +125,7 @@ class Pool:
                 it.source = (info["startFrame"], info["endFrame"])
                 tl.video.append(it)
             else:
-                assert info["mediaType"] == 2
+                assert info["mediaType"] == 2 and info["trackIndex"] <= tl.audio_tracks, "no such audio track"
                 it = Item(info["recordFrame"], 1440, Path(info["mediaPoolItem"].path).name)
                 tl.audio.setdefault(info["trackIndex"], []).append(it)
             out.append(it)
@@ -247,6 +253,18 @@ def test_a_stock_shot_puts_the_clip_at_its_frames_with_a_comp_on_top(tmp_path):
     st = R.fusion_stills(res, {"project_name": spec["project_name"], "fps": 60, "out_dir": str(out_dir),
                                "shots": [{"name": "shot-002", "at": [5], "stock": True}, {"name": "shot-003", "at": [5]}]})
     assert st["empty"] == ["shot-003"]
+
+
+def test_sound_effects_land_on_a3_at_their_frames(tmp_path):
+    a = tmp_path / "001.wav"; a.write_bytes(b"x")
+    b = tmp_path / "002.wav"; b.write_bytes(b"x")
+    res = Resolve()
+    out = R.fusion_build(res, build_spec(tmp_path, sfx=[{"path": str(a), "frame": 90}, {"path": str(b), "frame": 217},
+                                                       {"path": str(a), "frame": 330}]))
+    assert out["passed"], out
+    tl = res.manager.current.current
+    assert tl.audio_tracks == 3 and [i.start for i in tl.audio[3]] == [90, 217, 330]
+    assert [i.start for i in tl.audio[1]] == [0] and [i.start for i in tl.audio[2]] == [0]        # voice A1, music A2
 
 
 def test_stock_shots_get_whole_source_frames_without_gaps():

@@ -31,6 +31,9 @@ STUDIO_GATED = {"make_voiceover", "render_edit"}
 # Pexels with the owner's own free key (owner, 2026-10-06): one fixed site, files only into the
 # project's stock/ folder, the key never shown to the agent - so no card, unlike open web access.
 STUDIO_STOCK = {"stock_search", "stock_fetch"}
+# Epidemic Sound with the owner's own key (owner, 2026-10-11): the same reasoning - one fixed site,
+# files only into the project's sfx/ folder, the key never shown to the agent.
+STUDIO_SFX = {"sfx_search", "sfx_fetch"}
 # The fixed runner builds a NEW Resolve project for an episode / exports stills; only offered while the
 # owner has Resolve control and the Resolve MCP switched on.
 STUDIO_FUSION = {"fusion_setup", "fusion_stills"}
@@ -42,7 +45,7 @@ def studio_name(tool: str) -> str | None:
     """'mcp__studio__make_voiceover' (Claude) or 'make_voiceover' (Codex dynamic tool) -> name."""
     if tool.startswith("mcp__studio__"):
         return tool[len("mcp__studio__"):]
-    return tool if tool in STUDIO_LOOK | STUDIO_GATED | STUDIO_MEMORY | STUDIO_PLAN | STUDIO_DRAW | STUDIO_STOCK | STUDIO_FUSION else None
+    return tool if tool in STUDIO_LOOK | STUDIO_GATED | STUDIO_MEMORY | STUDIO_PLAN | STUDIO_DRAW | STUDIO_STOCK | STUDIO_SFX | STUDIO_FUSION else None
 
 
 def inside(path: str | None, root: Path) -> bool:
@@ -88,6 +91,8 @@ def decide(tool: str, tool_input: dict, root: Path) -> tuple[str, str]:
         return "allow", "builds a new Resolve project for the episode or exports review stills (fixed One Production helper)"
     if s in STUDIO_STOCK:
         return "allow", "free Pexels stock with your key; files go only into the project's stock folder"
+    if s in STUDIO_SFX:
+        return "allow", "Epidemic Sound effects with your key; files go only into the project's sfx folder"
     if s in STUDIO_GATED:
         return "gate", "uses the GPU" if s == "make_voiceover" else "uses the processor for minutes"
     if tool in HARMLESS:
