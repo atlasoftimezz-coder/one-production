@@ -382,7 +382,11 @@ class EpisodeRun(Team):
                  "words exactly as in the subtitles\", \"idea\": \"what the shot shows and how it moves\", \"text\"}}]}. The "
                  f"first shot starts at 0; every other shot starts at its anchor words. Pace: shots of about {shot:g} s"
                  + (f", with about {hook:g} cuts per minute in the first 30 s" if hook else "") +
-                 " (the competitor's measured rhythm), and always a new shot when the narration changes subject.",
+                 " (the competitor's measured rhythm), and always a new shot when the narration changes subject."
+                 + (" Where real footage explains better than graphics (follow the style's share of footage; at most about "
+                    "half of the shots), find a Pexels video with stock_search, download it with stock_fetch, and give that "
+                    "shot \"stock\": \"stock/<file>.mp4\" and \"from\": seconds into the clip; the shot's graphics then go over "
+                    "the footage." if getattr(self.deps, "stock_ready", lambda: False)() else ""),
                  f"4. Call fusion_setup with shots=\"{b}/shots.json\" art=\"{b}/art.json\" voiceover=\"{self.vo['wav']}\" "
                  f"subtitles=\"{self.vo['srt']}\"{music} name=\"{s['name']}\". Fix whatever it reports and call it again.",
                  "Do not script any shot in this turn. Finish with the concept in one line and the number of shots."]
@@ -423,6 +427,7 @@ class EpisodeRun(Team):
         b = self.base
         use_motion = not self.motion_ok()
         rows = [f"- {s['name']} ({s['frames'] / 60:.1f} s): {s['idea']}" + (f" | on screen: {s['text']}" if s.get("text") else "")
+                + (f" | footage: {s['stock']} - build over it: S.over(S.media(), layer)" if s.get("stock") else "")
                 for s in shots]
         lines = [f"Build these shots of the episode \"{self.spec['name']}\" in its Resolve project. Read {b}/art.json"
                  + (f" and {b}/motion.py (this episode's own helpers)" if use_motion else "") + " first"

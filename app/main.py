@@ -1882,6 +1882,8 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
             return out
 
         deps.style_profiles = style_profiles_of
+        deps.render_start = lambda state, name: fusion.render_start(pid, state, name)
+        deps.render_status = lambda state, job: fusion.render_status(pid, state, job)
         deps.fusion_ready = fusion.ready
         deps.fusion_stills = lambda state: fusion.stills(pid, state)
         deps.video_gate = video_gate_of

@@ -151,3 +151,13 @@ def test_no_style_chosen_falls_back_to_the_script_alone(tmp_path, setup):
     snap = run(make(tmp_path, store, pid, deps, styles=()).go())
     plan = next(c[4] for c in deps.calls if c[0] == "worker")
     assert snap["state"] == "done" and "No competitor style was chosen" in plan and "shots of about 3.5 s" in plan
+    assert "stock_search" not in plan                                       # no Pexels key: no footage
+
+
+def test_with_a_pexels_key_the_plan_may_use_footage(tmp_path, setup):
+    store, pid = setup
+    deps = Deps(tmp_path, store, pid)
+    deps.stock_ready = lambda: True
+    run(make(tmp_path, store, pid, deps).go())
+    plan = next(c[4] for c in deps.calls if c[0] == "worker")
+    assert "stock_fetch" in plan and '"from": seconds into the clip' in plan

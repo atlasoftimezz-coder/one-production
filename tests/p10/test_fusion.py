@@ -5,6 +5,7 @@ playhead (splitting an item it lands in), DeleteClips(ripple=False) leaves gaps,
 writes the viewer frame, comps keep SetData values."""
 import json
 import re
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -13,7 +14,7 @@ import pytest
 from app import resolve_runner as R
 from app.fusion import Fusion, FusionError, check_art, check_shots, frames_of
 from app.storage import Store
-from tests.p10.media_fixtures import master, needs_ffmpeg, srt, voice
+from tests.p10.media_fixtures import master, needs_ffmpeg, srt, video, voice
 
 GEN = 300
 
@@ -37,6 +38,8 @@ class Item:
     def GetName(self): return self.name
     def SetName(self, n): self.name = n; return True
     def GetFusionCompByIndex(self, i): return self.comp if i == 1 else None
+    def GetClipProperty(self, k): return "30" if k == "FPS" else None      # a 30 fps Pexels clip in the media pool
+    def AddFusionComp(self): return self.comp
 
 
 class Timeline:
@@ -108,9 +111,17 @@ class Pool:
     def AppendToTimeline(self, infos):
         out = []
         for info in infos:
-            assert info["mediaType"] == 2
-            it = Item(info["recordFrame"], 1440, Path(info["mediaPoolItem"].path).name)
-            self.project.current.audio.setdefault(info["trackIndex"], []).append(it)
+            tl = self.project.current
+            if info["mediaType"] == 1:                 # video: the source range conformed to the timeline's rate
+                src = float(info["mediaPoolItem"].GetClipProperty("FPS"))
+                dur = round((info["endFrame"] - info["startFrame"] + 1) * tl.fps / src)
+                it = Item(info["recordFrame"], dur, Path(info["mediaPoolItem"].path).name, info["mediaPoolItem"].path)
+                it.source = (info["startFrame"], info["endFrame"])
+                tl.video.append(it)
+            else:
+                assert info["mediaType"] == 2
+                it = Item(info["recordFrame"], 1440, Path(info["mediaPoolItem"].path).name)
+                tl.audio.setdefault(info["trackIndex"], []).append(it)
             out.append(it)
         return out
 
@@ -218,6 +229,92 @@ def test_fusion_stills_exports_built_shots_and_names_the_empty_ones(tmp_path):
     assert all(Path(p).name.startswith(("shot-002_f", "shot-004_f")) for p in out["stills"])
 
 
+def test_a_stock_shot_puts_the_clip_at_its_frames_with_a_comp_on_top(tmp_path):
+    clip = tmp_path / "pexels-video-7.mp4"; clip.write_bytes(b"x")
+    spec = build_spec(tmp_path)
+    spec["shots"][1].update(frames=128, stock="stock/pexels-video-7.mp4", stock_path=str(clip), **{"from": 2.0})
+    spec["shots"][2].update(start=218, frames=112)                         # (the plan made the stock shot even)
+    res = Resolve()
+    out = R.fusion_build(res, spec)
+    assert out["passed"], out
+    assert out["shots"][1] == {"name": "shot-002", "start": 90, "frames": 128}
+    items = res.manager.current.current.GetItemListInTrack("video", 1)
+    assert len(items) == 4 and items[1].path == str(clip) and items[1].name == "shot-002"
+    assert items[1].source == (60, 60 + 64 - 1)                            # 2 s into a 30 fps clip, 128 frames at 60 fps
+    assert items[1].comp.data["OneProduction.shot"]["stock"] == "stock/pexels-video-7.mp4"
+    # stills: a stock shot with nothing on top still shows its footage, so it is not "empty"
+    out_dir = tmp_path / "st"; out_dir.mkdir()
+    st = R.fusion_stills(res, {"project_name": spec["project_name"], "fps": 60, "out_dir": str(out_dir),
+                               "shots": [{"name": "shot-002", "at": [5], "stock": True}, {"name": "shot-003", "at": [5]}]})
+    assert st["empty"] == ["shot-003"]
+
+
+def test_stock_shots_get_whole_source_frames_without_gaps():
+    from app.fusion import whole_source_frames
+    timed = [(0, 90), (90, 127), (217, 113), (330, 70)]
+    out = whole_source_frames(timed, [0.0, 30.0, 25.0, 30.0])
+    assert out == [(0, 90), (90, 128), (218, 108), (326, 74)]              # 30 fps: even; 25 fps: x12; the last cut stays
+    assert sum(f for _, f in out) == 400 and all(a + f == b for (a, f), (b, _) in zip(out, out[1:]))
+    assert whole_source_frames(timed, [0.0, 29.97, 0.0, 0.0]) == timed     # non-integer rates conform as they are
+
+
+def test_stock_shot_rules():
+    shots = check_shots({"shots": [{"idea": "a", "stock": "stock/pexels-video-1.mp4", "from": "1.5"}]})
+    assert shots[0]["stock"] == "stock/pexels-video-1.mp4" and shots[0]["from"] == 1.5
+    for bad in ("work/x.mp4", "stock/pexels-photo-2.jpg", "../stock/a.mp4"):
+        with pytest.raises(FusionError, match="stock"):
+            check_shots({"shots": [{"idea": "a", "stock": bad}]})
+
+
+class RenderProject(Project):
+    """Render queue as in the Resolve 21.1 stubs: AddRenderJob -> id, StartRendering([ids]), status dicts."""
+    def __init__(self, name):
+        super().__init__(name)
+        self.format, self.render, self.jobs, self.started = None, None, {}, []
+
+    def SetCurrentRenderFormatAndCodec(self, fmt, codec): self.format = (fmt, codec); return True
+    def SetRenderSettings(self, s): self.render = dict(s); return True
+
+    def AddRenderJob(self):
+        jid = f"job-{len(self.jobs) + 1}"
+        self.jobs[jid] = {"JobStatus": "Ready", "CompletionPercentage": 0}
+        return jid
+
+    def StartRendering(self, ids, interactive=False):
+        assert isinstance(ids, list)
+        self.started += ids
+        for j in ids:
+            self.jobs[j] = {"JobStatus": "Rendering", "CompletionPercentage": 40}
+        return True
+
+    def GetRenderJobStatus(self, jid): return self.jobs[jid]
+
+
+def test_render_queues_only_the_episode_timeline_and_reports_progress(tmp_path, monkeypatch):
+    monkeypatch.setattr(sys.modules[__name__], "Project", RenderProject)
+    res = Resolve()
+    R.fusion_build(res, build_spec(tmp_path))
+    ep = res.manager.current
+    res.manager.current = Project("Owner project")                     # the owner had another project open
+    spec = {"project_name": "Ep 1 - One Production test", "timeline": "Episode", "fps": 60, "width": 1920, "height": 1080,
+            "target_dir": str(tmp_path / "work"), "name": "draft-1"}
+    out = R.render_start(res, spec)
+    assert out["passed"] and out["job"] == "job-1" and res.manager.current is ep and res.page == "deliver"
+    assert ep.format == ("mp4", "H264") and ep.started == ["job-1"]
+    assert ep.render["TargetDir"] == spec["target_dir"] and ep.render["CustomName"] == "draft-1"
+    assert ep.render["FrameRate"] == 60.0 and ep.render["SelectAllFrames"] and ep.render["ExportAudio"]
+    st = R.render_status(res, {"project_name": spec["project_name"], "job": "job-1"})
+    assert st["passed"] and st["progress"] == 40 and not st["done"] and not st["failed"]
+    ep.jobs["job-1"] = {"JobStatus": "Failed", "Error": "Disk full"}
+    st = R.render_status(res, {"project_name": spec["project_name"], "job": "job-1"})
+    assert st["failed"] and st["error"] == "Disk full"
+    ep.jobs["job-1"] = {"JobStatus": "Complete", "CompletionPercentage": 100}
+    assert R.render_status(res, {"project_name": spec["project_name"], "job": "job-1"})["done"]
+    res.manager.current = Project("Owner project")
+    gone = R.render_status(res, {"project_name": spec["project_name"], "job": "job-1"})
+    assert not gone["passed"] and "no longer open" in gone["error"]
+
+
 # ---------------------------------------------------------------- the service
 ART = {"concept": "c", "palette": {"bg": "#111111", "ink": "#EEEEEE", "accent": "#FF0000"}, "fonts": {"heading": "Inter", "body": "Inter"}}
 
@@ -287,3 +384,15 @@ def test_setup_and_stills_through_the_service(tmp_path):
                                                                        {"anchor": "and fast", "idea": "c"}]}), encoding="utf-8")
     with pytest.raises(FusionError, match="under 0.4 s"):
         svc.plan(pid, "work/shots.json", "work/art.json", "vo.wav", "vo.srt")
+    # a stock clip must be long enough for its shot after "from"
+    (files / "stock").mkdir()
+    video(files / "stock" / "pexels-video-9.mp4", files / "vo.wav", 4.5)
+    (files / "work" / "shots.json").write_text(json.dumps({"shots": [{"idea": "a", "stock": "stock/pexels-video-9.mp4", "from": 1},
+                                                                       {"anchor": "the dollar floated", "idea": "b"}]}), encoding="utf-8")
+    srt(files / "vo.srt", 8, [(0, 4, "first the gold standard ended"), (4, 8, "then the dollar floated freely")])
+    with pytest.raises(FusionError, match="has only 3.5 s"):
+        svc.plan(pid, "work/shots.json", "work/art.json", "vo.wav", "vo.srt")
+    (files / "work" / "shots.json").write_text(json.dumps({"shots": [{"idea": "a", "stock": "stock/pexels-video-9.mp4"},
+                                                                       {"anchor": "then the dollar", "idea": "b"}]}), encoding="utf-8")
+    plan = svc.plan(pid, "work/shots.json", "work/art.json", "vo.wav", "vo.srt")
+    assert plan["shots"][0]["stock_path"].endswith("pexels-video-9.mp4") and plan["shots"][0]["frames"] % 2 == 0

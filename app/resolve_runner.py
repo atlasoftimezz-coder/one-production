@@ -162,6 +162,24 @@ def open_episode(resolve, spec: dict):
     return pm, current, timeline
 
 
+def place_stock(timeline, pool, item, clip, shot: dict, base: int, fps: float):
+    """Swap a shot's empty Fusion clip for the stock clip at the same frames (video only), then give it a
+    Fusion comp, so the AI's graphics go on top of MediaIn1. The source range is converted from the
+    timeline's 60 fps to the clip's own rate (Resolve conforms it)."""
+    src_fps = float(clip.GetClipProperty('FPS') or fps)
+    first = int(round(float(shot.get('from') or 0) * src_fps))
+    last = first + max(1, int(round(shot['frames'] * src_fps / fps))) - 1
+    need(timeline.DeleteClips([item], False), f'Could not clear {shot["name"]} for its stock clip.')
+    placed = pool.AppendToTimeline([{'mediaPoolItem': clip, 'startFrame': first, 'endFrame': last, 'mediaType': 1,
+                                     'trackIndex': 1, 'recordFrame': base + shot['start']}]) or []
+    new = need(placed and placed[0], f'Resolve would not place the stock clip of {shot["name"]}.')
+    need(new.GetStart() - base == shot['start'] and abs(new.GetDuration() - shot['frames']) <= 1,
+         f'The stock clip of {shot["name"]} landed at {new.GetStart() - base}+{new.GetDuration()}, '
+         f'expected {shot["start"]}+{shot["frames"]}.')
+    need(new.GetFusionCompByIndex(1) or new.AddFusionComp(), f'Could not add a Fusion comp to {shot["name"]}.')
+    return new
+
+
 def fusion_build(resolve, spec: dict) -> dict:
     """A NEW project for the episode: 60 fps timeline, one Fusion composition per shot cut exactly at
     its frames (ripple inserts at each start, leftovers deleted), the voiceover on A1, music on A2,
@@ -207,15 +225,20 @@ def fusion_build(resolve, spec: dict) -> dict:
             need(timeline.DeleteClips(leftovers, False), 'Could not remove the pieces past the last shot.')
         items = sorted(timeline.GetItemListInTrack('video', 1) or [], key=lambda i: i.GetStart())
         need(len(items) == len(shots), f'Expected {len(shots)} shot clips, Resolve has {len(items)}.')
+        stock_paths = list(dict.fromkeys(s['stock_path'] for s in shots if s.get('stock_path')))
+        stock = dict(zip(stock_paths, pool.ImportMedia(stock_paths) or [])) if stock_paths else {}
+        need(len(stock) == len(stock_paths), f'Imported {len(stock)} of {len(stock_paths)} stock clips.')
         for item, shot in zip(items, shots):
             need(item.GetStart() - base == shot['start'] and item.GetDuration() == shot['frames'],
                  f'{shot["name"]} landed at {item.GetStart() - base}+{item.GetDuration()}, '
                  f'expected {shot["start"]}+{shot["frames"]}.')
+            if shot.get('stock_path'):
+                item = place_stock(timeline, pool, item, stock[shot['stock_path']], shot, base, fps)
             need(item.SetName(shot['name']), f'Could not name {shot["name"]}.')
             comp = need(item.GetFusionCompByIndex(1), f'{shot["name"]} has no Fusion composition.')
             comp.SetData('OneProduction.style', spec.get('style') or {})
             comp.SetData('OneProduction.shot', {k: shot.get(k) for k in ('name', 'start', 'frames', 'idea', 'anchor', 'text')}
-                         | {'fps': fps})
+                         | ({'stock': shot['stock']} if shot.get('stock') else {}) | {'fps': fps})
             out['shots'].append({'name': shot['name'], 'start': item.GetStart() - base, 'frames': item.GetDuration()})
         for track, path in enumerate(media, 1):
             clip = imported[media.index(path)]
@@ -249,7 +272,7 @@ def fusion_stills(resolve, spec: dict) -> dict:
             comp = item.GetFusionCompByIndex(1)
             tools = len(comp.GetToolList(False) or {}) if comp else 0
             out['shots'].append({'name': shot['name'], 'tools': tools})
-            if tools <= 2:                  # only MediaOut (+ MediaIn): nothing was built
+            if tools <= 2 and not shot.get('stock'):   # only MediaOut (+ MediaIn): nothing was built (stock shows its clip)
                 out['empty'].append(shot['name'])
                 continue
             for f in shot['at']:
@@ -266,7 +289,50 @@ def fusion_stills(resolve, spec: dict) -> dict:
     return out
 
 
-ACTIONS = {'execute': execute, 'fusion_build': fusion_build, 'fusion_stills': fusion_stills}
+def render_start(resolve, spec: dict) -> dict:
+    """Draft episodes (owner, 2026-10-11: the app renders the draft): queue the episode's own timeline as an
+    H.264 mp4 into the project folder and start it. Only the episode project is opened; nothing else is
+    queued or changed. Calls checked against the Resolve 21.1 scripting stubs (StartRendering takes a list)."""
+    out = {'passed': False}
+    try:
+        pm, project, timeline = open_episode(resolve, spec)
+        resolve.OpenPage('deliver')
+        need(project.SetCurrentRenderFormatAndCodec('mp4', 'H264'), 'Resolve refused the mp4 / H.264 render format.')
+        need(project.SetRenderSettings({'SelectAllFrames': True, 'TargetDir': spec['target_dir'], 'CustomName': spec['name'],
+                                        'FormatWidth': int(spec.get('width', 1920)), 'FormatHeight': int(spec.get('height', 1080)),
+                                        'FrameRate': float(spec.get('fps', 60)), 'ExportVideo': True, 'ExportAudio': True,
+                                        'VideoQuality': 'High', 'AudioCodec': 'aac', 'AudioSampleRate': 48000}),
+             'Resolve refused the render settings.')
+        job = need(project.AddRenderJob(), 'Resolve could not add the render job.')
+        need(project.StartRendering([job]), 'Resolve could not start the render.')
+        out.update(passed=True, job=job)
+    except Failed as exc:
+        out['error'] = str(exc)
+    except Exception as exc:                 # noqa: BLE001
+        out['error'] = f'Resolve raised {type(exc).__name__}: {exc}'
+    return out
+
+
+def render_status(resolve, spec: dict) -> dict:
+    out = {'passed': False}
+    try:
+        pm = resolve.GetProjectManager()
+        project = pm.GetCurrentProject()
+        need(project and project.GetName() == spec['project_name'], 'The episode project is no longer open in Resolve.')
+        st = project.GetRenderJobStatus(spec['job']) or {}
+        state = st.get('JobStatus', '')
+        out.update(passed=True, status=state, progress=int(st.get('CompletionPercentage') or 0),
+                   done=state == 'Complete', failed=state in ('Failed', 'Cancelled', 'Background Render Cancelled'),
+                   error=st.get('Error') or (f'the render was {state.lower()}' if state in ('Cancelled', 'Background Render Cancelled') else ''))
+    except Failed as exc:
+        out['error'] = str(exc)
+    except Exception as exc:                 # noqa: BLE001
+        out['error'] = f'Resolve raised {type(exc).__name__}: {exc}'
+    return out
+
+
+ACTIONS = {'execute': execute, 'fusion_build': fusion_build, 'fusion_stills': fusion_stills,
+           'render_start': render_start, 'render_status': render_status}
 
 
 def main(connector=connect) -> int:

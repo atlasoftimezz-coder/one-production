@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import re
 
-KIT_VERSION = 1
+KIT_VERSION = 2
 MARKER = re.compile(r"^[ \t]*from[ \t]+op_kit[ \t]+import[ \t]+\*[ \t]*$", re.M)
 FONTS = ("Inter", "Bahnschrift", "Cambria", "Sitka", "Consolas", "Segoe UI", "Segoe UI Emoji", "Segoe Fluent Icons")
 
@@ -58,6 +58,9 @@ class Shot:
         return (self.style.get("fonts") or {}).get(role) or "Inter"
     def sec(self, s):
         return int(round(float(s) * self.fps))
+    def media(self):
+        """A stock shot's footage (MediaIn1) to build on; None for a pure motion-graphics shot."""
+        return self.comp.FindToolByID("MediaIn") if self.info.get("stock") else None
 
     # -- raw tools
     def add(self, tool_id, **inputs):
@@ -331,6 +334,8 @@ the fixed kit code when the owner approves the script):
   S = begin("shot-007")          opens that shot's comp, clears an earlier attempt; S.frames, S.fps (60),
                                  S.last, S.sec(seconds) -> frames, S.style (the art direction), S.info (the brief)
   S.c("accent") / S.font("heading")   colors and fonts from art.json
+  S.media()                      a stock shot's footage (its Fusion MediaIn) - put graphics OVER it with S.over(S.media(),
+                                 layer); None on pure motion-graphics shots
   Layers: S.solid(color, alpha), S.gradient(tl, tr, bl, br), S.clear(), S.text(s, x, y, size, color, role, style,
     align), S.icon(name, x, y, size, color), S.masked(color, mask), S.over(back, front, fade=(f0, f1), mode, blend),
     S.grain(layer, 0.04), S.vignette(layer, color, 0.35), S.glow(layer, 0.8, 12), S.dashed(x0, x1, y, color)

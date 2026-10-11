@@ -31,6 +31,8 @@ MIN_VERSION = '21.0'                 # Fusion compositions on the timeline by sc
 HEX = re.compile(r'^#[0-9A-Fa-f]{6}$')
 MAX_SHOTS = 600
 NEEDED_COLORS = ('bg', 'ink', 'accent')
+STOCK_VIDEO = ('.mp4', '.mov', '.m4v')
+SHOT_KEYS = ('name', 'start', 'frames', 'idea', 'anchor', 'text', 'stock', 'from')
 
 
 class FusionError(Exception):
@@ -115,8 +117,18 @@ def check_shots(spec: dict) -> list[dict]:
             raise FusionError(f'Shot {n} needs an "idea": what it shows and how it moves.')
         if n > 1 and not str(s.get('anchor') or '').strip():
             raise FusionError(f'Shot {n} needs "anchor" words (only the first shot starts at 0 without one).')
-        out.append({'idea': str(s['idea'])[:600], 'anchor': str(s.get('anchor') or '')[:200] or None,
-                    'text': str(s.get('text') or '')[:400]})
+        item = {'idea': str(s['idea'])[:600], 'anchor': str(s.get('anchor') or '')[:200] or None,
+                'text': str(s.get('text') or '')[:400]}
+        if s.get('stock'):                          # a Pexels clip under this shot's graphics (2026-10-11)
+            stock = str(s['stock']).replace('\\', '/')
+            if not stock.startswith('stock/') or Path(stock).suffix.lower() not in STOCK_VIDEO:
+                raise FusionError(f'Shot {n}: "stock" must be a video fetched into stock/ (.mp4/.mov), not {stock[:60]}.')
+            try:
+                start = float(s.get('from') or 0)
+            except (TypeError, ValueError):
+                raise FusionError(f'Shot {n}: "from" must be seconds into the clip.') from None
+            item.update(stock=stock, **{'from': max(0.0, start)})
+        out.append(item)
     return out
 
 
@@ -124,6 +136,24 @@ def frames_of(starts: list[float], seconds: float, fps: int = FPS) -> list[tuple
     """Shot start seconds + voiceover length -> (start frame, frames) with no gaps or overlaps."""
     cuts = [int(round(s * fps)) for s in starts] + [int(round(seconds * fps))]
     return [(a, b - a) for a, b in zip(cuts, cuts[1:])]
+
+
+def whole_source_frames(timed: list[tuple[int, int]], rates: list[float], fps: int = FPS) -> list[tuple[int, int]]:
+    """A stock shot of a 30 fps clip on the 60 fps timeline needs an even frame count (25 fps: a multiple
+    of 12, 24 fps: of 5), or Resolve can't fill it exactly. Such a shot's end cut moves to the nearest
+    allowed frame and the next shot starts there - a few milliseconds, never a gap or overlap."""
+    import math
+    starts = [s for s, _ in timed] + [timed[-1][0] + timed[-1][1]]
+    for i, rate in enumerate(rates):
+        whole = round(rate)
+        if not rate or abs(rate - whole) > 0.01 or i == len(rates) - 1:
+            continue                                  # 29.97 and the like conform anyway; the last cut is the voiceover's end
+        step = fps // math.gcd(fps, whole)
+        frames = starts[i + 1] - starts[i]
+        fixed = max(step, int(round(frames / step)) * step)
+        if starts[i] + fixed < starts[i + 2]:         # never swallow the next shot
+            starts[i + 1] = starts[i] + fixed
+    return [(a, b - a) for a, b in zip(starts, starts[1:])]
 
 
 class Fusion:
@@ -167,8 +197,25 @@ class Fusion:
         short = [n + 1 for n, (_, f) in enumerate(timed) if f < MIN_SHOT * FPS]
         if short:
             raise FusionError(f'Shots {short[:8]} would last under {MIN_SHOT} s; move their anchors apart.')
+        clips = {}
+        for shot in shots:
+            if shot.get('stock') and shot['stock'] not in clips:
+                clip = self._file(pid, shot['stock'])
+                info = media.probe(ffmpeg, clip)
+                vs = next((s for s in info.get('streams', []) if s.get('codec_type') == 'video'), {})
+                num, _, den = str(vs.get('avg_frame_rate') or '0/1').partition('/')
+                rate = float(num) / float(den or 1) if float(den or 1) else 0.0
+                clips[shot['stock']] = (clip, float(info['format']['duration']), rate)
+        timed = whole_source_frames(timed, [clips[s['stock']][2] if s.get('stock') else 0.0 for s in shots])
         out = []
         for n, (shot, (start, frames)) in enumerate(zip(shots, timed), 1):
+            if shot.get('stock'):
+                clip, length, _ = clips[shot['stock']]
+                have = length - shot['from']
+                if have < frames / FPS - 0.02:
+                    raise FusionError(f"shot-{n:03d}: {shot['stock']} has only {max(0, have):.1f} s after \"from\" "
+                                      f"{shot['from']:g} s, the shot needs {frames / FPS:.1f} s - start earlier or pick a longer clip.")
+                shot = {**shot, 'stock_path': str(clip)}
             out.append({'name': f'shot-{n:03d}', 'start': start, 'frames': frames, **shot})
         stamp = time.strftime('%Y%m%d-%H%M%S')
         return {'project_name': f'{name[:60]} - One Production {stamp}', 'timeline': 'Episode', 'fps': FPS,
@@ -192,7 +239,7 @@ class Fusion:
         if not answer.get('passed'):
             raise FusionError('Resolve: ' + (answer.get('error') or answer.get('reason') or 'the build failed'))
         state = {k: spec[k] for k in ('project_name', 'timeline', 'fps', 'width', 'height', 'seconds', 'kit_version')}
-        state.update(shots=[{k: s[k] for k in ('name', 'start', 'frames', 'idea', 'anchor', 'text')} for s in spec['shots']],
+        state.update(shots=[{k: s[k] for k in SHOT_KEYS if k in s} for s in spec['shots']],
                      style=spec['style'], created=time.time(), shots_file=shots_name)
         state_name = str(Path(shots_name).with_name('fusion.json').as_posix())
         target = self.store.files_dir(pid) / state_name
@@ -200,8 +247,34 @@ class Fusion:
         target.write_text(json.dumps(state, indent=1), encoding='utf-8')
         return {'project': spec['project_name'], 'timeline': 'Episode', 'fps': FPS, 'state': state_name,
                 'seconds': spec['seconds'], 'shots': [{'name': s['name'], 'start_s': round(s['start'] / FPS, 2),
-                                                      'seconds': round(s['frames'] / FPS, 2), 'idea': s['idea']}
+                                                      'seconds': round(s['frames'] / FPS, 2), 'idea': s['idea'],
+                                                      **({'stock': s['stock']} if s.get('stock') else {})}
                                                      for s in spec['shots']]}
+
+    def render_start(self, pid: str, state_name: str, out_name: str) -> dict:
+        """Draft: Resolve renders the episode timeline to out_name (a project file, .mp4)."""
+        ok, why = self.ready()
+        if not ok:
+            raise FusionError(why)
+        state = self._json(pid, state_name)
+        target = self.store.files_dir(pid) / out_name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        answer = self.resolve.call({'action': 'render_start', 'spec': {
+            'project_name': state['project_name'], 'timeline': state.get('timeline', 'Episode'), 'fps': state['fps'],
+            'width': state.get('width', WIDTH), 'height': state.get('height', HEIGHT),
+            'target_dir': str(target.parent), 'name': target.stem}}, 300)
+        if not answer.get('passed'):
+            raise FusionError('Resolve: ' + (answer.get('error') or answer.get('reason') or 'the render did not start'))
+        return {'job': answer['job'], 'file': out_name}
+
+    def render_status(self, pid: str, state_name: str, job: dict) -> dict:
+        state = self._json(pid, state_name)
+        answer = self.resolve.call({'action': 'render_status', 'spec': {'project_name': state['project_name'], 'job': job['job']}}, 120)
+        if not answer.get('passed'):
+            return {'failed': True, 'error': answer.get('error') or answer.get('reason') or 'Resolve did not answer'}
+        if answer.get('done') and not (self.store.files_dir(pid) / job['file']).is_file():
+            return {'failed': True, 'error': f"Resolve says the render is complete but {job['file']} is not there"}
+        return {k: answer.get(k) for k in ('done', 'failed', 'progress', 'error')}
 
     def stills(self, pid: str, state_name: str) -> dict:
         """Two review stills per built shot (middle and near the end) under <folder>/stills/."""
@@ -214,7 +287,8 @@ class Fusion:
         if out_dir.exists():
             shutil.rmtree(out_dir, ignore_errors=True)
         out_dir.mkdir(parents=True, exist_ok=True)
-        shots = [{'name': s['name'], 'at': sorted({s['frames'] // 2, max(0, s['frames'] - 12)})} for s in state['shots']]
+        shots = [{'name': s['name'], 'at': sorted({s['frames'] // 2, max(0, s['frames'] - 12)}), 'stock': bool(s.get('stock'))}
+                 for s in state['shots']]
         answer = self.resolve.call({'action': 'fusion_stills', 'spec': {
             'project_name': state['project_name'], 'timeline': state.get('timeline', 'Episode'), 'fps': state['fps'],
             'out_dir': str(out_dir), 'shots': shots}}, 600)
