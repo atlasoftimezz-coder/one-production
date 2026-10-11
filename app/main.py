@@ -184,6 +184,8 @@ class EpisodeIn(BaseModel):
     visual_notes: str = ""
     approve: str | None = None               # the heavy jobs (GPU voice, CPU render): "once" | "always"
     config: dict | None = None
+    draft: bool = False                      # no stops: flags for the owner's first review, the app renders (2026-10-11)
+    styles: list[str] = []                   # competitor style profiles (Competitors tab) to edit in
 
 
 class ScriptSettingsIn(BaseModel):
@@ -1870,6 +1872,16 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
             from .gates_api import VideoCheck
             return await gates.video(pid, VideoCheck(video=video, voiceover=voiceover))
 
+        def style_profiles_of(ids):
+            out = []
+            for sid in ids:
+                try:
+                    out.append({"id": sid, "name": styles.get(sid)["name"], "profile": styles.profile(sid)})
+                except (StyleError, OSError, ValueError):
+                    continue
+            return out
+
+        deps.style_profiles = style_profiles_of
         deps.fusion_ready = fusion.ready
         deps.fusion_stills = lambda state: fusion.stills(pid, state)
         deps.video_gate = video_gate_of
@@ -1897,6 +1909,11 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
                 raise HTTPException(400, "that voiceover is not a finished one in this project")
         if not team_accounts():
             raise HTTPException(400, "the episode run needs at least one signed-in Claude, Codex or API-key account")
+        for sid in body.styles:
+            try:
+                styles.get(sid)
+            except StyleError:
+                raise HTTPException(400, "a chosen competitor style no longer exists - reopen the dialog")
         needs = [n for n in (approvals.check(t, body.approve) for t in ([] if body.voice_job else ["voiceover"])) if n]
         if needs:
             from fastapi.responses import JSONResponse

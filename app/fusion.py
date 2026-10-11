@@ -20,7 +20,7 @@ import shutil
 import time
 from pathlib import Path
 
-from . import media
+from . import fusion_kit, media
 from .animation import MIN_SHOT, anchor_times
 from .fusion_kit import FONTS, KIT_VERSION
 from .resolve import at_least
@@ -35,6 +35,47 @@ NEEDED_COLORS = ('bg', 'ink', 'accent')
 
 class FusionError(Exception):
     pass
+
+
+class ShotScripts:
+    """How a visuals worker's Resolve scripts are completed and approved (owner, 2026-10-11).
+
+    Every script gets the kit + this episode's motion.py + a guard that the episode's own project is
+    open. In a DRAFT, a script runs without a card when it is a kit script whose begin("shot-NNN") calls
+    all name shots of this episode; anything else still asks. The AI's own code is saved per shot so the
+    owner can read what ran."""
+
+    def __init__(self, project: str, shots: set[str], motion_file: Path | None, save_dir: Path | None, auto: bool):
+        self.project, self.shots, self.motion_file, self.save_dir, self.auto_ok = project, shots, motion_file, save_dir, auto
+
+    def motion(self) -> str | None:
+        if not self.motion_file or not self.motion_file.is_file():
+            return None
+        try:
+            return fusion_kit.check_motion(self.motion_file.read_text(encoding='utf-8-sig'))
+        except ValueError:
+            return None
+
+    def expand(self, script: str) -> tuple[str, bool]:
+        return fusion_kit.expand(script, self.motion(), self.project)
+
+    def auto(self, script: str) -> str | None:
+        """The completed script when it may run without a card, else None (-> the normal card)."""
+        if not self.auto_ok or not isinstance(script, str):
+            return None
+        if not fusion_kit.MARKER.search(script) and not fusion_kit.EP_MARKER.search(script):
+            return None
+        names = fusion_kit.shots_in(script)
+        if not names or any(n not in self.shots for n in names):
+            return None
+        if fusion_kit.EP_MARKER.search(script) and self.motion() is None:
+            return None                              # a broken motion.py: let the owner see it
+        out, _ = self.expand(script)
+        if self.save_dir:
+            self.save_dir.mkdir(parents=True, exist_ok=True)
+            for n in dict.fromkeys(names):
+                (self.save_dir / f'{n}.py').write_text(script, encoding='utf-8')
+        return out
 
 
 def check_art(art: dict) -> dict:

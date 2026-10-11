@@ -356,9 +356,52 @@ def source() -> str:
     return KIT.replace("%(version)d", str(KIT_VERSION)).replace("%(icons)r", repr(ICONS))
 
 
-def expand(script: str) -> tuple[str, bool]:
-    """Replace the `from op_kit import *` line with the kit. (script, whether it was used)."""
-    if not isinstance(script, str) or not MARKER.search(script):
+def expand(script: str, motion: str | None = None, project: str | None = None) -> tuple[str, bool]:
+    """Replace `from op_kit import *` with the kit and `from ep_motion import *` with the episode's own
+    motion library (owner, 2026-10-11: new animation for every script). `project`: the script may only
+    run while that Resolve project is open (a guard line after the kit). (script, whether expanded)."""
+    if not isinstance(script, str) or not (MARKER.search(script) or EP_MARKER.search(script)):
         return script, False
-    kit = source()
-    return MARKER.sub(lambda _m: kit, script, count=1), True
+    head = source() + (guard(project) if project else "")
+    if MARKER.search(script):
+        script = MARKER.sub(lambda _m: head, script, count=1)
+        head = ""                                   # the kit is in; the motion library goes after it
+    if EP_MARKER.search(script) and motion is not None:
+        lib = "\n# ---- this episode's motion library (motion.py) ----\n" + motion + "\n# ---- end of motion.py ----\n"
+        script = EP_MARKER.sub(lambda _m: head + lib, script, count=1)
+    return script, True
+
+
+# ---------------------------------------------------------------- episode motion library + scope (2026-10-11)
+EP_MARKER = re.compile(r"^[ \t]*from[ \t]+ep_motion[ \t]+import[ \t]+\*[ \t]*$", re.M)
+SHOT_CALL = re.compile(r"""\bbegin\(\s*["'](shot-\d{3,4})["']\s*\)""")
+_FORBIDDEN = re.compile(r"(?<![.\w])(exec|eval|compile|__import__|open)\s*\(|^\s*(import|from)\s+(os|sys|subprocess|shutil|socket|ctypes"
+                        r"|pathlib|importlib|urllib|http)\b|run_script_unsafe", re.M)
+MAX_MOTION = 60_000
+
+
+def guard(project: str) -> str:
+    return (f"\nif project.GetName() != {project!r}:\n"
+            f"    raise RuntimeError('One Production: open the Resolve project ' + {project!r} + ' to build this shot')\n")
+
+
+def shots_in(script: str) -> list[str]:
+    return SHOT_CALL.findall(script or "")
+
+
+def check_motion(code: str) -> str:
+    """An episode's motion.py: plain helper functions on top of the kit, nothing that reaches out."""
+    if not isinstance(code, str) or not code.strip():
+        raise ValueError("motion.py is empty")
+    if len(code) > MAX_MOTION:
+        raise ValueError(f"motion.py is over {MAX_MOTION // 1000} kB - keep it to reusable helpers")
+    if MARKER.search(code) or EP_MARKER.search(code):
+        raise ValueError("motion.py must not import op_kit or ep_motion itself (the app puts the kit before it)")
+    bad = _FORBIDDEN.search(code)
+    if bad:
+        raise ValueError(f"motion.py may only build Fusion tools - not allowed: {bad.group(0).strip()[:40]}")
+    try:
+        compile(code, "motion.py", "exec")
+    except SyntaxError as e:
+        raise ValueError(f"motion.py line {e.lineno}: {e.msg}") from None
+    return code

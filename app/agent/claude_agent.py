@@ -91,11 +91,18 @@ class ClaudeAgent:
                                            "permissionDecisionReason": reason}}
 
         async def can_use_tool(tool: str, tool_input: dict, context: Any):
+            shots = getattr(run, "shot_scripts", None)      # an episode's visuals worker (fusion.ShotScripts)
+            if tool == f"mcp__{resolve_mcp.SERVER}__run_script" and shots is not None:
+                # a draft episode: a kit script for this episode's own shots runs without a card (owner, 2026-10-11)
+                script = shots.auto(tool_input.get("script", ""))
+                if script is not None:
+                    return sdk.PermissionResultAllow(updated_input={**tool_input, "script": script})
             ok, message = await runs.permit(run, tool, tool_input, gate=gate)
             if ok:
                 if tool == f"mcp__{resolve_mcp.SERVER}__run_script":
                     # the approved script's `from op_kit import *` line becomes the fixed kit (sandbox has no exec)
-                    script, used = fusion_kit.expand(tool_input.get("script", ""))
+                    raw = tool_input.get("script", "")
+                    script, used = shots.expand(raw) if shots is not None else fusion_kit.expand(raw)
                     if used:
                         return sdk.PermissionResultAllow(updated_input={**tool_input, "script": script})
                 return sdk.PermissionResultAllow(updated_input=tool_input)

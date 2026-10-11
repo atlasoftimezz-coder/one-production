@@ -18,17 +18,32 @@ A numeric gate that fails sends its numbers back to the worker as the review not
 `gate_rounds` times); a gate the app's own stages fail stops the run with "needs you". The run
 waits at "edit" (state "waiting_render") until the owner picks the rendered file, then resumes
 - also after an app restart, from the saved snapshot.
+
+DRAFT (spec["draft"], owner 2026-10-11: "first it should draft completely for first level of review"):
+the run never waits for the owner unless going on is impossible. A failed gate, a shot still empty
+after its retries or the master's doubts become FLAGS (stage "passed_with_notes") listed in the draft
+review report. Visuals are made in fresh turns: a plan turn (art direction from the chosen competitor
+style profiles, this episode's own motion library motion.py, shots timed to the learned pacing,
+fusion_setup), script turns of about BATCH shots (kit scripts for this episode's shots run without a
+card - fusion.ShotScripts), and a check turn on the stills. The app renders the timeline itself.
+Hard stops: unreadable script, failed voiceover, Resolve not ready, no Resolve project, failed render.
 """
 from __future__ import annotations
 
 import asyncio
 import json
 import re
+import statistics
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
+from .. import fusion_kit
+from ..fusion import ShotScripts
 from ..fusion_kit import FONTS
-from .team import Stopped, Task, Team, TeamConfig
+from .team import Stopped, SubRun, Task, Team, TeamConfig
+
+BATCH = 10                          # shots per script turn in a draft
 
 STAGES = (("script", "Script"), ("voice", "Voiceover"), ("visuals", "Visuals"), ("edit", "Render"), ("package", "Package"))
 ORDER = [s for s, _ in STAGES]
@@ -63,6 +78,9 @@ class EpisodeRun(Team):
         self.notes: list[str] = []
         self.result: dict = {}
         self.vo: dict = {}
+        self.draft = bool(spec.get("draft"))
+        self.flags: list[dict] = []                  # draft: what the owner should look at first
+        self.profiles: list[dict] = []               # draft: the chosen competitor style profiles
 
     @classmethod
     def from_snapshot(cls, pid: str, snap: dict, run, deps, config: EpisodeConfig, state_file: Path | None = None) -> "EpisodeRun":
@@ -73,6 +91,7 @@ class EpisodeRun(Team):
         ep.base = snap.get("base") or ep.base
         ep.state = snap.get("state") or "running"
         ep.notes = list(snap.get("notes") or [])
+        ep.flags = list(snap.get("flags") or [])
         return ep
 
     # ------------------------------------------------ reporting
@@ -82,7 +101,8 @@ class EpisodeRun(Team):
                 "config": {k: getattr(self.cfg, k) for k in ("master_model", "master_effort", "worker_model", "worker_effort",
                                                               "review_rounds", "gate_rounds")},
                 "tasks": [t.public() for t in self.tasks], "master_tokens": self.master_tokens, "final": self.final,
-                "result": self.result, "notes": self.notes[-6:], "started": self.started, "base": self.base, "vo": self.vo}
+                "result": self.result, "notes": self.notes[-6:], "started": self.started, "base": self.base, "vo": self.vo,
+                "draft": self.draft, "flags": self.flags}
 
     def publish(self) -> None:
         snap = self.snapshot()
@@ -111,6 +131,12 @@ class EpisodeRun(Team):
         await self.set_stage(sid, "needs_you", why, report=report)
         self.state, self.result = "needs_you", {"stage": sid, "why": why}
         return self.snapshot()
+
+    async def flag(self, sid: str, why: str, report: str = "", **extra) -> None:
+        """Draft: note it for the owner's review and carry on."""
+        self.flags.append({"stage": sid, "why": why[:600], "report": report})
+        self.notice(f"Flagged for your review - {self.stage(sid)['title']}: {why[:160]}")
+        await self.set_stage(sid, "passed_with_notes", why[:300], report=report, **extra)
 
     # ------------------------------------------------ the flow
     async def go(self, start: str = "script") -> dict:
@@ -184,6 +210,9 @@ class EpisodeRun(Team):
         srt = next((f for f in job["files"] if f.lower().endswith(".srt")), "")
         self.vo = {"job": job["id"], "wav": wav, "srt": srt}
         if not report["passed"]:
+            if self.draft and srt:
+                await self.flag("voice", "voice gate: " + report["summary"], report["report"], files=[wav, srt])
+                return True
             await self.blocked("voice", "voice gate: " + report["summary"], report["report"])
             return False
         await self.set_stage("voice", "passed", f"{report.get('seconds', 0):.0f} s, all voice checks passed",
@@ -198,6 +227,9 @@ class EpisodeRun(Team):
             res = await self.run_worker(task, prompt(task), note, "worker")
             self.locks.release(task.id)
             if res.get("error"):
+                if self.draft and sid == "package":          # the draft video exists; packaging can wait for review
+                    await self.flag(sid, f"the packaging worker failed: {task.why}")
+                    return {}
                 await self.blocked(sid, f"the worker failed: {task.why}")
                 return None
             task.output = res.get("text", "")
@@ -206,11 +238,25 @@ class EpisodeRun(Team):
             if not ok:
                 misses += 1
                 if misses >= self.cfg.gate_rounds:
+                    if self.draft and extra.get("usable", True):
+                        task.status = "done"
+                        await self.flag(sid, f"still failing its check after {misses} tries: {why}", extra.get("report", ""),
+                                        files=extra.get("files", []))
+                        return extra
                     await self.blocked(sid, f"still failing its check after {misses} tries: {why}", extra.get("report", ""))
                     return None
                 task.notes = "The automatic check failed - fix this first: " + why
                 self.notice(f"{task.title}: check failed ({why[:120]}) - back to the worker.")
                 continue
+            if self.draft:                           # one look by the master; its doubts go into the review report
+                verdict = await self.review(task)
+                task.status = "done"
+                if verdict == "pass":
+                    await self.set_stage(sid, "passed", extra.get("detail", ""), report=extra.get("report", ""), files=extra.get("files", []))
+                else:
+                    await self.flag(sid, "the master's notes: " + (task.notes or task.why or verdict), extra.get("report", ""),
+                                    files=extra.get("files", []))
+                return extra
             verdict = await self.review(task)
             if verdict == "pass":
                 task.status = "done"
@@ -271,6 +317,8 @@ class EpisodeRun(Team):
         if not ok:
             await self.blocked("visuals", why)
             return False
+        if self.draft:
+            return await self.draft_visuals()
         task = Task(id="visuals", title="Visuals (Fusion)", files=[f"{self.base}/art.json", f"{self.base}/shots.json"],
                     providers=list(CLAUDE_ACCOUNTS),
                     brief=(f"Fusion motion graphics at 1080p 60 fps. Read {self.base}/art.json and open the stills in "
@@ -285,9 +333,222 @@ class EpisodeRun(Team):
         self.vo["resolve_project"] = extra.get("project", "")
         return True
 
-    # render (the owner) ---------------------------------------------------------------
+    # visuals as a draft: plan turn -> script turns -> check turn --------------------------------
+    def load_profiles(self) -> None:
+        """The chosen competitor style profiles, copied into the episode folder for the worker to read."""
+        self.profiles = []
+        for n, item in enumerate(self.deps.style_profiles(self.spec.get("styles") or []), 1):
+            rel = f"{self.base}/style/{n}-{slug(item['name'])}.json"
+            target = self.run.root / rel
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(json.dumps(item["profile"], indent=1), encoding="utf-8")
+            self.profiles.append({**item, "file": rel})
+
+    def pace_target(self) -> tuple[float, float | None]:
+        """(shot length to aim for in seconds, hook cuts per minute) from the competitor numbers."""
+        def num(key):
+            vals = [((p["profile"].get("measured") or {}).get("pace") or {}).get(key) for p in self.profiles]
+            vals = [float(v) for v in vals if v]
+            return statistics.median(vals) if vals else None
+        shot = num("shot_median")
+        return (round(max(1.0, min(10.0, shot)), 2) if shot else self.cfg.shot_seconds), num("first_30s_cuts_per_min")
+
+    def style_lines(self) -> list[str]:
+        if not self.profiles:
+            return ["No competitor style was chosen for this episode: design the look from the script alone."]
+        return ["The owner chose these competitor editing styles to learn from (read each file: what the shots show, "
+                "type, colour approach, motion, transitions, sound, do/don't, and the measured numbers). Learn their craft "
+                "and rhythm - never copy their branding, characters, logos, exact layouts or wording:",
+                *[f"- {p['name']}: {p['file']}" for p in self.profiles]]
+
+    def plan_prompt(self, task: Task) -> str:
+        s, b = self.spec, self.base
+        shot, hook = self.pace_target()
+        music = f' music="{s["music"]}"' if s.get("music") else ""
+        lines = [f"Plan the visuals of the episode \"{s['name']}\" (DaVinci Resolve Fusion, 1080p, 60 fps). This turn plans "
+                 "and sets up the project; other turns script the shots.",
+                 f"Script: {s['script']}. Voiceover: {self.vo['wav']} ({self.vo.get('seconds', 0):.0f} s). Subtitles with the "
+                 f"spoken words and times: {self.vo['srt']}. Read the script first.", "", *self.style_lines(), "",
+                 f"1. Art direction for THIS script (new every time, never a template): write {b}/art.json {{\"concept\", "
+                 "\"palette\": {\"bg\", \"ink\", \"accent\", ... \"#RRGGBB\"}, \"fonts\": {\"heading\", \"body\", \"mono\"} from "
+                 f"{', '.join(f for f in FONTS if f not in ('Segoe UI Emoji', 'Segoe Fluent Icons'))}, \"motion\", \"three_d\", "
+                 "\"why_this_fits\": \"how this look follows the chosen style and makes this script easy to follow\"}.",
+                 f"2. This episode's own motion library: write {b}/motion.py - new helper functions designed for this "
+                 "script in the learned style (how text enters, reveals, transitions, diagram/chart/map builders, emphasis "
+                 "moves). Build only on the Fusion kit (functions take S, the shot, and use its methods or S.add with real "
+                 "Fusion tool IDs). No imports, no files, no exec. Shot scripts will start with `from op_kit import *` and "
+                 "`from ep_motion import *` and call your functions.",
+                 f"3. Shot list: write {b}/shots.json {{\"shots\": [{{\"idea\", \"text\"}}, {{\"anchor\": \"3-6 consecutive "
+                 "words exactly as in the subtitles\", \"idea\": \"what the shot shows and how it moves\", \"text\"}}]}. The "
+                 f"first shot starts at 0; every other shot starts at its anchor words. Pace: shots of about {shot:g} s"
+                 + (f", with about {hook:g} cuts per minute in the first 30 s" if hook else "") +
+                 " (the competitor's measured rhythm), and always a new shot when the narration changes subject.",
+                 f"4. Call fusion_setup with shots=\"{b}/shots.json\" art=\"{b}/art.json\" voiceover=\"{self.vo['wav']}\" "
+                 f"subtitles=\"{self.vo['srt']}\"{music} name=\"{s['name']}\". Fix whatever it reports and call it again.",
+                 "Do not script any shot in this turn. Finish with the concept in one line and the number of shots."]
+        if s.get("visual_notes"):
+            lines += ["", "The owner's directions for the look: " + s["visual_notes"]]
+        if task.notes:
+            lines += ["", "Fix this first:", task.notes]
+        return "\n".join(lines)
+
+    def fusion_state(self) -> dict | None:
+        f = self.run.root / self.base / "fusion.json"
+        try:
+            return json.loads(f.read_text(encoding="utf-8")) if f.is_file() else None
+        except ValueError:
+            return None
+
+    def motion_ok(self) -> str:
+        """'' when motion.py is usable, else why not."""
+        f = self.run.root / self.base / "motion.py"
+        if not f.is_file():
+            return f"{self.base}/motion.py was not written"
+        try:
+            fusion_kit.check_motion(f.read_text(encoding="utf-8-sig"))
+        except ValueError as e:
+            return str(e)
+        return ""
+
+    async def check_plan(self) -> tuple[bool, str, dict]:
+        state = self.fusion_state()
+        if not state:
+            return False, f"fusion_setup has not built the Resolve project yet ({self.base}/fusion.json is missing)", {"usable": False}
+        why = self.motion_ok()
+        extra = {"project": state["project_name"], "detail": f"{len(state['shots'])} shots in Resolve project {state['project_name']}",
+                 "files": [f"{self.base}/art.json", f"{self.base}/motion.py", f"{self.base}/shots.json"]}
+        return (not why), why, extra
+
+    def shots_prompt(self, task: Task, shots: list[dict]) -> str:
+        b = self.base
+        use_motion = not self.motion_ok()
+        rows = [f"- {s['name']} ({s['frames'] / 60:.1f} s): {s['idea']}" + (f" | on screen: {s['text']}" if s.get("text") else "")
+                for s in shots]
+        lines = [f"Build these shots of the episode \"{self.spec['name']}\" in its Resolve project. Read {b}/art.json"
+                 + (f" and {b}/motion.py (this episode's own helpers)" if use_motion else "") + " first"
+                 + (", and the style files in " + f"{b}/style/" if self.profiles else "") + ".", *rows, "",
+                 "Script EACH shot with its own mcp__davinci__run_script. The script starts with `from op_kit import *`"
+                 + (" then `from ep_motion import *`" if use_motion else "") + ", then S = begin(\"shot-NNN\"), builds the "
+                 "shot for its idea in this episode's style, and ends with result = finish(S, layer).",
+                 "These scripts run straight away without an approval card, because they only touch this episode's own "
+                 "Resolve project; anything else still asks. If Resolve reports an error, fix the script and run it again.",
+                 "Finish with one line per shot you could not build and why."]
+        if task.notes:
+            lines += ["", "Fix this first:", task.notes]
+        return "\n".join(lines)
+
+    def check_prompt(self, task: Task) -> str:
+        b = self.base
+        lines = [f"Check the visuals of the episode \"{self.spec['name']}\". Call fusion_stills with state=\"{b}/fusion.json\", "
+                 f"open the stills (Read the PNG files in {b}/stills/) and re-script (mcp__davinci__run_script, same rules: "
+                 "`from op_kit import *`" + ("" if self.motion_ok() else ", `from ep_motion import *`") + ", begin, finish) "
+                 "every shot that is empty, unclear, off-style, cramped, overlapping or cut off. Then call fusion_stills again.",
+                 *([""] + self.style_lines() if self.profiles else []),
+                 "Finish with the shots you changed and anything still weak."]
+        if task.notes:
+            lines += ["", "Fix this first:", task.notes]
+        return "\n".join(lines)
+
+    def prepare_sub(self, task: Task, sub: SubRun) -> None:
+        """Visuals turns get the episode's shot-script rules once the Resolve project exists."""
+        if task.id != "visuals" and not task.id.startswith("shots-"):
+            return
+        state = self.fusion_state()
+        if state:
+            sub.shot_scripts = ShotScripts(state["project_name"], {s["name"] for s in state["shots"]},
+                                           self.run.root / self.base / "motion.py", self.run.root / self.base / "scripts",
+                                           auto=self.draft)
+
+    async def draft_visuals(self) -> bool:
+        self.vo["seconds"] = await asyncio.to_thread(self.deps.duration, self.vo["wav"])
+        self.load_profiles()
+        plan = Task(id="visuals-plan", title="Visuals: plan", providers=list(CLAUDE_ACCOUNTS),
+                    files=[f"{self.base}/art.json", f"{self.base}/motion.py", f"{self.base}/shots.json"],
+                    brief="art direction, motion library, shot list, Resolve project")
+        self.tasks.append(plan)
+        misses = 0
+        while True:
+            res = await self.run_worker(plan, self.plan_prompt(plan), VISUALS_NOTE, "worker")
+            self.locks.release(plan.id)
+            if res.get("error"):
+                await self.blocked("visuals", f"the visuals worker failed: {plan.why}")
+                return False
+            ok, why, extra = await self.check_plan()
+            if ok:
+                break
+            misses += 1
+            if misses >= self.cfg.gate_rounds:
+                if not extra.get("usable", True):
+                    await self.blocked("visuals", f"no Resolve project after {misses} tries: {why}")
+                    return False
+                self.flags.append({"stage": "visuals", "why": f"motion.py not usable ({why}) - shots use the kit only", "report": ""})
+                break
+            plan.notes = why
+            self.notice(f"Visuals plan: {why[:120]} - back to the worker.")
+        plan.status = "done"
+        state = self.fusion_state()
+        self.vo["resolve_project"] = state["project_name"]
+        shots = state["shots"]
+        for n in range(0, len(shots), BATCH):
+            part = shots[n:n + BATCH]
+            t = Task(id=f"shots-{n // BATCH + 1}", title=f"Shots {part[0]['name'][5:]}-{part[-1]['name'][5:]}",
+                     providers=list(CLAUDE_ACCOUNTS), brief="script these shots")
+            self.tasks.append(t)
+            await self.set_stage("visuals", "running", f"building shots {n + 1}-{n + len(part)} of {len(shots)}")
+            res = await self.run_worker(t, self.shots_prompt(t, part), VISUALS_NOTE, "worker")
+            self.locks.release(t.id)
+            if res.get("error"):
+                self.flags.append({"stage": "visuals", "why": f"{t.title}: the worker stopped ({t.why}) - the check turn retries them",
+                                   "report": ""})
+            t.status = "done"
+        check = Task(id="visuals", title="Visuals (Fusion)", providers=list(CLAUDE_ACCOUNTS),
+                     files=[f"{self.base}/art.json", f"{self.base}/shots.json"],
+                     brief=(f"Fusion motion graphics at 1080p 60 fps. Read {self.base}/art.json and open the stills in "
+                            f"{self.base}/stills/ (Read the PNG files). Pass only if: the art direction suits this script "
+                            + ("and follows the chosen competitor style; " if self.profiles else "") +
+                            "each shot makes its one idea easy to understand at a glance; type is clean and readable on a "
+                            "phone; nothing overlaps or is cut off; and it does not look like a generic template."))
+        extra = await self.worker_stage("visuals", check, self.check_prompt, VISUALS_NOTE, self.check_visuals)
+        if extra is None:
+            return False
+        lengths = [s["frames"] / 60 for s in shots]
+        target, _ = self.pace_target()
+        median = round(statistics.median(lengths), 2) if lengths else None
+        self.vo["pace"] = {"median": median, "target": target}
+        if self.profiles and median and abs(median - target) / target > 0.4:
+            await self.flag("visuals", f"pacing: median shot {median} s, the competitor style's is {target} s",
+                            files=extra.get("files", []))
+        return True
+
+    # render (the app in a draft, otherwise the owner) -------------------------------------------
+    async def render_draft(self) -> str | None:
+        """Draft: Resolve renders the Episode timeline into the project (resolve_runner render_start /
+        render_status). The file name, or None after blocking the run."""
+        name = f"{self.base}/draft-{time.strftime('%Y%m%d-%H%M%S')}.mp4"
+        try:
+            job = await asyncio.to_thread(self.deps.render_start, f"{self.base}/fusion.json", name)
+            while True:
+                st = await asyncio.to_thread(self.deps.render_status, f"{self.base}/fusion.json", job)
+                if st.get("failed"):
+                    raise RuntimeError(st.get("error") or "Resolve stopped the render")
+                if st.get("done"):
+                    return name
+                await self.set_stage("edit", "running", f"Resolve is rendering the draft: {st.get('progress', 0)}%")
+                if self.run.stopped:
+                    raise Stopped()
+                await asyncio.sleep(self.deps.poll)
+        except Stopped:
+            raise
+        except Exception as exc:                     # noqa: BLE001 - shown to the owner
+            await self.blocked("edit", f"the draft render failed: {str(exc)[:300]}")
+            return None
+
     async def do_edit(self) -> bool:
         video = self.vo.pop("rendered", "")
+        if not video and self.draft and hasattr(self.deps, "render_start"):
+            video = await self.render_draft()
+            if not video:
+                return False
         if not video:
             project = self.vo.get("resolve_project") or "the episode's project"
             await self.set_stage("edit", "waiting",
@@ -298,6 +559,10 @@ class EpisodeRun(Team):
             return False
         report = await self.deps.video_gate(video, self.vo["wav"])
         if not report["passed"]:
+            if self.draft:
+                self.vo["video"] = video
+                await self.flag("edit", "video gate: " + report["summary"], report.get("report", ""), files=[video])
+                return True
             await self.blocked("edit", "video gate: " + report["summary"], report.get("report", ""))
             return False
         self.vo["video"] = video
@@ -341,6 +606,17 @@ class EpisodeRun(Team):
 
     def final_prompt(self) -> str:
         rows = "\n".join(f"- {s['title']}: {s['status']} - {s['detail']}" for s in self.stages)
+        if self.draft:
+            flags = "\n".join(f"- {f['stage']}: {f['why']}" for f in self.flags) or "- none"
+            pace = self.vo.get("pace") or {}
+            return (f"The DRAFT of the episode \"{self.spec['name']}\" is finished:\n{rows}\n\nFlagged for review:\n{flags}\n\n"
+                    f"Draft video: {self.vo.get('video', '(not rendered)')}. Resolve project: {self.vo.get('resolve_project', '?')}. "
+                    f"Stills: {self.base}/stills/. Shot scripts that ran: {self.base}/scripts/. "
+                    + (f"Pacing: median shot {pace.get('median')} s against the competitor style's {pace.get('target')} s. "
+                       if pace else "")
+                    + "\n\nWrite the draft review report for the owner in plain words: where to watch the draft, the flagged "
+                    "points first (what each means and what you would change), anything you are unsure about. This is the "
+                    "first review, not a publish - keep it short and concrete.")
         return (f"The episode \"{self.spec['name']}\" went through every stage:\n{rows}\n\nWrite the final report for the owner "
                 "in plain words: where the finished bundle is, what to look at before publishing, and anything you are "
                 "unsure about. Keep it short. The owner watches the whole video before publishing.")

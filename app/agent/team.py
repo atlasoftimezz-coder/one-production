@@ -134,6 +134,7 @@ class SubRun:
         self.pid, self.root = parent.pid, parent.root
         self.pending, self.asks = parent.pending, parent.asks
         self.task = None
+        self.shot_scripts = None         # an episode's visuals turn: how its Resolve scripts are completed / approved
 
     @property
     def stopped(self) -> bool:
@@ -435,6 +436,7 @@ class Team:
             await self._changed()
             model, effort = self.choice(acc, "worker")
             sub = SubRun(self.run, task.id, self._write_check(task))
+            self.prepare_sub(task, sub)
             try:
                 res = await self.deps.call(acc, sub, prompt + self._resume(task), note, model, effort, role)
             finally:
@@ -465,6 +467,10 @@ class Team:
                 task.why = f"{err.kind}: {err.message[:200]}"
             await self._changed()
             return res
+
+    def prepare_sub(self, task: Task, sub: SubRun) -> None:
+        """A subclass hook: set up a worker's run before its turn (the episode run gives visuals turns their
+        shot-script rules)."""
 
     @staticmethod
     def _resume(task: Task) -> str:
