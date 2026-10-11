@@ -43,8 +43,9 @@ $('#compform').onsubmit = async e => {
 function styleNumbers(m) {
   const p = (m && m.pace) || {}, s = (m && m.sound) || {}, w = (m && m.words) || {};
   const pct = v => v == null ? '?' : Math.round(v * 100) + '%';
-  return [p.cuts_per_min != null ? `${p.cuts_per_min} cuts/min` : '', p.shot_median != null ? `shot ${p.shot_median} s (median)` : '',
-          p.first_30s_cuts_per_min != null ? `hook ${p.first_30s_cuts_per_min} cuts/min` : '',
+  return [p.beats_per_min != null ? `${p.beats_per_min} changes/min` : '', p.beat_median != null ? `every ${p.beat_median} s (median)` : '',
+          p.first_30s_beats_per_min != null ? `hook ${p.first_30s_beats_per_min}/min` : '',
+          p.cuts_per_min != null ? `${p.cuts_per_min} hard cuts/min` : '', (p.continuous_share || 0) >= 0.5 ? 'continuous canvas' : '',
           s.cuts_with_a_hit != null ? `SFX on ${pct(s.cuts_with_a_hit)} of cuts` : '',
           s.music_bed_hint_share != null ? `music bed ${pct(s.music_bed_hint_share)}` : '', w.wpm ? `${w.wpm} wpm` : '']
     .filter(Boolean).map(x => `<span class="stchip">${esc(x)}</span>`).join(' ');
@@ -136,8 +137,8 @@ function renderStyle(bubble, d, pid, prev) {
     ${d.state === 'paused' ? `<div class="tpause"><span style="flex:1">${esc(d.paused_why || '')}</span><button class="btn" data-resume>Resume</button></div>` : ''}
     ${(d.stages || []).map(s => `<div class="trow"><span class="tst ${s.status === 'passed' ? 'done' : s.status}">${STYLE_STAGE[s.status] || s.status}</span>
         <span class="tt">${esc(s.title)}</span><span class="ta">${esc(s.detail || '')}</span></div>`).join('')}
-    ${(d.videos || []).map(v => `<div class="tnote">${esc(v.title)} - ${v.shots} shots, ${v.cuts_per_min ?? '?'} cuts/min</div>`).join('')}
-    ${(d.problems || []).map(p => `<div class="tnote" style="color:var(--warn)">${esc(p.link)}: ${esc(p.why)}</div>`).join('')}
+    ${(d.videos || []).map(v => `<div class="tnote">${esc(v.title)} - ${v.beats_per_min ?? '?'} visible changes/min, ${v.cuts_per_min ?? '?'} hard cuts/min</div>`).join('')}
+    ${(d.problems || []).map(p => `<div class="tnote" style="color:var(${p.note ? '--dim' : '--warn'})">${esc(p.link)}: ${esc(p.why)}</div>`).join('')}
     ${d.state === 'done' ? `<div class="tnote">Open <b>Competitors</b> to read the profile and use it as guidance.</div>` : ''}`;
   const r = t.el.querySelector('[data-resume]');
   if (r) r.onclick = async () => { r.disabled = true; try { await api(`/api/projects/${pid}/team/resume`, { method: 'POST' }); } catch (e) { toast(e.message, true); } };

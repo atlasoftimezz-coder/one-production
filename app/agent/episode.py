@@ -350,8 +350,11 @@ class EpisodeRun(Team):
             vals = [((p["profile"].get("measured") or {}).get("pace") or {}).get(key) for p in self.profiles]
             vals = [float(v) for v in vals if v]
             return statistics.median(vals) if vals else None
-        shot = num("shot_median")
-        return (round(max(1.0, min(10.0, shot)), 2) if shot else self.cfg.shot_seconds), num("first_30s_cuts_per_min")
+        # a visible change (cut OR something animating in) is what a new Fusion shot is; hard cuts alone undercount a
+        # continuous motion-graphics style (Bravos Research: 0.2 cuts/min, 11 changes/min - real measure, 2026-10-11)
+        shot = num("beat_median") or num("shot_median")
+        hook = num("first_30s_beats_per_min") or num("first_30s_cuts_per_min")
+        return (round(max(1.0, min(10.0, shot)), 2) if shot else self.cfg.shot_seconds), hook
 
     def style_lines(self) -> list[str]:
         if not self.profiles:

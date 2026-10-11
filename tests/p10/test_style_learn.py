@@ -140,7 +140,8 @@ def test_check_profile_and_brief():
         styles_mod.check_profile({"summary": "x"})
     with pytest.raises(styles_mod.StyleError, match="list"):
         styles_mod.check_profile({**PROFILE, "do": "cut a lot"})
-    p = {**PROFILE, "measured": {"pace": {"cuts_per_min": 24, "shot_median": 2.1}, "sound": {"cuts_with_a_hit": 0.8},
-                                 "words": {"wpm": 170}}}
+    p = {**PROFILE, "measured": {"pace": {"cuts_per_min": 0.2, "beats_per_min": 11, "beat_median": 3.4, "continuous_share": 1.0},
+                                 "sound": {"cuts_with_a_hit": 0.8}, "words": {"wpm": 170}}}
     b = styles_mod.brief(p)
-    assert "24 cuts/min" in b and "80% of cuts" in b and "Do: cut on every new claim" in b
+    assert "11 visible changes/min (median 3.4 s apart" in b and "0.2 hard cuts/min" in b and "continuous" in b
+    assert "80% of cuts" in b and "Do: cut on every new claim" in b

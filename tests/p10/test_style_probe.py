@@ -55,6 +55,22 @@ def test_no_bed_and_no_hits_are_told_apart(tmp_path):
     assert not s.get("cuts_with_a_hit")
 
 
+def test_beats_catch_a_continuous_canvas_with_no_cuts():
+    """Bravos Research style (real measure, 2026-10-11): elements animate in on one dark canvas, no cuts."""
+    import numpy as np
+    fps = style_probe.SMALL_FPS
+    frames = np.full((int(12 * fps), 36, 64, 3), 18, dtype=np.uint8)            # 12 s of dark background
+    for n, t in enumerate((2.0, 5.0, 8.0)):                                     # a card slides in at 2, 5 and 8 s
+        a = int(t * fps)
+        for k in range(4):                                                       # 0.4 s slide
+            frames[a + k:, 6:30, 4 + n * 20: 4 + n * 20 + 4 * (k + 1)] = 230
+    beats = style_probe.beat_times(frames)
+    assert len(beats) == 3 and all(abs(b - t) < 0.6 for b, t in zip(beats, (2.0, 5.0, 8.0))), beats
+    assert style_probe.beat_times(np.full((120, 36, 64, 3), 18, dtype=np.uint8)) == []   # nothing moves: no beats
+    ms = style_probe.moments([5.05], beats, 12.0)                                    # a cut next to a beat counts once
+    assert len(ms) == 4
+
+
 def test_combine_takes_medians_by_code():
     a = {"pace": {"cuts_per_min": 10, "shot_median": 3}, "sound": {"has_audio": True, "music_bed_hint": True}}
     b = {"pace": {"cuts_per_min": 20, "shot_median": 5}, "sound": {"has_audio": True, "music_bed_hint": False}}
@@ -68,8 +84,46 @@ def test_combine_takes_medians_by_code():
 def test_download_through_yt_dlp_gets_video_meta_and_captions(clip, tmp_path, monkeypatch):
     monkeypatch.setenv("FAKE_YTDLP_VIDEO", str(clip))
     yt = YtDlp([sys.executable, str(FAKE)])
-    got = asyncio.run(style_probe.download(yt, "FACTSVID002", tmp_path / "dl", FF))
-    assert got["video"].name == "FACTSVID002.mp4" and got["meta"]["title"] == "The city under the sea"
-    assert "vanish" in got["text"]
-    with pytest.raises(FetchError, match="could not be downloaded"):
-        asyncio.run(style_probe.download(yt, "TOOLONG0001", tmp_path / "dl2", FF))
+    got = asyncio.run(style_probe.download(yt, "FACTSVID002", tmp_path / "dl", FF, pause=0))
+    assert got["video"].name == "FACTSVID002.mp4" and got["meta"]["duration"] == 120
+    assert "vanish" in got["text"] and got["notes"] == []
+    with pytest.raises(FetchError, match="without a video file"):
+        asyncio.run(style_probe.download(yt, "NOFILEVID01", tmp_path / "dl2", FF, pause=0))
+    with pytest.raises(FetchError, match="Video unavailable"):          # yt-dlp's own reason reaches the owner
+        asyncio.run(style_probe.download(yt, "GONEGONE001", tmp_path / "dl3", FF, pause=0))
+
+
+@needs_ffmpeg
+def test_a_caption_rate_limit_keeps_the_video(clip, tmp_path, monkeypatch):
+    """Owner's first real run (2026-10-11): HTTP 429 on the subtitles lost two whole videos."""
+    monkeypatch.setenv("FAKE_YTDLP_VIDEO", str(clip))
+    got = asyncio.run(style_probe.download(YtDlp([sys.executable, str(FAKE)]), "SUBS429VID1", tmp_path / "dl", FF, pause=0))
+    assert got["video"].is_file() and got["text"] == ""
+    assert "429" in got["notes"][0] and "picture and sound" in got["notes"][0]
+
+
+@needs_ffmpeg
+def test_a_long_video_is_measured_on_its_first_20_minutes(clip, tmp_path, monkeypatch):
+    monkeypatch.setenv("FAKE_YTDLP_VIDEO", str(clip))
+    monkeypatch.setenv("FAKE_YTDLP_LOG_SECTIONS", str(tmp_path / "sections.txt"))
+    got = asyncio.run(style_probe.download(YtDlp([sys.executable, str(FAKE)]), "LONGVIDEO01", tmp_path / "dl", FF, pause=0))
+    assert (tmp_path / "sections.txt").read_text() == "*0-1200" and "first 20 min" in got["notes"][0]
+
+
+def test_rate_limits_are_retried_then_reported():
+    calls = []
+
+    async def flaky():
+        calls.append(1)
+        if len(calls) < 3:
+            raise FetchError("HTTP Error 429: Too Many Requests")
+        return "ok"
+    assert asyncio.run(style_probe._retry(flaky, pause=0)) == "ok" and len(calls) == 3
+
+    async def gone():
+        calls.append(1)
+        raise FetchError("Video unavailable")
+    calls.clear()
+    with pytest.raises(FetchError):
+        asyncio.run(style_probe._retry(gone, pause=0))
+    assert len(calls) == 1                                               # not a rate limit: no retry

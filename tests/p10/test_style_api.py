@@ -34,7 +34,7 @@ def test_list_read_rename_approve_delete(client, project):
     assert approved["lesson"]
     lessons = client.get(f"/api/projects/{project}/learning").json()
     found = [l for l in (lessons.get("lessons") if isinstance(lessons, dict) else lessons) if l["id"] == approved["lesson"]]
-    assert found and "24 cuts/min" in found[0]["text"] and found[0]["state"] == "active"
+    assert found and "24 hard cuts/min" in found[0]["text"] and found[0]["state"] == "active"
 
     assert client.delete(f"/api/styles/{entry['id']}").json() == {"removed": entry["id"]}
     assert client.get("/api/styles").json() == [] and not folder.exists()

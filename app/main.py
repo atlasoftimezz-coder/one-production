@@ -1765,6 +1765,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
         deps.download = lambda vid, work: style_probe.download(StyleYtDlp, vid, work, ffmpeg)
         deps.analyse = lambda video, out, text, meta: style_probe.analyse(ffmpeg, video, out, text, meta)
         deps.combine = style_probe.combine
+        deps.pause = 3.0
         deps.styles = styles
         cfg = TeamConfig.from_dict(team_settings())
         sr = StyleRun(pid, name, links["items"], run, deps, cfg, state_file=store.project_dir(pid) / "style.json",

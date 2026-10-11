@@ -5,7 +5,8 @@
 Special video ids:  NOCAPTION01 (no captions)   RATELIMIT01 (429 the first time)
                     GONEGONE001 (video unavailable)   AUTOCAPS001 (rolling auto captions)
 FAKE_YTDLP_LOG = file: every command line is appended (tests count calls).
-FAKE_YTDLP_VIDEO = file: without --skip-download it is "downloaded" as <id>.mp4 (TOOLONG0001: nothing).
+FAKE_YTDLP_VIDEO = file: without --skip-download it is "downloaded" as <id>.mp4 (NOFILEVID01: nothing).
+Style probe ids: LONGVIDEO01 (25 min: download-sections), SUBS429VID1 (captions always 429).
 """
 import json
 import os
@@ -38,6 +39,20 @@ vid = url.split("v=")[1][:11]
 if vid == "GONEGONE001":
     sys.stderr.write("ERROR: [youtube] GONEGONE001: Video unavailable\n")
     sys.exit(1)
+if "-J" in args:                                 # one video's metadata (style probe)
+    print(json.dumps({"id": vid, "title": f"Video {vid}", "channel": "Mr Facts", "uploader_id": "@mrfacts",
+                      "duration": 1500 if vid == "LONGVIDEO01" else 120, "view_count": 1, "upload_date": "20260901"}))
+    sys.exit(0)
+if "--skip-download" not in args:                # style probe: the "downloaded" video is FAKE_YTDLP_VIDEO
+    if os.environ.get("FAKE_YTDLP_LOG_SECTIONS") and "--download-sections" in args:
+        Path(os.environ["FAKE_YTDLP_LOG_SECTIONS"]).write_text(args[args.index("--download-sections") + 1])
+    src = os.environ.get("FAKE_YTDLP_VIDEO")
+    if vid != "NOFILEVID01" and src:
+        Path(f"{vid}.mp4").write_bytes(Path(src).read_bytes())
+    sys.exit(0)
+if vid == "SUBS429VID1":
+    sys.stderr.write("ERROR: Unable to download video subtitles for 'en': HTTP Error 429: Too Many Requests\n")
+    sys.exit(1)
 if vid == "RATELIMIT01":
     marker = Path.cwd() / ".ratelimited"
     if not marker.exists():
@@ -68,8 +83,3 @@ else:
         for n, line in enumerate([s.strip() + "." for s in (sentence * 20).split(". ") if s.strip()][:59]))
     vtt += "00:00:59.000 --> 00:01:00.000\n[Music]\n\n"
 Path(f"{vid}.en.vtt").write_text(vtt, encoding="utf-8")
-if "--skip-download" not in args:            # style probe: the "downloaded" video is FAKE_YTDLP_VIDEO
-    src = os.environ.get("FAKE_YTDLP_VIDEO")
-    if vid == "TOOLONG0001" or not src:
-        sys.exit(0)                          # yt-dlp skips a --match-filter miss without an error
-    Path(f"{vid}.mp4").write_bytes(Path(src).read_bytes())

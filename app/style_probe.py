@@ -28,7 +28,7 @@ from pathlib import Path
 import numpy as np
 
 from . import media
-from .competitors import FetchError, YtDlp, clean_vtt, measure, words_of
+from .competitors import FetchError, YtDlp, measure
 
 SCENE = 0.30                 # scene-change threshold (ffmpeg's 0..1 score)
 MIN_SHOT = 0.20              # cuts closer than this are one flicker, not two shots
@@ -43,31 +43,55 @@ class ProbeError(RuntimeError):
 
 # ---------------------------------------------------------------- download
 
-async def download(ytdlp: YtDlp, video_id: str, work: Path, ffmpeg: str | None = None) -> dict:
-    """Small working copy + metadata + captions of one video into work/. {video, meta, text}"""
+RATE_LIMIT = re.compile(r"429|too many requests|temporar|timed out|unable to download webpage", re.I)
+
+
+async def _retry(call, tries: int = 3, pause: float = 4.0):
+    """YouTube rate-limits bursts (HTTP 429, owner's first real run on 2026-10-11): wait and try again."""
+    for attempt in range(tries):
+        try:
+            return await call()
+        except FetchError as e:
+            if attempt == tries - 1 or not RATE_LIMIT.search(str(e)):
+                raise
+            import asyncio
+            await asyncio.sleep(pause * (attempt + 1))
+
+
+async def download(ytdlp: YtDlp, video_id: str, work: Path, ffmpeg: str | None = None, pause: float = 4.0) -> dict:
+    """Small working copy + metadata + captions of one video into work/. {video, meta, text, notes}
+
+    The video and the captions are fetched separately: captions are a bonus (a rate-limited caption
+    request must not lose the video). A video longer than MAX_MINUTES is measured on its first
+    MAX_MINUTES only."""
     work.mkdir(parents=True, exist_ok=True)
+    url = f"https://www.youtube.com/watch?v={video_id}"
+    notes: list[str] = []
+    info = await _retry(lambda: ytdlp.run(["--skip-download", "--no-playlist", "-J", url], work), pause=pause)
+    try:
+        full = json.loads(info.strip().splitlines()[-1]) if info.strip() else {}
+    except ValueError:
+        full = {}
+    meta = {k: full.get(k) for k in ("id", "title", "channel", "uploader_id", "duration", "view_count", "upload_date")}
+    meta["id"] = meta.get("id") or video_id
     args = ["-f", "bv*[height<=720][ext=mp4]+ba[ext=m4a]/b[height<=720][ext=mp4]/b[height<=720]/b",
-            "--merge-output-format", "mp4", "--max-filesize", "600M",
-            "--match-filter", f"duration<={MAX_MINUTES * 60}",
-            "--write-subs", "--write-auto-subs", "--sub-langs", "en.*,en", "--sub-format", "vtt",
-            "--print-to-file", "%(.{id,title,channel,uploader_id,duration,view_count,upload_date})j",
-            f"{video_id}.meta.json", "-o", "%(id)s.%(ext)s"]
+            "--merge-output-format", "mp4", "--max-filesize", "800M", "--no-playlist", "-o", "%(id)s.%(ext)s"]
+    if (meta.get("duration") or 0) > MAX_MINUTES * 60:
+        args += ["--download-sections", f"*0-{MAX_MINUTES * 60}"]
+        notes.append(f"longer than {MAX_MINUTES} min - the first {MAX_MINUTES} min were measured")
     if ffmpeg:
         args += ["--ffmpeg-location", str(Path(ffmpeg).parent)]
-    await ytdlp.run([*args, f"https://www.youtube.com/watch?v={video_id}"], work)
-    meta_file = work / f"{video_id}.meta.json"
-    meta = json.loads(meta_file.read_text(encoding="utf-8").splitlines()[0]) if meta_file.exists() else {}
+    await _retry(lambda: ytdlp.run([*args, url], work), pause=pause)
     video = next((p for p in sorted(work.glob(f"{video_id}.*"))
                   if p.suffix.lower() in (".mp4", ".mkv", ".webm") and ".part" not in p.name), None)
     if not video:
-        if (meta.get("duration") or 0) > MAX_MINUTES * 60:
-            raise FetchError(f"longer than {MAX_MINUTES} minutes - pick a shorter video")
-        raise FetchError("the video could not be downloaded")
-    subs = {p.name.split(".")[-2]: p for p in work.glob(f"{video_id}.*.vtt")}
-    pick = next((subs[k] for k in ("en", "en-US", "en-GB", *[k for k in subs if k.startswith("en") and k != "en-orig"],
-                                   "en-orig") if k in subs), None)
-    text = clean_vtt(pick.read_text(encoding="utf-8", errors="replace")) if pick else ""
-    return {"video": video, "meta": meta, "text": text if words_of(text) >= 30 else ""}
+        raise FetchError("yt-dlp finished without a video file (it may be members-only, private or too big)")
+    text = ""
+    try:
+        _, text = await _retry(lambda: ytdlp.captions(video_id, work / "captions"), pause=pause)
+    except FetchError as e:
+        notes.append(f"no transcript ({e}) - the style is learned from the picture and sound")
+    return {"video": video, "meta": meta, "text": text, "notes": notes}
 
 
 # ---------------------------------------------------------------- cuts
@@ -121,6 +145,42 @@ def small_frames(ffmpeg: str, video: Path) -> np.ndarray:
         raise ProbeError("could not decode the video: " + r.stderr.decode(errors="replace")[-200:])
     n = len(r.stdout) // (SMALL_W * SMALL_H * 3)
     return np.frombuffer(r.stdout[: n * SMALL_W * SMALL_H * 3], dtype=np.uint8).reshape(n, SMALL_H, SMALL_W, 3)
+
+
+def beat_times(frames: np.ndarray, fps: float = SMALL_FPS, gap: float = 0.5) -> list[float]:
+    """Moments the picture clearly changes - a hard cut OR something animating in / out / across.
+
+    Owner's first real competitor (Bravos Research, 2026-10-11) is one continuous motion-graphics
+    canvas: 4 hard cuts in 20 minutes, yet something new every second or two. Scene scores miss that;
+    so: the change between a frame and the one 0.5 s earlier, smoothed, and its peaks above an
+    adaptive floor (4x the video's median change, at least 2 grey levels), 0.5 s apart."""
+    if len(frames) < 12:
+        return []
+    gray = frames.astype(np.float32).mean(axis=3)
+    lag = max(1, int(round(fps * 0.5)))
+    change = np.abs(gray[lag:] - gray[:-lag]).mean(axis=(1, 2))
+    change = np.convolve(change, np.ones(3) / 3, mode="same")
+    floor = max(2.0, 4 * float(np.median(change)))
+    out: list[float] = []
+    for i in range(1, len(change) - 1):
+        if change[i] >= floor and change[i] >= change[i - 1] and change[i] > change[i + 1]:
+            t = round((i + lag / 2) / fps, 2)
+            if not out or t - out[-1] >= gap:
+                out.append(t)
+            elif change[i] > change[int(round(out[-1] * fps - lag / 2))]:
+                out[-1] = t
+    return out
+
+
+def moments(cuts: list[float], beats: list[float], seconds: float) -> list[tuple[float, float]]:
+    """Cuts and beats together: the stretches between visible changes (what an editor would call shots
+    in a continuous motion-graphics video)."""
+    times = sorted(set(round(t, 2) for t in cuts + beats))
+    merged: list[float] = []
+    for t in times:
+        if not merged or t - merged[-1] >= MIN_SHOT * 2:
+            merged.append(t)
+    return shots_of(merged, seconds)
 
 
 def picture(frames: np.ndarray, shots: list[tuple[float, float]]) -> dict:
@@ -235,11 +295,20 @@ def analyse(ffmpeg: str, video: Path, out: Path, text: str = "", meta: dict | No
         raise ProbeError("the file has no picture")
     cuts = cut_times(ffmpeg, video)
     shots = shots_of(cuts, seconds)
+    small = small_frames(ffmpeg, video)
+    beats = beat_times(small)
+    beat_shots = moments(cuts, beats, seconds)
+    p = pace(shots, seconds)
+    b = pace(beat_shots, seconds)
+    p.update(beats=len(beat_shots) - 1, beats_per_min=b["cuts_per_min"], beat_median=b["shot_median"],
+             beat_p10=b["shot_p10"], beat_p90=b["shot_p90"], first_30s_beats_per_min=b["first_30s_cuts_per_min"],
+             beats_per_minute_curve=b["cuts_per_minute_curve"],
+             continuous=bool(p["cuts_per_min"] is not None and p["cuts_per_min"] < 3 and (b["cuts_per_min"] or 0) >= 10))
     result = {"video": dict(meta or {}), "seconds": round(seconds, 2), "size": f"{vs.get('width')}x{vs.get('height')}",
-              "fps": vs.get("avg_frame_rate"), "pace": pace(shots, seconds), "cuts": cuts,
-              "picture": picture(small_frames(ffmpeg, video), shots), "sound": sound(ffmpeg, video, shots, seconds),
+              "fps": vs.get("avg_frame_rate"), "pace": p, "cuts": cuts, "beats": beats,
+              "picture": picture(small, shots), "sound": sound(ffmpeg, video, beat_shots, seconds),
               "words": {k: v for k, v in measure(text, seconds).items()} if text else None}
-    result["frames"] = keyframes(ffmpeg, video, shots, out)
+    result["frames"] = keyframes(ffmpeg, video, beat_shots, out)       # one still per visible change
     result["sheets"] = sorted(f"sheets/{p.name}" for p in (out / "sheets").glob("*.jpg"))
     (out / "measure.json").write_text(json.dumps(result, indent=1), encoding="utf-8")
     if text:
@@ -252,11 +321,14 @@ def combine(measures: list[dict]) -> dict:
     def med(path: tuple[str, str]) -> float | None:
         vals = [m[path[0]][path[1]] for m in measures if (m.get(path[0]) or {}).get(path[1]) is not None]
         return round(statistics.median(vals), 2) if vals else None
-    keys = {"pace": ("cuts_per_min", "shot_median", "shot_p10", "shot_p90", "first_30s_cuts_per_min", "after_30s_cuts_per_min"),
+    keys = {"pace": ("cuts_per_min", "shot_median", "shot_p10", "shot_p90", "first_30s_cuts_per_min", "after_30s_cuts_per_min",
+                     "beats_per_min", "beat_median", "beat_p10", "beat_p90", "first_30s_beats_per_min"),
             "picture": ("motion_inside_shots", "moving_shot_share", "flat_frame_share", "colourfulness", "brightness"),
             "sound": ("hits_per_min", "cuts_with_a_hit", "pause_level_db", "lufs"),
             "words": ("wpm", "avg_sentence")}
     out = {group: {k: med((group, k)) for k in ks} for group, ks in keys.items()}
+    cont = [bool((m.get("pace") or {}).get("continuous")) for m in measures]
+    out["pace"]["continuous_share"] = round(sum(cont) / len(cont), 2) if cont else None
     beds = [m["sound"].get("music_bed_hint") for m in measures if (m.get("sound") or {}).get("has_audio")]
     out["sound"]["music_bed_hint_share"] = round(sum(beds) / len(beds), 2) if beds else None
     out["videos"] = len(measures)

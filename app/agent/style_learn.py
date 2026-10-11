@@ -106,11 +106,15 @@ class StyleRun(Team):
                 raise Stopped()
             await self.set_stage("watch", "running", f"video {n}/{len(ids)}: downloading")
             vwork = work / vid
+            if n > 1:
+                await asyncio.sleep(getattr(self.deps, "pause", 0))     # YouTube rate-limits quick bursts (429)
             try:
                 got = await self.deps.download(vid, vwork)
             except FetchError as e:
                 self.problems.append({"link": f"https://www.youtube.com/watch?v={vid}", "why": str(e)})
                 continue
+            for note in got.get("notes") or []:
+                self.problems.append({"link": f"https://www.youtube.com/watch?v={vid}", "why": note, "note": True})
             await self.set_stage("watch", "running", f"video {n}/{len(ids)}: measuring cuts, picture and sound")
             out = files / self.base / vid
             try:
@@ -124,7 +128,8 @@ class StyleRun(Team):
             measures.append(m)
             self.videos.append({"id": vid, "title": got["meta"].get("title") or vid, "channel": got["meta"].get("channel"),
                                 "folder": f"{self.base}/{vid}", "shots": m["pace"]["shots"],
-                                "cuts_per_min": m["pace"]["cuts_per_min"], "sheets": [f"{self.base}/{vid}/{s}" for s in m["sheets"]]})
+                                "cuts_per_min": m["pace"]["cuts_per_min"], "beats_per_min": m["pace"].get("beats_per_min"),
+                                "sheets": [f"{self.base}/{vid}/{s}" for s in m["sheets"]]})
             await self._changed()
         if not measures:
             await self.stop_here("watch", "no video could be watched: " +
@@ -138,9 +143,13 @@ class StyleRun(Team):
     def learn_prompt(self, task: Task) -> str:
         b = self.base
         lines = [f"Learn the editing style of these competitor videos. Everything is in {b}/:",
-                 f"- {b}/numbers.json: medians over all videos, measured by the app (trust these numbers).",
-                 *[f"- {v['folder']}/: measure.json (this video's numbers: cut times, per-shot motion, colours, sound), "
-                   f"transcript.txt, frames/ (one still per shot, in order), sheets/ (contact sheets of those stills: "
+                 f"- {b}/numbers.json: medians over all videos, measured by the app (trust these numbers). \"cuts\" are hard "
+                 "cuts; \"beats\" are every moment the picture visibly changes (something animates in, out or across, or a "
+                 "cut). continuous_share near 1 means one continuous motion-graphics canvas where elements move instead of "
+                 "cutting - say so, and describe HOW things enter, move and leave.",
+                 *[f"- {v['folder']}/: measure.json (this video's numbers: cut and beat times, motion, colours, sound), "
+                   f"transcript.txt (if YouTube gave captions), frames/ (one still per visible change, in order), sheets/ "
+                   f"(contact sheets of those stills: "
                    f"{', '.join(Path(s).name for s in v['sheets'][:12])}) - \"{v['title']}\"" for v in self.videos], "",
                  "1. LOOK at every contact sheet (Read the image files) and at single frames where you need detail. "
                  "Watch for: what each shot shows (kinetic text, diagrams, maps, charts, stock footage, footage with "

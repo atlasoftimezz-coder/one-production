@@ -230,12 +230,12 @@ try:
         js("""{ const b = document.createElement('div'); b.id = 'stdemo'; document.body.appendChild(b);
              renderStyle(b, {state: 'running', name: 'Rival fast', stages: [{id: 'watch', title: 'Watch the videos', status: 'passed', detail: '1 video(s) measured'},
                {id: 'learn', title: 'Learn the style', status: 'running', detail: 'the AI is looking at the frames'}],
-               videos: [{title: 'Why the Sahara was green', shots: 48, cuts_per_min: 24}], problems: [{link: 'https://youtu.be/x', why: 'Video unavailable'}]}, 'x', null);
+               videos: [{title: 'Why the Sahara was green', shots: 48, cuts_per_min: 0.2, beats_per_min: 11}], problems: [{link: 'https://youtu.be/x', why: 'Video unavailable'}]}, 'x', null);
              b.insertAdjacentHTML('beforeend', styleDetail({summary: 's', pacing: {hook: 'a cut every second'}, visual_language: [{kind: 'kinetic type', share: 60, how: 'words slam in'}],
                typography: {case: 'upper'}, color: {approach: 'dark'}, motion: {eases: 'fast'}, sound: {sfx: 'clicks'}, do: ['cut on claims'], dont: ['slow fades']})); }""")
         txt = (js("document.querySelector('#stdemo').innerText") or "").lower()
         check("style panel shows stages, videos, problems and the profile",
-              all(x in txt for x in ("watch the videos", "learn the style", "48 shots", "24 cuts/min", "video unavailable",
+              all(x in txt for x in ("watch the videos", "learn the style", "11 visible changes/min", "0.2 hard cuts/min", "video unavailable",
                                      "kinetic type", "a cut every second", "cut on claims", "slow fades")), txt[:300])
         js("document.querySelector('#stdemo').remove()")
 

@@ -51,8 +51,9 @@ def brief(profile: dict, limit: int = 2800) -> str:
     """A short plain-text version for the learning store and agent prompts."""
     m = profile.get("measured") or {}
     p, s = m.get("pace") or {}, m.get("sound") or {}
-    nums = (f"measured: {p.get('cuts_per_min')} cuts/min, median shot {p.get('shot_median')} s "
-            f"(p10 {p.get('shot_p10')}, p90 {p.get('shot_p90')}), first 30 s {p.get('first_30s_cuts_per_min')} cuts/min, "
+    nums = (f"measured: {p.get('beats_per_min')} visible changes/min (median {p.get('beat_median')} s apart, first 30 s "
+            f"{p.get('first_30s_beats_per_min')}/min), {p.get('cuts_per_min')} hard cuts/min"
+            + (" - one continuous motion-graphics canvas" if (p.get('continuous_share') or 0) >= 0.5 else "") + ", "
             f"SFX on {round(100 * (s.get('cuts_with_a_hit') or 0))}% of cuts, music bed in "
             f"{round(100 * (s.get('music_bed_hint_share') or 0))}% of videos, {(m.get('words') or {}).get('wpm')} wpm.")
     text = f"{profile.get('summary', '')}\n{nums}\nDo: " + "; ".join(profile.get("do") or []) + \
