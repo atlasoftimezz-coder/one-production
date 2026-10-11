@@ -62,8 +62,15 @@ def last_user_line(prompt: str) -> str:
 
 def claude(args, home: Path):
     flag = home / "logged_in"
+    # CLAUDE_CODE_OAUTH_TOKEN (from `claude setup-token`) signs in without the login file. Real
+    # 2.1.284, 2026-10-11: auth status says loggedIn / "oauth_token" with no email (it doesn't
+    # check the token), and /usage prints only the session cost summary, no limit windows.
+    token = os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")
     if args[:2] == ["auth", "status"]:
-        if flag.exists():
+        if token:
+            out({"loggedIn": True, "authMethod": "oauth_token", "apiProvider": "firstParty",
+                 "configDirectory": str(home)})
+        elif flag.exists():
             out({"loggedIn": True, "authMethod": "claude.ai", "email": flag.read_text(),
                  "subscriptionType": "pro", "configDirectory": str(home)})
         else:
@@ -75,6 +82,10 @@ def claude(args, home: Path):
     if "-p" not in args:
         return 2
     if "/usage" in args:                      # answered locally by the real CLI: no turn, no cost
+        if token:
+            out({"type": "result", "subtype": "success", "is_error": False, "num_turns": 0,
+                 "total_cost_usd": 0, "result": "Total cost:            $0.0000\nUsage:                 0 input, 0 output"})
+            return 0
         if not flag.exists():
             sys.stderr.write("Not logged in · Please run /login\n")
             return 1
@@ -95,7 +106,7 @@ def claude(args, home: Path):
         with open(log, "a", encoding="utf-8") as fh:
             fh.write(json.dumps({"args": args, "prompt": prompt,
                                  "env": {k: v for k, v in os.environ.items() if k.startswith("CLAUDE_CODE_")}}) + "\n")
-    if not flag.exists():
+    if not flag.exists() and not token:
         sys.stderr.write("Not logged in · Please run /login\n")
         return 1
     n = bump()

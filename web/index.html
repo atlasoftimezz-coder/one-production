@@ -434,6 +434,8 @@
   .meter .bar i { display: block; height: 100%; background: var(--ok); }
   .meter .bar i.warn { background: var(--warn); } .meter .bar i.hot { background: var(--bad); }
   .aact { display: flex; gap: 6px; flex: none; }
+  .tokask { display: flex; gap: 6px; margin-top: 8px; }
+  .tokask input { flex: 1; min-width: 0; }
   .btn { padding: 7px 12px; border-radius: 10px; font-weight: 600; font-size: 13px; background: var(--panel2);
          border: 1px solid var(--line); white-space: nowrap; }
   .btn:hover { border-color: var(--accent); }
@@ -751,6 +753,8 @@
         <input id="addlabel" maxlength="60" placeholder="e.g. Main Claude, Work, Aditya's own">
         <div id="keyrow"><label for="addkey">API key</label>
           <input id="addkey" type="password" autocomplete="off" placeholder="sk-ant-…"></div>
+        <div id="tokrow"><label for="addtoken">Sign-in token (optional)</label>
+          <input id="addtoken" type="password" autocomplete="off" placeholder="sk-ant-oat… from: claude setup-token"></div>
         <div class="note" id="addnote"></div>
         <div class="row2"><button type="button" class="btn" id="addcancel">Cancel</button>
           <button class="btn primary" id="addgo">Continue</button></div>
@@ -1967,7 +1971,8 @@ function renderAccounts() {
   const real = state.accounts.filter(a => a.id !== "demo");
   $("#acclist").innerHTML = real.length ? real.map(a => {
     const p = PROV[a.provider];
-    const sub = [a.email, a.plan ? a.plan + " plan" : "", a.method, a.key_hint, a.model ? "model: " + a.model : ""]
+    const sub = [a.email, a.plan ? a.plan + " plan" : "", a.method, a.key_hint,
+                 a.token_hint ? "token " + a.token_hint : "", a.model ? "model: " + a.model : ""]
                   .filter(Boolean).join(" · ");
     const statusText = a.status === "ok" ? "Ready" : a.status === "error" ? (a.reason || "Problem") : "Not checked";
     const needsLogin = a.provider !== "anthropic_api";
@@ -1979,6 +1984,7 @@ function renderAccounts() {
         ${meterHTML(a.rate_limit)}</div>
       <div class="aact">
         ${needsLogin && a.status !== "ok" ? `<button class="btn primary" data-act="login">Sign in</button>` : ""}
+        ${a.provider === "claude" ? `<button class="btn" data-act="${a.token_hint ? "untoken" : "token"}">${a.token_hint ? "Remove token" : "Use a token"}</button>` : ""}
         <button class="btn" data-act="check">Check</button>
         <button class="btn" data-act="toggle">${a.enabled ? "Turn off" : "Turn on"}</button>
         <button class="btn danger" data-act="remove">Remove</button>
@@ -2005,6 +2011,28 @@ async function accountAction(id, act, btn) {
     await loadAccounts(); toast("Removed " + accName(a));
   } else if (act === "login") {
     await startLogin(id);
+  } else if (act === "token") {
+    const box = btn.closest(".acc");
+    if (box.querySelector(".tokask")) return;
+    const ask = document.createElement("div");
+    ask.className = "tokask";
+    ask.innerHTML = `<input type="password" autocomplete="off" placeholder="sk-ant-oat… from: claude setup-token">
+      <button class="btn primary" data-t="save">Save token</button><button class="btn" data-t="cancel">Cancel</button>`;
+    box.querySelector(".ainfo").appendChild(ask);
+    ask.querySelector("input").focus();
+    ask.querySelector("[data-t=cancel]").onclick = () => ask.remove();
+    ask.querySelector("[data-t=save]").onclick = async () => {
+      try {
+        const r = await (await api(`/api/accounts/${id}/token`, { method: "PUT", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token: ask.querySelector("input").value.trim() }) })).json();
+        await loadAccounts();
+        toast(r.status === "ok" ? "Sign-in token saved" : "Token saved, but: " + (r.reason || "not ready"), r.status !== "ok");
+      } catch (err) { toast(err.message, true); }
+    };
+  } else if (act === "untoken") {
+    if (btn.dataset.sure !== "1") { btn.dataset.sure = "1"; btn.textContent = "Click again to remove the token"; return; }
+    await api(`/api/accounts/${id}/token`, { method: "DELETE" });
+    await loadAccounts(); toast("Token removed from " + accName(a));
   }
 }
 
@@ -2032,23 +2060,29 @@ document.querySelectorAll(".tile").forEach(t => t.onclick = () => {
   $("#addtitle").textContent = { claude: "Add a Claude login", codex: "Add a Codex login",
                                  anthropic_api: "Add an Anthropic API key" }[addProvider];
   $("#keyrow").style.display = api_ ? "" : "none";
+  $("#tokrow").style.display = addProvider === "claude" ? "" : "none";
   $("#addnote").textContent = api_
     ? "The key is checked with a free request, then stored in Windows Credential Manager — never in a file."
     : "Continue opens " + (addProvider === "claude" ? "Claude" : "Codex") +
-      "'s own sign-in window. Sign in with whichever email this account uses; this page updates by itself.";
+      "'s own sign-in window. Sign in with whichever email this account uses; this page updates by itself." +
+      (addProvider === "claude" ? " Or paste a sign-in token: run claude setup-token while signed in to your own" +
+        " Claude subscription. It is kept in Windows Credential Manager." : "");
   $("#addgo").textContent = api_ ? "Check and save" : "Continue to sign-in";
   $("#addform").classList.add("open"); $("#addlabel").focus();
 });
-$("#addcancel").onclick = () => { $("#addform").classList.remove("open"); $("#addkey").value = ""; };
+$("#addcancel").onclick = () => { $("#addform").classList.remove("open"); $("#addkey").value = ""; $("#addtoken").value = ""; };
 $("#addform").onsubmit = async e => {
   e.preventDefault();
   const go = $("#addgo"); go.disabled = true;
+  const token = addProvider === "claude" ? $("#addtoken").value.trim() : "";
   try {
     const acc = await (await api("/api/accounts", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ provider: addProvider, label: $("#addlabel").value, api_key: $("#addkey").value || null }) })).json();
-    $("#addform").classList.remove("open"); $("#addkey").value = ""; $("#addlabel").value = "";
+      body: JSON.stringify({ provider: addProvider, label: $("#addlabel").value, api_key: $("#addkey").value || null,
+                             oauth_token: token || null }) })).json();
+    $("#addform").classList.remove("open"); $("#addkey").value = ""; $("#addtoken").value = ""; $("#addlabel").value = "";
     await loadAccounts();
-    if (addProvider !== "anthropic_api") await startLogin(acc.id);
+    if (token) toast(acc.status === "ok" ? "Sign-in token saved" : "Token saved, but: " + (acc.reason || "not ready"), acc.status !== "ok");
+    else if (addProvider !== "anthropic_api") await startLogin(acc.id);
     else toast("API key saved and working");
   } catch (err) { toast(err.message, true); }
   go.disabled = false;

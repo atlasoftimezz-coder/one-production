@@ -58,6 +58,34 @@ def key_name(acc_id: str) -> str:
     return f"anthropic-api:{acc_id}"
 
 
+def token_name(acc_id: str) -> str:
+    return f"claude-token:{acc_id}"
+
+
+TOKEN_PREFIX = "sk-ant-oat"             # what `claude setup-token` prints
+API_KEY_PREFIX = "sk-ant-api"
+
+
+def check_token(token: str) -> str:
+    """A Claude sign-in token from `claude setup-token` (the account owner's own subscription)."""
+    token = (token or "").strip()
+    if token.startswith(API_KEY_PREFIX):
+        raise AccountError("that is an API key, not a sign-in token - add it as an Anthropic API key")
+    if not token.startswith(TOKEN_PREFIX) or len(token) < 40 or any(c.isspace() for c in token):
+        raise AccountError("that doesn't look like a sign-in token: run `claude setup-token` and paste "
+                           "the whole line that starts with sk-ant-oat")
+    return token
+
+
+def claude_env(acc: dict) -> dict[str, str]:
+    """Environment for Claude Code on a Claude login: its own config folder, plus the sign-in
+    token when the account uses one instead of the browser login. Always set (empty = none,
+    verified on Claude Code 2.1.284), so a token in the PC's own environment can't sign every
+    account in as the same person."""
+    token = Accounts.oauth_token(acc) if acc.get("token_hint") else None
+    return {"CLAUDE_CONFIG_DIR": acc["profile_dir"], "CLAUDE_CODE_OAUTH_TOKEN": token or ""}
+
+
 class Accounts:
     def __init__(self, data_dir: Path):
         self.file = data_dir / "accounts.json"
@@ -131,6 +159,11 @@ class Accounts:
         if acc["provider"] == "anthropic_api":
             try:
                 keyring.delete_password(KEYRING_SERVICE, key_name(acc_id))
+            except keyring.errors.PasswordDeleteError:
+                pass
+        if acc.get("token_hint"):
+            try:
+                keyring.delete_password(KEYRING_SERVICE, token_name(acc_id))
             except keyring.errors.PasswordDeleteError:
                 pass
         if acc.get("profile_dir"):
@@ -230,9 +263,31 @@ class Accounts:
     def mark_auth_error(self, acc_id: str, reason: str) -> None:
         self._update(acc_id, status="error", reason=reason)
 
+    def set_token(self, acc_id: str, token: str) -> dict:
+        """Use a sign-in token from `claude setup-token` instead of the browser login. The
+        token goes to Windows Credential Manager; the registry keeps only its last 4 characters."""
+        acc = self.get(acc_id)
+        if acc["provider"] != "claude":
+            raise AccountError("sign-in tokens are only for Claude logins")
+        token = check_token(token)
+        keyring.set_password(KEYRING_SERVICE, token_name(acc_id), token)
+        return self._update(acc_id, token_hint="…" + token[-4:])
+
+    def clear_token(self, acc_id: str) -> dict:
+        self.get(acc_id)
+        try:
+            keyring.delete_password(KEYRING_SERVICE, token_name(acc_id))
+        except keyring.errors.PasswordDeleteError:
+            pass
+        return self._update(acc_id, token_hint=None)
+
     @staticmethod
     def api_key(acc: dict) -> str | None:
         return keyring.get_password(KEYRING_SERVICE, key_name(acc["id"]))
+
+    @staticmethod
+    def oauth_token(acc: dict) -> str | None:
+        return keyring.get_password(KEYRING_SERVICE, token_name(acc["id"]))
 
     @staticmethod
     def public(acc: dict) -> dict:

@@ -18,6 +18,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import AsyncIterator
 
+from ..accounts import claude_env
 from ..models import EFFORTS
 from .base import Event, Fail, RateLimit, Text, Usage, classify_status, classify_text
 from .cli import resolve, run_capture, run_lines
@@ -74,7 +75,7 @@ class ClaudeCLI:
         # The data folder usually sits under the user's home, and Claude Code reads CLAUDE.md
         # (and .claude/CLAUDE.md) from every parent folder - so the user's own global
         # instructions would steer the studio assistant. Memory files are switched off.
-        return {"CLAUDE_CONFIG_DIR": account["profile_dir"], "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "1",
+        return {**claude_env(account), "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "1",
                 "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1"}
 
     async def status(self, account: dict) -> dict:
@@ -89,8 +90,11 @@ class ClaudeCLI:
             return {"ok": False, "reason": (err or out or "no answer").strip()[:200]}
         if not d.get("loggedIn"):
             return {"ok": False, "reason": "not logged in"}
+        method = d.get("authMethod")
+        if method == "oauth_token":     # CLAUDE_CODE_OAUTH_TOKEN: Claude Code can't tell whose it is
+            method = "sign-in token"
         return {"ok": True, "email": d.get("email"), "plan": d.get("subscriptionType"),
-                "org": d.get("orgName"), "method": d.get("authMethod")}
+                "org": d.get("orgName"), "method": method}
 
     async def live_usage(self, account: dict) -> dict | None:
         """Current utilisation without sending a message. Safety stop: if this ever runs a

@@ -12,7 +12,38 @@ phase log and the plan, checks the PC, runs the last gate and reports before tou
 
 ---
 
-## Current continuation checkpoint - Claude, 2026-10-06 (night): P12 built, handed to a friend
+## Checkpoint - Claude, 2026-10-10/11: /handoff run, Claude sign-in tokens
+
+- **/handoff on 2026-10-10** ran on the studio PC itself (all paths in §2 exist; tools match §6).
+  `check.bat P12` = 475/477: the 1 opt-in GPU skip, plus `tests/p6/test_ui_p6` "backup shows it
+  as deleted". **Cause found and fixed (a test race):** the inline delete confirm hides the
+  project's name at once, so "project deleted" passed before the DELETE request finished; the
+  Backups screen then loaded while the project still existed (no DELETED badge). Both delete
+  checks in `ui_drive.py` now also wait for the confirm row to go away, and that check prints the
+  backup rows when it fails. Launching `check.bat` through `cmd /c` from
+  PowerShell said "not recognized"; run `.venv\Scripts\python.exe tools\check.py P12` instead.
+- **Claude sign-in token** (owner, 2026-10-11: "OAuth token is enough can you check and
+  implement"). The owner's browser login wasn't working and kept asking for an API key; a
+  pasted OAuth token was refused because it went into the API key box.
+  - A Claude login can carry a token from `claude setup-token`: Credential Manager entry
+    `OneProduction` / `claude-token:<account id>`, `token_hint` in accounts.json.
+  - `accounts.claude_env()` is now the one place that builds a Claude login's environment
+    (chat CLI, agent, dispatch). It always sets `CLAUDE_CODE_OAUTH_TOKEN`, empty when the account
+    has none, so a token in the PC's own environment can't sign every account in as one person.
+    Empty = unset was checked on the real Claude Code 2.1.284.
+  - Real Claude Code facts (2026-10-11, fake token, free): `auth status` says `loggedIn: true`,
+    `authMethod: "oauth_token"` and gives no email, without checking the token; a bad token only
+    shows on the first message. `/usage` prints only a cost summary for token logins, so their
+    meters fill from `rate_limit_event`s in replies.
+  - Routes `PUT` / `DELETE /api/accounts/{id}/token`; `POST /api/accounts` takes `oauth_token`.
+    UI: "Sign-in token" box on the Claude tile, "Use a token" / "Remove token" on Claude cards.
+  - Tests: `tests/p2/test_token_login.py`; the fake CLI honours `CLAUDE_CODE_OAUTH_TOKEN`.
+  - Gate after both changes: `check.bat P12` = **482 passed, 0 failed, 1 opt-in GPU skip**.
+  - Not verified with a real token yet. Decision D2 still holds: use only your own
+    subscription's token. Claude declined to wire in a token from someone else's account
+    (asked about on 2026-10-11).
+
+## Earlier checkpoint - Claude, 2026-10-06 (night): P12 built, handed to a friend
 
 **Handover.** The owner, 2026-10-06: "Here after friend will take care you can push in git hub and
 update handoff". Everything up to P12 plus this handoff is pushed to `origin/main`.

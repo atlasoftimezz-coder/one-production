@@ -74,7 +74,7 @@ from .media import duration as media_duration
 from .storage import NotFound, Store
 from .tools import Approvals, TOOLS
 from .usage import RANGES, Ledger, range_start, usage_pct as shared_usage_pct
-from .accounts import CAP_FIELDS, chaining_allowed, switch_allowed
+from .accounts import CAP_FIELDS, TOKEN_PREFIX, chaining_allowed, check_token, switch_allowed
 from . import terms
 from .version import __version__
 from .voice import VoiceTuner, VoiceError, VoiceJobs, VoiceService
@@ -112,6 +112,11 @@ class NewAccount(BaseModel):
     label: str = ""
     api_key: str | None = None
     model: str | None = None
+    oauth_token: str | None = None             # Claude: token from `claude setup-token` instead of the browser login
+
+
+class TokenIn(BaseModel):
+    token: str
 
 
 class AccountPatch(BaseModel):
@@ -669,17 +674,48 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
 
     @app.post("/api/accounts")
     async def add_account(body: NewAccount) -> dict:
+        token = (body.oauth_token or "").strip()
         if body.provider == "anthropic_api":
+            if (body.api_key or "").strip().startswith(TOKEN_PREFIX):
+                raise HTTPException(400, "That is a Claude sign-in token, not an API key. Add a "
+                                         "Claude login instead and paste it in the sign-in token box.")
             check = await providers["anthropic_api"].check_key((body.api_key or "").strip())
             if not check["ok"]:
                 raise HTTPException(400, f"That API key didn't work: {check['reason']}")
         try:
+            if token:
+                if body.provider != "claude":
+                    raise AccountError("sign-in tokens are only for Claude logins")
+                check_token(token)
             acc = accounts.add(body.provider, body.label, body.api_key, body.model)
+            if token:
+                accounts.set_token(acc["id"], token)
         except AccountError as e:
             raise HTTPException(400, str(e))
         if body.provider == "anthropic_api":
             acc = accounts.record_status(acc["id"], {"ok": True, "method": "API key"})
+        elif token:
+            acc = await _check(accounts.get(acc["id"]))
         return _public(acc)
+
+    @app.put("/api/accounts/{acc_id}/token")
+    async def set_account_token(acc_id: str, body: TokenIn) -> dict:
+        """Claude login signed in with a token from `claude setup-token` (no browser window)."""
+        _account(acc_id)
+        try:
+            accounts.set_token(acc_id, body.token)
+        except AccountError as e:
+            raise HTTPException(400, str(e))
+        return _public(await _check(accounts.get(acc_id)))
+
+    @app.delete("/api/accounts/{acc_id}/token")
+    async def clear_account_token(acc_id: str) -> dict:
+        _account(acc_id)
+        try:
+            accounts.clear_token(acc_id)
+        except AccountError as e:
+            raise HTTPException(400, str(e))
+        return _public(await _check(accounts.get(acc_id)))
 
     @app.post("/api/accounts/check")
     async def check_all() -> list[dict]:

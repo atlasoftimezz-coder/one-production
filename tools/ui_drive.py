@@ -265,6 +265,10 @@ try:
         check("email read from Claude", "friend@example.com" in (js("document.querySelector('#acclist').innerText") or ""))
         check("Codex login signs in", add_cli("codex", "My Codex"))
         check("API key tile asks for key", js("document.querySelector('.tile[data-prov=\"anthropic_api\"]').click(); getComputedStyle(document.querySelector('#keyrow')).display") != "none")
+        check("API key tile has no token box", js("getComputedStyle(document.querySelector('#tokrow')).display") == "none")
+        check("Claude tile offers a sign-in token", js("document.querySelector('.tile[data-prov=\"claude\"]').click(); getComputedStyle(document.querySelector('#tokrow')).display") != "none"
+              and "setup-token" in (js("document.querySelector('#addnote').innerText") or ""))
+        check("Claude cards offer 'Use a token'", js("[...document.querySelectorAll('.acc')].some(a=>a.innerText.includes('Main Claude') && a.querySelector('[data-act=token]'))"))
         js("document.querySelector('#addcancel').click()")
         shot("09-accounts-signed-in")
         js("document.querySelector('#accclose').click()")
@@ -492,6 +496,7 @@ try:
         wait_for("!!document.querySelector('#projects li.confirm')", 5)
         js("document.querySelector('#projects li.confirm [data-a=del]').click()")
         check("Delete removes the project", wait_for(
+            "!document.querySelector('#projects li.confirm') && "
             "![...document.querySelectorAll('#projects .pname')].some(e=>e.innerText==='Empty one')", 5), ", ".join(names()))
         check("the open project is untouched", "Voice test" in names() and
               js("document.querySelectorAll('.vcard.done').length") == before + 1)
@@ -742,10 +747,14 @@ try:
         js("[...document.querySelectorAll('#projects li[data-id]')].find(l=>l.innerText.includes('Ghost Towns')).querySelector('.pdel').click()")
         wait_for("!!document.querySelector('#projects li.confirm')", 5)
         js("document.querySelector('#projects li.confirm [data-a=del]').click()")
-        check("project deleted", wait_for("![...document.querySelectorAll('#projects .pname')].some(e=>e.innerText.includes('Ghost Towns'))", 5))
+        # the inline confirm row hides the name at once; deleted = that row is gone too (the
+        # DELETE finished), else the Backups screen can load first and still see the project
+        check("project deleted", wait_for("!document.querySelector('#projects li.confirm') && "
+                                          "![...document.querySelectorAll('#projects .pname')].some(e=>e.innerText.includes('Ghost Towns'))", 5))
         js("document.querySelector('#bkbtn').click()")
         check("backup shows it as deleted", wait_for(
-            "[...document.querySelectorAll('#bklist .bkp')].some(r=>r.innerText.includes('Ghost Towns') && r.innerText.includes('DELETED'))", 8))
+            "[...document.querySelectorAll('#bklist .bkp')].some(r=>r.innerText.includes('Ghost Towns') && r.innerText.includes('DELETED'))", 8),
+              js("[...document.querySelectorAll('#bklist .bkp')].map(r=>r.innerText).join(' | ')"))
         js("[...document.querySelectorAll('#bklist .bkp')].find(r=>r.innerText.includes('Ghost Towns')).querySelector('[data-a=restore]').click()")
         check("restore asks first (inline)", wait_for("!!document.querySelector('#bklist .bkp .ask')", 5))
         shot("26-restore-ask")

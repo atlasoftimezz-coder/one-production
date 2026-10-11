@@ -15,6 +15,7 @@ import shutil
 from pathlib import Path
 from typing import Any, Callable
 
+from ..accounts import claude_env
 from ..providers.base import Fail, Usage, classify_status, classify_text
 from ..providers.cli import resolve
 from .. import fusion_kit, resolve_mcp
@@ -62,7 +63,7 @@ class ClaudeAgent:
             cfg.mkdir(parents=True, exist_ok=True)
             key = self.api_key_of(account) if self.api_key_of else None
             return {"CLAUDE_CONFIG_DIR": str(cfg), "ANTHROPIC_API_KEY": key or "", **ISOLATION}
-        return {"CLAUDE_CONFIG_DIR": account["profile_dir"], **ISOLATION}
+        return {**claude_env(account), **ISOLATION}
 
     def options(self, run: Run, runs: Runs, account: dict, studio: Studio, session_id: str | None,
                 instructions: str, model: str | None, gate, effort: str | None = None) -> Any:

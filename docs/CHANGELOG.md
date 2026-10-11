@@ -3,6 +3,13 @@
 What changed in each version, in plain words. "Check for updates" shows the newest section.
 
 ## Unreleased - P10 production engine, knowledge, learning and Resolve; P11 stock footage; P12 safety and learning
+- **Claude sign-in token**: a Claude login can use a token instead of the browser sign-in. Run
+  `claude setup-token` while signed in to your own Claude subscription, then paste the
+  `sk-ant-oat…` line into "Sign-in token" when adding a Claude login, or press "Use a token" on an
+  existing one. It is kept in Windows Credential Manager. A token pasted into the API key box (or
+  an API key into the token box) is now explained instead of failing with "invalid x-api-key".
+  Limit meters for a token login fill in from replies, because Claude Code's `/usage` doesn't
+  report them for tokens.
 - **Learn from a published video**: in Knowledge and learning, pick the YouTube Studio
   audience-retention CSV of an episode. One Production finds where viewers left (after the intro),
   names the chapter, the Fusion shot and the words at that moment, and suggests at most 3 lessons.

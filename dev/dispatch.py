@@ -37,7 +37,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from app import models as M  # noqa: E402
-from app.accounts import Accounts, chaining_allowed  # noqa: E402
+from app.accounts import Accounts, chaining_allowed, claude_env  # noqa: E402
 from app.config import Settings, load_settings  # noqa: E402
 from app.providers.base import Fail, RateLimit, Usage, classify_text  # noqa: E402
 from app.providers.claude_cli import MODELS as CLAUDE_MODELS, ClaudeCLI  # noqa: E402
@@ -256,7 +256,7 @@ class Dispatcher:
             # Unlike the app's studio assistant, a dev task SHOULD read the repo's CLAUDE.md.
             # The user's own global instructions stay out: they live in the real ~/.claude,
             # not in this account's login folder.
-            env = {"CLAUDE_CONFIG_DIR": acc["profile_dir"], "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1"}
+            env = {**claude_env(acc), "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1"}
         else:
             env = {"CODEX_HOME": acc["profile_dir"]}
         venv = self.repo / ".venv" / "Scripts"
