@@ -79,7 +79,7 @@ def test_names_and_the_no_people_no_logo_rule(svc, name, prompt, why):
 
 
 def test_not_installed_says_where_to_install():
-    s = ImageService()
+    s = ImageService("http://127.0.0.1:9")          # not the real port: a running image server must not matter
     with pytest.raises(AssetError, match="isn't installed yet"):
         s.ensure_running()
 
