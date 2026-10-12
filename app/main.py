@@ -1939,6 +1939,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
         deps.sfx_ready = lambda: bool(sfx.key())
         deps.assets_ready = image_svc.ready
         deps.assets_unload = image_svc.unload
+        deps.voice_release = voice_svc.release
         deps.script_stats = script_stats_of
         deps.voice_job = voice_job_of
         deps.start_voice = start_voice_job

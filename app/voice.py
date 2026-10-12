@@ -90,6 +90,22 @@ class VoiceService:
             await asyncio.sleep(1)
         raise VoiceError("the voiceover app did not start within 90 seconds")
 
+    async def release(self) -> bool:
+        """Stop the voiceover app this One Production started, freeing its model's GPU memory (v2 re-draft,
+        2026-10-12: Chatterbox kept ~4 GB after the voiceover and the image model spilled - 200 s an object).
+        A voiceover app someone else started is left alone; the next voiceover starts it again."""
+        proc, self._proc = self._proc, None
+        if proc is None or proc.poll() is not None:
+            return False
+        log.info("stopping the voiceover app to free the graphics card")
+        if os.name == "nt":        # the venv's python.exe is a launcher: take its child with it
+            subprocess.run(["taskkill", "/T", "/F", "/PID", str(proc.pid)], capture_output=True,
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        else:
+            proc.kill()
+        await asyncio.to_thread(proc.wait)
+        return True
+
     async def meta(self) -> dict:
         async with self._client() as c:
             r = await c.get(self.url + "/api/meta")

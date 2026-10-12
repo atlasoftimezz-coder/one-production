@@ -298,3 +298,27 @@ def test_an_episode_paused_when_the_app_restarted_can_be_picked_up():
     assert retry_stage(paused, busy=True) is None                       # still live: that's Resume, not a restart
     assert retry_stage({"state": "needs_you", "stages": stages, "result": {"stage": "edit"}}, busy=False) == "edit"
     assert retry_stage({"state": "done", "stages": stages}, busy=False) is None and retry_stage(None, False) is None
+
+
+def test_the_voice_model_leaves_the_gpu_before_the_visuals(tmp_path, setup):
+    """v2 re-draft (2026-10-12): Chatterbox kept ~4 GB after the voiceover; FLUX + Resolve spilled, 200 s an object."""
+    store, pid = setup
+    deps = Deps(tmp_path, store, pid)
+    order = []
+
+    async def release():
+        order.append(("release", len(deps.auto_ran)))
+    deps.voice_release = release
+    snap = run(make(tmp_path, store, pid, deps).go())
+    assert snap["state"] == "done" and order == [("release", 0)]          # once, before any shot was built
+
+
+def test_release_stops_only_the_voice_app_it_started(tmp_path):
+    import subprocess
+    from types import SimpleNamespace
+    import sys
+    from app.voice import VoiceService
+    svc = VoiceService(SimpleNamespace(voice_app_dir=None, voice_python=None, voice_app_url="http://127.0.0.1:9"))
+    assert run(svc.release()) is False                                    # someone else's (or none): left alone
+    svc._proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+    assert run(svc.release()) is True and svc._proc is None

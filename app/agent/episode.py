@@ -362,6 +362,9 @@ class EpisodeRun(Team):
             await self.blocked("visuals", why)
             return False
         if self.draft:
+            release = getattr(self.deps, "voice_release", None)
+            if release:                # the voiceover is done: its model's GPU memory goes to images and Resolve
+                await release()
             return await self.draft_visuals()
         task = Task(id="visuals", title="Visuals (Fusion)", files=[f"{self.base}/art.json", f"{self.base}/shots.json"],
                     providers=list(CLAUDE_ACCOUNTS),
