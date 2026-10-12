@@ -586,6 +586,9 @@ class EpisodeRun(Team):
             plan.notes = why
             self.notice(f"Visuals plan: {why[:120]} - back to the worker.")
         plan.status = "done"
+        unload = getattr(self.deps, "assets_unload", None)
+        if unload:                                   # FLUX holds ~12 GB of the card; Resolve needs it for the shots
+            await asyncio.to_thread(unload)
         state = self.fusion_state()
         self.vo["resolve_project"] = state["project_name"]
         shots = state["shots"]
