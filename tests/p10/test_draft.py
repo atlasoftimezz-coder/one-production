@@ -286,3 +286,15 @@ def test_with_a_pexels_key_the_plan_may_use_footage(tmp_path, setup):
     run(make(tmp_path, store, pid, deps).go())
     plan = next(c[4] for c in deps.calls if c[0] == "worker")
     assert "stock_fetch" in plan and '"from": seconds into the clip' in plan
+
+
+def test_an_episode_paused_when_the_app_restarted_can_be_picked_up():
+    """v2 re-draft (2026-10-12): the app restarted while the draft was paused at its visuals; nothing ran it any more."""
+    from app.agent.episode import retry_stage
+    stages = [{"id": "script", "status": "passed"}, {"id": "voice", "status": "passed_with_notes"},
+              {"id": "visuals", "status": "running"}, {"id": "edit", "status": "waiting"}]
+    paused = {"state": "paused", "stages": stages}
+    assert retry_stage(paused, busy=False) == "visuals"
+    assert retry_stage(paused, busy=True) is None                       # still live: that's Resume, not a restart
+    assert retry_stage({"state": "needs_you", "stages": stages, "result": {"stage": "edit"}}, busy=False) == "edit"
+    assert retry_stage({"state": "done", "stages": stages}, busy=False) is None and retry_stage(None, False) is None

@@ -60,7 +60,7 @@ from .agent.codex_agent import CodexAgent
 from .agent.runs import Runs
 from .agent.team import Team, TeamConfig
 from .agent.scriptflow import ScriptConfig, ScriptRun
-from .agent.episode import STAGES as EPISODE_STAGES, EpisodeConfig, EpisodeRun
+from .agent.episode import STAGES as EPISODE_STAGES, EpisodeConfig, EpisodeRun, retry_stage
 from .agent.style_learn import StyleRun
 from . import competitors, faceless, style_probe
 from .styles import StyleError, Styles, brief as style_brief
@@ -2096,8 +2096,8 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
         _project(pid)
         state_file = store.project_dir(pid) / "episode.json"
         snap = json.loads(state_file.read_text(encoding="utf-8")) if state_file.exists() else None
-        stage = ((snap or {}).get("result") or {}).get("stage")
-        if not snap or snap.get("state") not in ("needs_you", "stopped") or stage not in [s for s, _ in EPISODE_STAGES]:
+        stage = retry_stage(snap, runs.busy(pid))
+        if stage not in [s for s, _ in EPISODE_STAGES]:
             raise HTTPException(409, "no stopped episode to try again")
         try:
             run = runs.start(pid, store.files_dir(pid))

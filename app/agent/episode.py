@@ -74,6 +74,19 @@ def slug(text: str) -> str:
     return re.sub(r'[^a-z0-9]+', '-', text.lower()).strip('-')[:40] or 'episode'
 
 
+def retry_stage(snap: dict | None, busy: bool) -> str | None:
+    """The stage "Try this stage again" restarts: a stopped episode's stopped stage, or - when the app restarted
+    under a paused or running episode (v2 re-draft, 2026-10-12) - its first open stage."""
+    if not snap:
+        return None
+    if snap.get("state") in ("needs_you", "stopped"):
+        return (snap.get("result") or {}).get("stage")
+    if snap.get("state") in ("paused", "running") and not busy:
+        return next((x["id"] for x in snap.get("stages") or []
+                     if x.get("status") not in ("passed", "passed_with_notes")), None)
+    return None
+
+
 class EpisodeRun(Team):
     def __init__(self, pid: str, spec: dict, run, deps, config: EpisodeConfig, state_file: Path | None = None):
         super().__init__(pid, f"Episode: {spec['name']}", run, deps, config, state_file)

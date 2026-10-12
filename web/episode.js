@@ -135,7 +135,16 @@ function renderEpisode(bubble, d, pid, prev) {
       "${esc((d.result || {}).project || '')}" (Deliver page: H.264, 1920x1080, 60 fps) into this project's folder, then pick it:</span>
       <select data-video style="flex:1"><option value="">Loading videos…</option></select><button class="btn" data-rendered>Check and package</button></div>` : ''}`;
   const r = t.el.querySelector('[data-resume]');
-  if (r) r.onclick = async () => { r.disabled = true; try { await api(`/api/projects/${pid}/team/resume`, { method: 'POST' }); } catch (e) { toast(e.message, true); } };
+  if (r) r.onclick = async () => {
+    r.disabled = true;
+    try { await api(`/api/projects/${pid}/team/resume`, { method: 'POST' }); }
+    catch (e) {
+      if (state.busy === pid) return toast(e.message, true);
+      // nothing is running it any more (the app restarted while it was paused): pick up its open stage
+      addMsg('user', 'Resume the episode');
+      await consumeReply(() => api(`/api/projects/${pid}/episode/retry`, { method: 'POST' }), null);
+    }
+  };
   t.el.querySelectorAll('[data-report]').forEach(b => b.onclick = () => episodeReport(pid, b.dataset.report));
   const retry = t.el.querySelector('[data-retry]');
   if (retry) retry.onclick = async () => {
