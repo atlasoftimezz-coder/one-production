@@ -150,11 +150,25 @@ class ImageService:
         return r.json()
 
     def unload(self) -> None:
+        """Free the image model for Resolve. The server this app started is stopped outright: after /api/unload it
+        still held ~9 GB of memory and Resolve ran out ("Memory allocation failed", no stills - v2 re-draft,
+        2026-10-12). One someone else started only gets the unload call."""
         try:
             with self._client(30) as c:
                 c.post(self.url + "/api/unload")
         except httpx.HTTPError:
             pass
+        with self._lock:
+            proc, self._proc = self._proc, None
+        if proc is None or proc.poll() is not None:
+            return
+        log.info("stopping the image server to free memory for Resolve")
+        if os.name == "nt":        # the venv's python.exe is a launcher: take its child with it
+            subprocess.run(["taskkill", "/T", "/F", "/PID", str(proc.pid)], capture_output=True,
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        else:
+            proc.kill()
+        proc.wait()
 
 
 class Assets:

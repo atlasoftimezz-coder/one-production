@@ -135,3 +135,14 @@ def test_the_gpu_job_asks_unless_the_draft_ok_covers_it(tmp_path):
     run.approved_jobs = {"image_assets"}
     assert asyncio.run(runs.permit(run, "mcp__studio__asset_generate", {"name": "x"},
                                    gate=lambda **k: {"label": "Generated assets", "uses": "GPU"})) == (True, "")
+
+
+def test_unload_stops_the_image_server_it_started():
+    """v2 re-draft (2026-10-12): after /api/unload the server still held ~9 GB and Resolve could not export stills."""
+    import subprocess
+    import sys
+    s = ImageService("http://127.0.0.1:9")
+    s.unload()                                                         # none started: nothing to stop
+    s._proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+    s.unload()
+    assert s._proc is None
