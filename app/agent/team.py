@@ -135,6 +135,7 @@ class SubRun:
         self.pending, self.asks = parent.pending, parent.asks
         self.task = None
         self.shot_scripts = None         # an episode's visuals turn: how its Resolve scripts are completed / approved
+        self.approved_jobs: set[str] = set()   # heavy jobs OK'd for this whole run (a draft's start dialog)
 
     @property
     def stopped(self) -> bool:

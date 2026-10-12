@@ -547,7 +547,9 @@ class EpisodeRun(Team):
         return "\n".join(lines)
 
     def prepare_sub(self, task: Task, sub: SubRun) -> None:
-        """Visuals turns get the episode's shot-script rules once the Resolve project exists."""
+        """Visuals turns get the episode's shot-script rules once the Resolve project exists, and a draft's
+        heavy jobs OK'd in its start dialog (generated assets) for every worker turn."""
+        sub.approved_jobs = set(self.spec.get("approved_jobs") or [])
         if task.id != "visuals" and not task.id.startswith("shots-"):
             return
         state = self.fusion_state()

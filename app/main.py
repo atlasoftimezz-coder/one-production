@@ -36,6 +36,8 @@ from .animation import Animation
 from .packaging import Packaging
 from .stock import Stock, StockError
 from .sfx import Sfx, SfxError
+from .assets import AssetError, Assets, ImageService
+from .installer import IMAGE_LIBS_MB, IMAGE_MODELS_MB, ImageRecipe, image_home
 from .fusion import Fusion
 from .insights import InsightError, Insights, parse_lessons
 from . import handoff
@@ -83,6 +85,7 @@ from .version import __version__
 from .voice import VoiceTuner, VoiceError, VoiceJobs, VoiceService
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
+IMAGEGEN_DIR = Path(__file__).resolve().parent.parent / "imagegen"
 UPLOAD_CHUNK = 1024 * 1024
 MAX_CLIP = 50 * 1024 * 1024      # a 30 s wav is ~3-6 MB; anything far bigger is not a reference clip
 DEMO_ACCOUNT = {"id": "demo", "provider": "demo", "label": "Demo (no account)", "enabled": True,
@@ -258,6 +261,7 @@ class InsightsIn(BaseModel):
 
 class InstallIn(BaseModel):
     approve: list[str] = []
+    module: str | None = None                # "voice" (default) | "image"
 
 
 class SetupIn(BaseModel):
@@ -328,7 +332,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
                codex_transport=None, backup_delay: float = 120, backup_tick: float = 3600,
                restart=None, gpu_probe=None, tune_script: Path | None = None, relaunch=None,
                updater: Updater | None = None, ytdlp=None, stock_transport=None, google_transport=None,
-               sfx_transport=None) -> FastAPI:
+               sfx_transport=None, image_transport=None) -> FastAPI:
     if login_console is None:
         login_console = settings.login_console
     token = token or secrets.token_urlsafe(32)
@@ -348,6 +352,8 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
     packaging = Packaging(store, settings.data_dir, gates)
     stock = Stock(store, transport=stock_transport)
     sfx = Sfx(store, settings.data_dir, transport=sfx_transport)
+    image_svc = ImageService(settings.image_app_url, transport=image_transport)
+    assets = Assets(store, image_svc)
     fusion = Fusion(store, settings.data_dir, resolve, settings)
     insights = Insights(store, settings.data_dir, learning)
     runs = Runs()
@@ -412,12 +418,26 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
     async def reconfigure_voice() -> None:
         voice_svc.configure(*modules.voice_config(await gpu_info()))
 
+    async def image_recipe() -> ImageRecipe:
+        return ImageRecipe(image_home(settings.data_dir, settings.image_dir, drives()), IMAGEGEN_DIR, await gpu_info())
+
+    async def reconfigure_image() -> None:
+        r = await image_recipe()
+        if r.ready():
+            image_svc.configure(r.python, IMAGEGEN_DIR / "server.py", r.env(), None)
+        else:
+            image_svc.configure(None, None, {}, "the image module isn't installed yet - open System, Modules")
+
     @asynccontextmanager
     async def lifespan(_app):
         try:
             await reconfigure_voice()
         except Exception:                              # noqa: BLE001 - voice is optional
             log.exception("voice module check failed")
+        try:
+            await reconfigure_image()
+        except Exception:                              # noqa: BLE001 - image assets are optional
+            log.exception("image module check failed")
         ticker = asyncio.get_running_loop().create_task(daily_backups())
         yield
         ticker.cancel()
@@ -440,6 +460,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
     app.add_middleware(GuardMiddleware, token=token)
     app.state.token = token          # read by the launcher only; never sent in a response
     app.state.resolve = resolve      # tests swap in a stand-in Resolve helper
+    app.state.assets = assets        # tests configure a stand-in image server
 
     def _project(pid: str) -> None:
         try:
@@ -983,6 +1004,16 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
                          needs="Your own free Pexels API key (pexels.com/api). Storyblocks needs its paid key - not built yet.",
                          detail=("Pexels key " + st["key_hint"] + " - the AI can search and fetch free Pexels clips and photos."
                                  if st["key_set"] else "Add your free Pexels key to switch it on."))
+            if m["id"] == "animation":              # generated assets on the GPU (owner, 2026-10-12)
+                r = await image_recipe()
+                st = "installing" if installer.running() and installer.module == "image" else (
+                    "ready" if r.ready() else "broken" if r.marker.exists() else "needs_install")
+                m.update(id="image", label="Image assets", state=st, folder=str(r.root),
+                         what="Generates the hero objects of a video - gold, vaults, buildings, coins, maps - as cut-out "
+                              "PNGs that the Fusion shots animate (FLUX.1-schnell, free, on your graphics card).",
+                         needs=f"An NVIDIA card with 12 GB+ (yours: {gpu.get('vram_gb', '?') if gpu else 'none'} GB) and about "
+                               f"{(IMAGE_MODELS_MB + IMAGE_LIBS_MB + 3400) / 1000:.0f} GB of disk, installed in {r.root}.",
+                         detail="installed" if r.ready() else "not installed yet")
             if m["id"] == "sfx":                    # Epidemic Sound (owner, 2026-10-11)
                 st = sfx.status()
                 m.update(state="ready" if st["key_set"] else "off", key_set=st["key_set"], key_hint=st["key_hint"],
@@ -1066,8 +1097,15 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
 
     @app.get("/api/install/plan")
     async def install_plan(module: str = "voice") -> dict:
+        if module == "image":                          # FLUX + BiRefNet on the GPU (owner, 2026-10-12)
+            gpu = await gpu_info()
+            if not gpu or gpu.get("vram_gb", 0) < 11.5:
+                raise HTTPException(400, "image assets need an NVIDIA card with 12 GB or more")
+            r = await image_recipe()
+            return {"module": "image", "folder": str(r.root), "torch_build": r.torch_kind, "ready": r.ready(),
+                    "items": installer.plan("image", r.items())}
         if module != "voice":
-            raise HTTPException(404, "only the voice module installs anything")
+            raise HTTPException(404, "only the voice and image modules install anything")
         gpu = await gpu_info()
         if modules.external():
             return {"module": "voice", "external": True, "items": []}
@@ -1080,13 +1118,15 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
     @app.post("/api/install")
     async def install(body: InstallIn) -> dict:
         gpu = await gpu_info()
-        if installer.module != "voice" or not installer.items:
-            await install_plan("voice")
-        r = modules.recipe(gpu)
+        module = body.module or installer.module or "voice"
+        if installer.module != module or not installer.items:
+            await install_plan(module)
+        r = await image_recipe() if module == "image" else modules.recipe(gpu)
         loop = asyncio.get_running_loop()
 
         def done(result):
-            loop.call_soon_threadsafe(lambda: asyncio.ensure_future(reconfigure_voice()))
+            again = reconfigure_image if module == "image" else reconfigure_voice
+            loop.call_soon_threadsafe(lambda: asyncio.ensure_future(again()))
         try:
             installer.start(body.approve, verify=r.verify, on_done=done)
         except InstallError as e:
@@ -1386,7 +1426,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
         # a fresh session (new project, or another account taking over) gets the recent chat
         prompt = message if sid else build_prompt(store.history(pid), message).replace(SYSTEM + "\n\n", "", 1)
         store.append_message(pid, "user", message)
-        studio = Studio(pid, store, voice_svc, voice_jobs, tuned=tuner.for_voice, knowledge=knowledge, learning=learning, resolve=resolve, gates=gates, editor=editor, animation=animation, packaging=packaging, stock=stock, fusion=fusion, sfx=sfx,
+        studio = Studio(pid, store, voice_svc, voice_jobs, tuned=tuner.for_voice, knowledge=knowledge, learning=learning, resolve=resolve, gates=gates, editor=editor, animation=animation, packaging=packaging, stock=stock, fusion=fusion, sfx=sfx, assets=assets,
                         on_job=lambda job: run.emit({"t": "voicejob", "id": job["id"], "source": job["source"],
                                                      "voice": job["voice"]}))
 
@@ -1534,7 +1574,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
             files, voices, presets, jobs = await studio_state(pid)
             instructions = (STUDIO_INSTRUCTIONS + "\n\n" + actions.context(files, voices, presets, jobs)
                             + "\n\n" + note + "\n\n" + learning.instructions(pid, prompt))
-            studio = Studio(pid, store, voice_svc, voice_jobs, tuned=tuner.for_voice, knowledge=knowledge, learning=learning, resolve=resolve, gates=gates, editor=editor, animation=animation, packaging=packaging, stock=stock, fusion=fusion, sfx=sfx,
+            studio = Studio(pid, store, voice_svc, voice_jobs, tuned=tuner.for_voice, knowledge=knowledge, learning=learning, resolve=resolve, gates=gates, editor=editor, animation=animation, packaging=packaging, stock=stock, fusion=fusion, sfx=sfx, assets=assets,
                             on_job=lambda job: sub.emit({"t": "voicejob", "id": job["id"], "source": job["source"],
                                                          "voice": job["voice"]}))
             eff = M.effort_for(acc["provider"], model, effort, acc.get("codex_models"))
@@ -1890,6 +1930,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
 
         deps.stock_ready = lambda: bool(stock.key())
         deps.sfx_ready = lambda: bool(sfx.key())
+        deps.assets_ready = image_svc.ready
         deps.script_stats = script_stats_of
         deps.voice_job = voice_job_of
         deps.start_voice = start_voice_job
@@ -1939,6 +1980,9 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
                        "text": "Pexels key set: footage can be used" if stock.key() else "No Pexels key: graphics only (optional)"})
         checks.append({"id": "sfx", "ok": bool(sfx.key()), "optional": True,
                        "text": "Epidemic Sound key set: sound effects" if sfx.key() else "No Epidemic Sound key: no sound effects (optional)"})
+        checks.append({"id": "image", "ok": image_svc.ready(), "optional": True,
+                       "text": "Image assets installed: generated hero objects" if image_svc.ready()
+                       else "Image module not installed: no generated objects (System > Modules, optional)"})
         return {"checks": checks, "ready": all(c["ok"] for c in checks if not c.get("optional"))}
 
     @app.post("/api/projects/{pid}/episode")
@@ -1966,12 +2010,14 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
                 styles.get(sid)
             except StyleError:
                 raise HTTPException(400, "a chosen competitor style no longer exists - reopen the dialog")
-        needs = [n for n in (approvals.check(t, body.approve) for t in ([] if body.voice_job else ["voiceover"])) if n]
+        heavy = ([] if body.voice_job else ["voiceover"]) + (["image_assets"] if body.draft and image_svc.ready() else [])
+        needs = [n for n in (approvals.check(t, body.approve) for t in heavy) if n]
         if needs:
             from fastapi.responses import JSONResponse
             return JSONResponse({"needs_approval": needs}, status_code=409)
         spec = {k: v for k, v in body.model_dump().items() if k not in ("approve", "config")}
         spec["name"] = name
+        spec["approved_jobs"] = [h for h in heavy if h == "image_assets"]     # OK'd once for this whole draft
         cfg = EpisodeConfig.from_dict({**team_settings(), **(body.config or {})})
         try:
             run = runs.start(pid, store.files_dir(pid))

@@ -2902,8 +2902,9 @@ const WSTEPS = [
   ["Your voice", "Add your own reference voice"],
   ["Test run", "Check everything works end to end"],
 ];
-const wiz = { step: 0, setup: null, poll: null, installOk: {} };
+const wiz = { step: 0, setup: null, poll: null, installOk: {}, module: null };
 async function openSetup(step = 0) {
+  wiz.module = null;                                      // the voice module unless "Install image assets…" was pressed
   document.body.classList.add("insetup");
   $("#setup").classList.add("open");
   wiz.setup = await (await api("/api/setup")).json();
@@ -2999,10 +3000,12 @@ async function stepModules() {
       ${m.id === "stock" ? `<div class="opts">${m.key_set ? `<button class="opt" id="stockdel">Remove the Pexels key</button>`
           : `<input id="stockkey" type="password" autocomplete="off" placeholder="Pexels API key" style="flex:1;min-width:12em">
              <button class="opt" id="stocksave">Check and save</button>`}</div>` : ""}
+      ${m.id === "image" && m.state !== "ready" ? `<div class="opts"><button class="opt" id="imginstall">Install image assets…</button></div>` : ""}
       ${m.id === "sfx" ? `${m.licence_note ? `<p class="wnote warn">${esc(m.licence_note)}</p>` : ""}<div class="opts">${m.key_set ? `<button class="opt" id="sfxdel">Remove the Epidemic Sound key</button>`
           : `<input id="sfxkey" type="password" autocomplete="off" placeholder="Epidemic Sound API key (epidemic_live_...)" style="flex:1;min-width:12em">
              <button class="opt" id="sfxsave">Check and save</button>`}</div>` : ""}
     </div>`).join("");
+  if ($("#imginstall")) $("#imginstall").onclick = () => { wiz.module = "image"; wiz.installOk = {}; showStep(3); };
   const ssave = $("#sfxsave"), sdel = $("#sfxdel");
   if (ssave) ssave.onclick = async () => {
     ssave.disabled = true;
@@ -3041,6 +3044,16 @@ async function stepModules() {
 const IST = { present: "already here", pending: "not yet", waiting: "waiting", running: "working…", done: "done", failed: "failed", cancelled: "stopped" };
 async function stepInstall() {
   wiz.next = null;
+  if (wiz.module === "image") {                          // the image assets module (owner, 2026-10-12)
+    let st = await (await api("/api/install")).json();
+    if (!st.running || st.module !== "image") {
+      try { const p = await (await api("/api/install/plan?module=image")).json(); st = { items: p.items, running: false, folder: p.folder, module: "image" }; }
+      catch (e) { $("#wbody").innerHTML = `<p class="wnote warn">${esc(e.message)}</p>`; return; }
+    }
+    renderInstall(st);
+    if (st.running) watchInstall();
+    return;
+  }
   const mods = (await (await api("/api/modules")).json()).modules;
   const voice = mods.find(m => m.id === "voice");
   if (voice.external || voice.state === "ready" || voice.mode === "off") {
@@ -3057,9 +3070,11 @@ async function stepInstall() {
 function renderInstall(st) {
   const todo = st.items.filter(i => !["present", "done"].includes(i.status) && i.id !== "verify");
   const mb = todo.reduce((a, i) => a + i.size_mb, 0);
+  const img = wiz.module === "image";
   $("#wbody").innerHTML = `
-    <p>${todo.length ? `These are missing for the voice module — about <b>${mb >= 1000 ? (mb / 1000).toFixed(1) + " GB" : Math.round(mb) + " MB"}</b> to download.
-       Everything goes into One Production's data folder; nothing is installed on the PC itself. Tick each one you're OK with.` :
+    <p>${todo.length ? `These are missing for the ${img ? "image assets" : "voice"} module — about <b>${mb >= 1000 ? (mb / 1000).toFixed(1) + " GB" : Math.round(mb) + " MB"}</b> to download.
+       ${img ? `Everything goes into <b>${esc(st.folder || "the image module's folder")}</b> (a drive with room); nothing is installed on the PC itself.`
+             : "Everything goes into One Production's data folder; nothing is installed on the PC itself."} Tick each one you're OK with.` :
        `<span class="tick">✓</span> Everything is installed.`}</p>
     ${todo.length && !st.running ? `<div class="wrow"><button class="btn" id="wallok">Tick all</button></div>` : ""}
     ${st.items.map(i => `<div class="inst" data-id="${esc(i.id)}">
@@ -3073,14 +3088,14 @@ function renderInstall(st) {
     </div>`).join("")}
     <div class="wrow">${st.running ? `<button class="btn" id="wcancel">Cancel</button>` :
       todo.length ? `<button class="btn primary" id="winstall">${st.items.some(i => ["failed", "cancelled"].includes(i.status)) ? "Retry" : "Install"}</button>` : ""}</div>
-    ${st.finished && st.finished.ok ? `<p class="wnote ok"><span class="tick">✓</span> Voice module installed and checked.</p>` : ""}`;
+    ${st.finished && st.finished.ok ? `<p class="wnote ok"><span class="tick">✓</span> ${img ? "Image assets module" : "Voice module"} installed and checked.</p>` : ""}`;
   document.querySelectorAll(".iok").forEach(c => c.onchange = () => { wiz.installOk[c.dataset.id] = c.checked; });
   if ($("#wallok")) $("#wallok").onclick = () => { todo.forEach(i => wiz.installOk[i.id] = true); renderInstall(st); };
   if ($("#wcancel")) $("#wcancel").onclick = () => api("/api/install/cancel", { method: "POST" });
   if ($("#winstall")) $("#winstall").onclick = async () => {
     const approve = Object.keys(wiz.installOk).filter(k => wiz.installOk[k]);
     try {
-      const r = await (await api("/api/install", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ approve }) })).json();
+      const r = await (await api("/api/install", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ approve, module: wiz.module || "voice" }) })).json();
       renderInstall(r); watchInstall();
     } catch (e) { $("#wfootnote").textContent = e.message; }
   };

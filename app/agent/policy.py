@@ -27,7 +27,7 @@ STUDIO_LOOK = {"list_voices", "script_stats", "voiceover_status", "knowledge_sou
 STUDIO_MEMORY = {"remember_direction", "propose_lesson"}
 STUDIO_PLAN = {"resolve_status", "resolve_propose_plan", "edit_status"}
 STUDIO_DRAW = {"build_animation", "package_episode"}   # light CPU, writes only inside the project   # look / save a plan; only the owner executes
-STUDIO_GATED = {"make_voiceover", "render_edit"}
+STUDIO_GATED = {"make_voiceover", "render_edit", "asset_generate"}
 # Pexels with the owner's own free key (owner, 2026-10-06): one fixed site, files only into the
 # project's stock/ folder, the key never shown to the agent - so no card, unlike open web access.
 STUDIO_STOCK = {"stock_search", "stock_fetch"}
@@ -37,7 +37,8 @@ STUDIO_SFX = {"sfx_search", "sfx_fetch"}
 # The fixed runner builds a NEW Resolve project for an episode / exports stills; only offered while the
 # owner has Resolve control and the Resolve MCP switched on.
 STUDIO_FUSION = {"fusion_setup", "fusion_stills"}
-HEAVY = {"make_voiceover": "voiceover", "render_edit": "video_render"}   # tools.TOOLS key per gated tool
+HEAVY = {"make_voiceover": "voiceover", "render_edit": "video_render",   # tools.TOOLS key per gated tool
+         "asset_generate": "image_assets"}
 PATH_KEYS = ("file_path", "path", "notebook_path", "directory", "cwd")
 
 
@@ -94,7 +95,7 @@ def decide(tool: str, tool_input: dict, root: Path) -> tuple[str, str]:
     if s in STUDIO_SFX:
         return "allow", "Epidemic Sound effects with your key; files go only into the project's sfx folder"
     if s in STUDIO_GATED:
-        return "gate", "uses the GPU" if s == "make_voiceover" else "uses the processor for minutes"
+        return "gate", "uses the GPU" if s in ("make_voiceover", "asset_generate") else "uses the processor for minutes"
     if tool in HARMLESS:
         return "allow", "bookkeeping"
     if tool in READS | WRITES:

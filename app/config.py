@@ -69,6 +69,10 @@ class Settings(BaseModel):
     allow_chaining: bool = False
     # Outside MCP servers for Claude chats (app/mcp_servers.py), e.g. a local OS server. Every call asks.
     mcp_servers: dict = {}
+    # Where the image assets module lives (FLUX + BiRefNet, ~25 GB). Empty = the data folder if its drive has
+    # room, else the fixed drive with the most free space (installer.image_home). Owner, 2026-10-12.
+    image_dir: str | None = None
+    image_app_url: str = "http://127.0.0.1:8722"
 
     @field_validator("host")
     @classmethod

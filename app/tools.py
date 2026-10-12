@@ -19,6 +19,12 @@ TOOLS = {
         "uses": "your graphics card (GPU) for the voice clone, roughly 1 minute of work per "
                 "minute of audio, plus a few minutes of CPU for the read-check and subtitles",
     },
+    "image_assets": {
+        "label": "Generated assets",
+        "cost_class": HEAVY,
+        "uses": "your graphics card (GPU) for about 10 seconds per object (FLUX.1-schnell, local), plus a minute or "
+                "two to load the model the first time",
+    },
     "video_render": {
         "label": "Video render",
         "cost_class": HEAVY,

@@ -80,9 +80,10 @@ class Studio:
 
     def __init__(self, pid: str, store, voice_svc, voice_jobs, on_job: Callable[[dict], None],
                  tuned: Callable[[str], dict | None] | None = None, knowledge=None, learning=None, resolve=None, gates=None, editor=None, animation=None, packaging=None,
-                 stock=None, fusion=None, sfx=None):
+                 stock=None, fusion=None, sfx=None, assets=None):
         self.stock = stock
         self.sfx = sfx
+        self.assets = assets
         self.fusion = fusion
         self.knowledge = knowledge
         self.resolve = resolve
@@ -103,11 +104,13 @@ class Studio:
         from .stock_tools import tools as stock_tools
         from .fusion_tools import tools as fusion_tools
         from .sfx_tools import tools as sfx_tools
+        from .asset_tools import tools as asset_tools
         return (knowledge_tools(self) if self.knowledge else []) + (learning_tools(self) if self.learning else []) + (
             resolve_tools(self) if self.resolve else []) + (gate_tools(self) if self.gates else []) + (
             edit_tools(self) if self.editor else []) + (
             stock_tools(self) if self.stock and self.stock.key() else []) + (   # only once the owner added a key
             sfx_tools(self) if self.sfx and self.sfx.key() else []) + (
+            asset_tools(self) if self.assets and self.assets.svc.ready() else []) + (   # once the image module is installed
             fusion_tools(self) if self.fusion and self.fusion.ready()[0] else []) + [   # Resolve control + MCP on
             Tool("list_voices", "List the reference voices and delivery presets available for voiceovers.",
                  {"type": "object", "properties": {}}, self.list_voices),

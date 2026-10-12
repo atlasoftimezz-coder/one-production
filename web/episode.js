@@ -38,6 +38,7 @@ function episodeHeavy() {
     const ok = id => episodePre && (episodePre.checks.find(c => c.id === id) || {}).ok;
     if (ok('pexels')) rows.push('<li>Pexels footage where it explains better (your Pexels key)</li>');
     if (ok('sfx')) rows.push('<li>Sound effects from Epidemic Sound - each new effect is one download on your plan</li>');
+    if (ok('image')) rows.push('<li>Generated assets: your graphics card makes the hero objects (about 10 s each, FLUX, local) - this OK covers them for the whole draft</li>');
     rows.push('<li>AI use: about one Claude turn per 10 shots plus planning, checking and the review report</li>');
   } else {
     rows.push('<li>Visuals: built in DaVinci Resolve Studio (Resolve control and the Resolve MCP switched on, Resolve open); you approve each shot script and render the timeline yourself</li>');

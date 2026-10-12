@@ -407,6 +407,128 @@ class VoiceRecipe:
         return self.marker.exists() and self.python.exists() and self._models_present() and self.ffmpeg() is not None
 
 
+# ---------------------------------------------------------------- the image assets module (2026-10-12)
+IMAGE_MODELS = {"black-forest-labs/FLUX.1-schnell": ["model_index.json", "scheduler/*", "text_encoder/*", "text_encoder_2/*",
+                                                     "tokenizer/*", "tokenizer_2/*", "vae/*", "transformer/config.json"],
+                "city96/FLUX.1-schnell-gguf": ["flux1-schnell-Q5_K_S.gguf"],
+                "ZhengPeng7/BiRefNet": None}
+IMAGE_MODELS_MB = 19_500            # T5-XXL ~9.5 GB (loaded 4-bit), GGUF transformer ~8.3 GB, BiRefNet ~0.9 GB, rest ~0.5 GB
+IMAGE_LIBS_MB = 900
+IMAGE_MIN_FREE_GB = 30
+
+
+def image_home(data_dir: Path, chosen: str | None, drives: list[dict]) -> Path:
+    """Where the image module lives: the owner's choice, else the data folder if its drive has room, else the
+    fixed drive with the most free space (the studio PC's C: had 11 GB free - 2026-10-12)."""
+    if chosen:
+        return Path(chosen)
+    data_drive = str(data_dir.drive or data_dir.anchor).upper().rstrip("\\")
+    best = max((d for d in drives if d.get("free_gb") is not None), key=lambda d: d["free_gb"], default=None)
+    here = next((d for d in drives if str(d.get("drive", "")).upper() == data_drive), None)
+    if (here and here.get("free_gb", 0) >= IMAGE_MIN_FREE_GB) or not best:
+        return data_dir / "modules" / "imagegen"
+    return Path(best["drive"] + "\\") / "OneProduction" / "imagegen"
+
+
+class ImageRecipe(VoiceRecipe):
+    """FLUX.1-schnell (slimmed) + BiRefNet in a private Python under `root` (owner's choice, 2026-10-12)."""
+
+    def __init__(self, root: Path, engine_dir: Path, gpu: dict | None, opener=urllib.request.urlopen,
+                 system_python: Callable[[], str | None] = find_python):
+        self.m = root.parent
+        self.root = root
+        self.engine_dir = engine_dir
+        self.mode = "gpu"
+        self.gpu = gpu
+        self.opener = opener
+        self.system_python = system_python
+        self.torch_kind = torch_kind("gpu", gpu)
+
+    def env(self) -> dict[str, str]:
+        return {"HF_HOME": str(self.hf_home), "HF_HUB_DISABLE_SYMLINKS_WARNING": "1"}
+
+    def _models_present(self) -> bool:
+        hub = self.hf_home / "hub"
+        need = {"black-forest-labs/FLUX.1-schnell": ["model_index.json", "text_encoder_2", "vae", "tokenizer_2"],
+                "city96/FLUX.1-schnell-gguf": ["flux1-schnell-Q5_K_S.gguf"], "ZhengPeng7/BiRefNet": ["config.json"]}
+        for repo, files in need.items():
+            snaps = list((hub / ("models--" + repo.replace("/", "--")) / "snapshots").glob("*"))
+            if not snaps or not all(any((s / f).exists() for s in snaps) for f in files):
+                return False
+        return True
+
+    def items(self) -> list[Item]:
+        idx = self.torch_kind
+        return [
+            Item("python", "Python for the image generator", "A private Python just for image generation, in "
+                 f"{self.root} - nothing is installed on the PC itself.", 30, "python.org / pypa.io",
+                 self._python, lambda: self.python.exists()),
+            Item("torch", "PyTorch (graphics card, CUDA 12.8)" if idx == "cu128" else f"PyTorch ({idx})",
+                 "The maths library FLUX runs on." + (" RTX 50-series cards need this CUDA 12.8 build." if idx == "cu128" else ""),
+                 TORCH_MB.get(idx, 3400), "download.pytorch.org", self._torch,
+                 lambda: self._imports("torch", "torchvision")),
+            Item("libs", "Image generation libraries", "diffusers (FLUX), transformers, bitsandbytes (4-bit text "
+                 "encoder), GGUF (5-bit FLUX), timm/kornia (the cut-out model).", IMAGE_LIBS_MB, "pypi.org", self._libs,
+                 lambda: self._imports("diffusers", "transformers", "bitsandbytes", "gguf", "timm", "fastapi")),
+            Item("models", "FLUX.1-schnell and the cut-out model", "FLUX.1-schnell (Apache-2.0, free for commercial "
+                 "use): its text encoders, VAE and a 5-bit transformer; BiRefNet (MIT) cuts each object out.",
+                 IMAGE_MODELS_MB, "huggingface.co", self._image_models, self._models_present),
+        ]
+
+    def _torch(self, ctx: Ctx) -> None:
+        self._pip(["torch==2.8.0", "torchvision==0.23.0", "--index-url", TORCH_INDEX[self.torch_kind]], ctx, "PyTorch", expect=12)
+
+    def _libs(self, ctx: Ctx) -> None:
+        self._pip(["-r", str(self.engine_dir / "requirements.txt")], ctx, "image libraries", expect=60)
+
+    def _image_models(self, ctx: Ctx) -> None:
+        script = ("from huggingface_hub import hf_hub_download, snapshot_download\n"
+                  f"models = {IMAGE_MODELS!r}\n"
+                  "for repo, pats in models.items():\n"
+                  "    print('STEP', repo, flush=True)\n"
+                  "    if pats and len(pats) == 1 and '*' not in pats[0]:\n"
+                  "        hf_hub_download(repo, pats[0])\n"
+                  "    else:\n"
+                  "        snapshot_download(repo, allow_patterns=pats)\n")
+        stop = threading.Event()
+
+        def watch():
+            while not stop.wait(1.0):
+                got = sum(f.stat().st_size for f in self.hf_home.rglob("*") if f.is_file()) if self.hf_home.exists() else 0
+                ctx.progress(min(0.99, got / (IMAGE_MODELS_MB * 1e6)), f"models - {got / 1e9:.1f} of ~{IMAGE_MODELS_MB / 1e3:.1f} GB")
+        w = threading.Thread(target=watch, daemon=True)
+        w.start()
+        try:
+            run_cmd([str(self.python), "-c", script], ctx, env=self.env(), label="models", expect=10_000)
+        finally:
+            stop.set()
+
+    def verify(self, ctx: Ctx) -> dict:
+        """Imports, a real fp16 matmul AND a real 4-bit layer on the card - a library that installs but has no
+        kernels for a Blackwell card must fail here, not in the middle of an episode."""
+        code = ("import json, torch, diffusers, transformers, gguf, timm, fastapi, bitsandbytes as bnb\n"
+                "out = {'torch': torch.__version__, 'cuda': torch.cuda.is_available(), 'diffusers': diffusers.__version__}\n"
+                "a = torch.randn(256, 256, device='cuda', dtype=torch.float16); (a @ a).sum().item()\n"
+                "lin = bnb.nn.Linear4bit(64, 64, compute_dtype=torch.bfloat16, quant_type='nf4').to('cuda')\n"
+                "lin(torch.randn(2, 64, device='cuda', dtype=torch.bfloat16)).sum().item(); torch.cuda.synchronize()\n"
+                "out['device'] = torch.cuda.get_device_name(0); out['bnb'] = bnb.__version__\n"
+                "print('RESULT ' + json.dumps(out))\n")
+        text = run_cmd([str(self.python), "-c", code], ctx, env=self.env(), label="final check", expect=3)
+        line = next((l for l in reversed(text.splitlines()) if l.startswith("RESULT ")), None)
+        if not line:
+            raise InstallError("the final check didn't report back: " + text.strip()[-300:])
+        res = json.loads(line[7:])
+        if not self._models_present():
+            raise InstallError("the models are not all there - press Retry")
+        info = {**res, "torch_build": self.torch_kind, "verified_at": time.time(), "python": str(self.python),
+                "root": str(self.root)}
+        self.marker.write_text(json.dumps(info, indent=1), encoding="utf-8")
+        return info
+
+    def ready(self) -> bool:
+        return self.marker.exists() and self.python.exists() and self._models_present()
+
+
 def torch_kind(mode: str, gpu: dict | None) -> str:
     if mode != "gpu" or not gpu:
         return "cpu"

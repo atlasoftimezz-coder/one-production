@@ -78,6 +78,8 @@ class Runs:
             return False, reason
         if verdict == "gate":
             heavy = policy.HEAVY.get(policy.studio_name(tool) or "", "voiceover")
+            if heavy in (getattr(run, "approved_jobs", None) or ()):
+                return True, ""                          # OK'd for this whole run (a draft's start dialog)
             need = gate(tool=heavy) if gate else None   # None = already approved ("always")
             if not need:
                 return True, ""

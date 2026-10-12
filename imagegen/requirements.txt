@@ -1,0 +1,16 @@
+# One Production image assets server (installed by the app's image module; torch 2.8.0 cu128 first)
+diffusers>=0.32.0
+transformers>=4.48
+accelerate
+gguf>=0.10.0
+bitsandbytes>=0.46.0
+sentencepiece
+protobuf
+timm
+kornia
+einops
+pillow
+safetensors
+huggingface_hub
+fastapi
+uvicorn
