@@ -33,7 +33,7 @@ BASE_STYLE = ("a single isolated object, centred, on a plain neutral background,
 # A scene plate sets each shot in a place (owner, 2026-10-12: v2 shots were objects floating on an empty dark void).
 SCENE_STYLE = ("a wide cinematic establishing shot, no people, moody documentary lighting, deep shadows, shallow depth "
                "of field, rich texture, no text, no letters, no numbers, no logo, no watermark")
-SCENE_SIZE = (1344, 768)          # 16:9-ish, multiples of 16 for FLUX
+SCENE_SIZE = (1024, 576)           # 16:9, multiples of 16; a softened, darkened background needs no more (and fits beside Resolve)
 
 
 class AssetError(RuntimeError):
@@ -145,7 +145,7 @@ class ImageService:
         if size:
             body.update(width=size[0], height=size[1])
         try:
-            with self._client(600) as c:                 # the first call loads FLUX (a minute or two)
+            with self._client(1200) as c:                # the first call loads FLUX; beside Resolve it can spill to RAM
                 r = c.post(self.url + "/api/generate", json=body)
         except httpx.HTTPError as e:
             raise AssetError(f"the image server did not answer ({e.__class__.__name__})") from None
