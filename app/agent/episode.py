@@ -440,7 +440,8 @@ class EpisodeRun(Team):
                  "\"why_this_fits\": \"how this look follows the chosen style and makes this script easy to follow\"}.",
                  f"2. This episode's own motion library: write {b}/motion.py - new helper functions designed for this "
                  "script in the learned style (how text enters, reveals, transitions, diagram/chart/map builders, emphasis "
-                 "moves). Build only on the Fusion kit (functions take S, the shot, and use its methods or S.add with real "
+                 f"moves). Build only on the Fusion kit - every function is listed in {b}/op_kit.md (read it; op_kit is "
+                 "not a file to search for) - (functions take S, the shot, and use its methods or S.add with real "
                  "Fusion tool IDs). No imports, no files, no exec. Shot scripts will start with `from op_kit import *` and "
                  "`from ep_motion import *` and call your functions.",
                  f"3. Shot list: write {b}/shots.json {{\"shots\": [{{\"idea\", \"text\"}}, {{\"anchor\": \"3-6 consecutive "
@@ -519,7 +520,8 @@ class EpisodeRun(Team):
         rows = [f"- {s['name']} ({s['frames'] / 60:.1f} s): {s['idea']}" + (f" | on screen: {s['text']}" if s.get("text") else "")
                 + (f" | footage: {s['stock']} - build over it: S.over(S.media(), layer)" if s.get("stock") else "")
                 for s in shots]
-        lines = [f"Build these shots of the episode \"{self.spec['name']}\" in its Resolve project. Read {b}/art.json"
+        lines = [f"Build these shots of the episode \"{self.spec['name']}\" in its Resolve project. Read {b}/op_kit.md "
+                 f"(every Fusion kit function; op_kit is not a file to search for), {b}/art.json"
                  + (f" and {b}/motion.py (this episode's own helpers)" if use_motion else "") + " first"
                  + (", and the style files in " + f"{b}/style/" if self.profiles else "") + ".", *rows, "",
                  "Script EACH shot with its own mcp__davinci__run_script. The script starts with `from op_kit import *`"
@@ -567,6 +569,7 @@ class EpisodeRun(Team):
         """Visuals turns get the episode's shot-script rules once the Resolve project exists, and a draft's
         heavy jobs OK'd in its start dialog (generated assets) for every worker turn."""
         sub.approved_jobs = set(self.spec.get("approved_jobs") or [])
+        sub.draft = self.draft
         if task.id != "visuals" and not task.id.startswith("shots-"):
             return
         state = self.fusion_state()
@@ -578,6 +581,9 @@ class EpisodeRun(Team):
 
     async def draft_visuals(self) -> bool:
         self.vo["seconds"] = await asyncio.to_thread(self.deps.duration, self.vo["wav"])
+        kit_doc = self.run.root / self.base / "op_kit.md"
+        kit_doc.parent.mkdir(parents=True, exist_ok=True)
+        kit_doc.write_text(fusion_kit.reference(), encoding="utf-8")
         self.load_profiles()
         plan = Task(id="visuals-plan", title="Visuals: plan", providers=list(CLAUDE_ACCOUNTS),
                     files=[f"{self.base}/art.json", f"{self.base}/motion.py", f"{self.base}/shots.json"],

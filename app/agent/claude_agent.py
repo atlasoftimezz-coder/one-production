@@ -49,6 +49,7 @@ def _sdk():
 # as one bigger JSON message, and the reader died mid-draft (v2 re-draft, 2026-10-12).
 MAX_MESSAGE = 64 * 1024 * 1024
 SHELLS = ("Bash", "PowerShell")
+FILE_TOOLS = ("Read", "Glob", "Grep", "Write", "Edit", "MultiEdit", "NotebookEdit")
 
 class ClaudeAgent:
     def __init__(self, command: str | None, data_dir: Path, *, client_factory: Callable | None = None,
@@ -102,10 +103,15 @@ class ClaudeAgent:
                 script = shots.auto(tool_input.get("script", ""))
                 if script is not None:
                     return sdk.PermissionResultAllow(updated_input={**tool_input, "script": script})
-            if tool in SHELLS and shots is not None:
-                # a draft never stops for a command card (v2 re-draft, 2026-10-12: sed cards mid-plan); say why instead
-                return sdk.PermissionResultDeny(message="A draft runs no shell commands. Use Read/Write/Edit on the files "
-                                                        "and the studio tools; fix what a tool reported.")
+            if getattr(run, "draft", False):
+                # a draft never stops for a card (v2 re-draft, 2026-10-12: sed and outside-folder search cards); say why
+                if tool in SHELLS:
+                    return sdk.PermissionResultDeny(message="A draft runs no shell commands. Use Read/Write/Edit on the "
+                                                            "files and the studio tools; fix what a tool reported.")
+                verdict, why = policy.decide(tool, tool_input, run.root)
+                if verdict == "ask" and tool in FILE_TOOLS and why.startswith("outside the project"):
+                    return sdk.PermissionResultDeny(message="A draft stays in the project folder. The Fusion kit's functions "
+                                                            "are listed in op_kit.md in the episode's work folder.")
             ok, message = await runs.permit(run, tool, tool_input, gate=gate)
             if ok:
                 if tool == f"mcp__{resolve_mcp.SERVER}__run_script":

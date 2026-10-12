@@ -135,6 +135,7 @@ class SubRun:
         self.pending, self.asks = parent.pending, parent.asks
         self.task = None
         self.shot_scripts = None         # an episode's visuals turn: how its Resolve scripts are completed / approved
+        self.draft = False               # a draft episode's turn: never stops for a card it can answer itself
         self.approved_jobs: set[str] = set()   # heavy jobs OK'd for this whole run (a draft's start dialog)
 
     @property

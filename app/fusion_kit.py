@@ -468,6 +468,33 @@ def source() -> str:
     return KIT.replace("%(version)d", str(KIT_VERSION)).replace("%(icons)r", repr(ICONS))
 
 
+def reference() -> str:
+    """The kit's functions with their signatures and first doc line, for the shot workers (v2 re-draft,
+    2026-10-12: without it they went searching outside the project for op_kit and raised cards)."""
+    import ast
+    tree = ast.parse(source())
+    lines = [f"# One Production Fusion kit v{KIT_VERSION} - what `from op_kit import *` gives a shot script", "",
+             "S = begin(\"shot-NNN\") starts a shot; finish(S, layer) ends it. Methods take fractions of the frame "
+             "(x, y, sizes 0-1) and frames for times.", ""]
+
+    def sig(fn):
+        text = ast.unparse(fn.args)
+        return text[6:] if text.startswith("self, ") else ("" if text == "self" else text)
+
+    def doc(node):
+        d = ast.get_docstring(node) or ""
+        return (" - " + d.strip().splitlines()[0]) if d.strip() else ""
+    for node in tree.body:
+        if isinstance(node, ast.FunctionDef) and not node.name.startswith("_") and not node.name.startswith("op_"):
+            lines.append(f"{node.name}({ast.unparse(node.args)}){doc(node)}")
+        elif isinstance(node, ast.ClassDef):
+            lines += ["", f"## {node.name}" + doc(node)]
+            for fn in node.body:
+                if isinstance(fn, ast.FunctionDef) and not fn.name.startswith("_"):
+                    lines.append(f"{fn.name}({sig(fn)}){doc(fn)}")
+    return "\n".join(lines) + "\n"
+
+
 def settings_block(settings: dict | None) -> str:
     """Per-episode values the kit reads: draft quality, the project folder and the generated assets."""
     if not settings:

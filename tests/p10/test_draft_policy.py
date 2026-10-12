@@ -106,8 +106,22 @@ def test_a_big_image_read_does_not_kill_the_run_or_look_like_a_limit(tmp_path):
 
 
 def test_a_draft_denies_shell_commands_without_a_card(tmp_path):
-    """v2 re-draft (2026-10-12): the plan turn asked for sed cards and the owner had to answer them."""
-    run = SimpleNamespace(root=tmp_path, stopped=False, lock_check=None, shot_scripts=scripts(tmp_path))
+    """v2 re-draft (2026-10-12): the plan turn asked for sed cards, a shot turn for a search outside the project,
+    and the owner had to answer them."""
+    run = SimpleNamespace(root=tmp_path, stopped=False, lock_check=None, shot_scripts=None, draft=True)   # the plan turn
     cb, permits, sdk = can_use(tmp_path, run)
     res = asyncio.run(cb("Bash", {"command": "sed -e '/stock/d' shots.json"}, None))
     assert isinstance(res, sdk.PermissionResultDeny) and "no shell" in res.message and not permits
+    res = asyncio.run(cb("Glob", {"pattern": "**/op_kit*.py", "path": str(tmp_path.parent)}, None))
+    assert isinstance(res, sdk.PermissionResultDeny) and "op_kit.md" in res.message and not permits
+    plain = SimpleNamespace(root=tmp_path, stopped=False, lock_check=None)                             # a normal chat run
+    cb2, permits2, _ = can_use(tmp_path, plain)
+    asyncio.run(cb2("Bash", {"command": "dir"}, None))
+    assert permits2 == ["Bash"]                                                                        # still a card
+
+
+def test_the_kit_reference_lists_every_shot_method():
+    from app import fusion_kit
+    ref = fusion_kit.reference()
+    for name in ("image(name, x=0.5", "backdrop(", "quote_card(", "person_tag(", "media()", "begin(name)", "finish(S, layer"):
+        assert name in ref, name
