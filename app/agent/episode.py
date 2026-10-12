@@ -462,8 +462,12 @@ class EpisodeRun(Team):
                          "bars, coins, banknotes, maps, machines, a GENERIC person figure - and make each with asset_generate "
                          "(name = short-kebab-name, prompt = ONE isolated object, no text, no logos, no real people; the "
                          "episode's look is added for you). Look at every result (Read the PNG) and regenerate a bad one at "
-                         "most twice. Reuse an asset across shots; about 10-25 for a few minutes of video. Shots use them with "
-                         "S.image(name, x, y, h).")
+                         "most twice. About 10-25 objects for a few minutes of video; give each idea its own real object (a "
+                         "dollar is a banknote stack, not a card icon; interest is a coupon bond or a ledger) and do not lean on "
+                         "one object for every shot. Shots use them with S.image(name, x, y, h). Then the PLACES: one scene "
+                         "plate per section of the script with asset_generate kind=\"scene\" (a central bank hall, a vault "
+                         "interior, a trading floor at night, a cargo port - a place, no people), 4-8 for a few minutes; "
+                         "shots use them with S.scene(name).")
         if sfx:
             steps.append("Sound effects, following the style's sound rules (which kinds, how often, on which cuts): "
                          "sfx_search and sfx_fetch a small set (every download counts against the owner's Epidemic Sound plan - "
@@ -537,11 +541,15 @@ class EpisodeRun(Team):
                  "Script EACH shot with its own mcp__davinci__run_script. The script starts with `from op_kit import *`"
                  + (" then `from ep_motion import *`" if use_motion else "") + ", then S = begin(\"shot-NNN\"), builds the "
                  "shot for its idea in this episode's style, and ends with result = finish(S, layer).",
-                 "Every shot is a full, layered frame like the competitor's: S.backdrop() (never a flat empty colour), "
-                 "ONE clear hero (a generated asset with S.image, a chart, a quote card or footage) filling 35-60% of the "
-                 "frame height, then labels; captions at least size 0.02; all text fully on screen by 60% of the shot "
-                 "(no word still typing at the end); nothing tiny floating in empty space. Real people and headlines are "
-                 "S.person_tag / S.quote_card - never a real face, logo or imitated page."
+                 "Every shot is a full, layered frame like the competitor's, SET IN A PLACE: S.scene(name) behind it "
+                 "(the section's generated scene; S.backdrop() only for charts and quote cards) - never objects floating "
+                 "on an empty dark canvas. ONE clear hero (a generated asset with S.image, a chart, a quote card or "
+                 "footage) filling 35-60% of the frame height, then labels beside it - never a label pasted over the hero. "
+                 "Icons (S.icon) are small markers only (under 0.06 of the width), never a hero and never in a big empty "
+                 "tile. Something is on screen from the first frame (no empty opening). Captions at least size 0.02; all "
+                 "text fully on screen by 60% of the shot (no word still typing at the end); nothing tiny floating in "
+                 "empty space. Real people and headlines are S.person_tag / S.quote_card - never a real face, logo or "
+                 "imitated page; claims with a source get a quote card."
                  + (f" Generated assets for this episode: {', '.join(self.asset_names())}." if self.asset_names() else ""),
                  "These scripts run straight away without an approval card, because they only touch this episode's own "
                  "Resolve project; anything else still asks. If Resolve reports an error, fix the script and run it again.",

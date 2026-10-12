@@ -186,16 +186,15 @@ def test_3d_stage_sets_size_lock_off_per_face_colors_and_a_lit_renderer():
 ASSETS = {"vault-door": {"file": "assets/vault-door.png", "w": 1200, "h": 1600}}
 
 
-def test_draft_quality_blurs_only_the_camera_move_and_lightly():
-    """Owner's first draft rendered ~15 min for 1:46: every pop/rise carried 6-sample motion blur."""
+def test_draft_quality_has_no_motion_blur():
+    """Owner's first draft rendered ~15 min for 1:46 with 6-sample blur on every pop/rise; the second draft's 2-sample
+    blur drew moving text twice (a ghosted double image - owner, 2026-10-12). Drafts now have none."""
     code = ("S = begin('shot-007')\n"
             "p = S.pop(S.icon('bank', 0.5, 0.5, 0.06), 0.5, 0.5, 10)\n"
             "st = S.stage3d(); st.keep(st.cube('#FFB547', 1, 1, 1)); st.lights(); r = st.render()\n"
             "result = finish(S, S.over(p, r))\n")
     comp, env, _ = kit(code, settings={"quality": "draft"})
-    blurred = [t for t in comp.tools if t.inputs.get("MotionBlur") == 1]
-    assert [t.ID for t in blurred] == ["Transform"] and blurred[0] is comp.FindToolByID("MediaOut").links["Input"]
-    assert blurred[0].inputs["Quality"] == 2
+    assert not [t for t in comp.tools if t.inputs.get("MotionBlur") == 1]
     assert env["r"].inputs["RendererOpenGL.AntiAliasing.Presets.Color.Supersampling.LowQuality.Rate"] == 1
     comp, env, _ = kit(code)                                       # final quality: as before
     assert env["p"].inputs["MotionBlur"] == 1 and env["p"].inputs["Quality"] == 6
@@ -250,3 +249,19 @@ def test_guide_lists_every_icon_and_font():
         assert name in fusion_kit.GUIDE
     for font in fusion_kit.FONTS:
         assert font in fusion_kit.GUIDE
+
+
+def test_a_scene_plate_covers_the_frame_darkened_with_a_push():
+    """v2 draft (owner, 2026-10-12): objects floated on an empty dark void; every shot is now set in a generated place."""
+    code = ("S = begin('shot-007')\n"
+            "bg = S.scene('vault-hall')\n"
+            "result = finish(S, S.over(bg, S.image('gold-bar', 0.6, 0.45, 0.4)))\n")
+    assets = {"vault-hall": {"file": "assets/vault-hall.png", "w": 1344, "h": 768, "kind": "scene"},
+              "gold-bar": {"file": "assets/gold-bar.png", "w": 600, "h": 400}}
+    comp, env, _ = kit(code, settings={"quality": "draft", "root": r"C:\P\files", "assets": assets})
+    ld = by(comp, "Loader")[0]
+    assert ld.Clip == r"C:\P\files\assets\vault-hall.png"
+    merge = [m for m in by(comp, "Merge") if m.links.get("Foreground") is ld][0]
+    assert merge.inputs["Size"] >= 1920 / 1344                                  # covers the frame
+    cc = [c for c in by(comp, "ColorCorrector") if c.links.get("Input") is merge][0]
+    assert cc.inputs["MasterRGBGain"] < 1                                       # darkened behind the hero

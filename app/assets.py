@@ -30,6 +30,10 @@ BANNED = re.compile(r"\b(logo|trademark|brand(ed)?|photo of (?:president|senator
                     r"[A-Z][a-z]+ [A-Z][a-z]+'s face)\b", re.I)
 BASE_STYLE = ("a single isolated object, centred, on a plain neutral background, studio product render, soft key light "
               "and rim light, crisp edges, high detail, no text, no letters, no numbers, no logo, no watermark, no people")
+# A scene plate sets each shot in a place (owner, 2026-10-12: v2 shots were objects floating on an empty dark void).
+SCENE_STYLE = ("a wide cinematic establishing shot, no people, moody documentary lighting, deep shadows, shallow depth "
+               "of field, rich texture, no text, no letters, no numbers, no logo, no watermark")
+SCENE_SIZE = (1344, 768)          # 16:9-ish, multiples of 16 for FLUX
 
 
 class AssetError(RuntimeError):
@@ -134,11 +138,15 @@ class ImageService:
                 time.sleep(1)
             raise AssetError("the image server did not start within 2 minutes")
 
-    def generate(self, prompt: str, out: Path, seed: int) -> dict:
+    def generate(self, prompt: str, out: Path, seed: int, size: tuple[int, int] | None = None,
+                 cutout: bool = True) -> dict:
         self.ensure_running()
+        body = {"prompt": prompt, "out": str(out), "seed": seed, "cutout": cutout}
+        if size:
+            body.update(width=size[0], height=size[1])
         try:
             with self._client(600) as c:                 # the first call loads FLUX (a minute or two)
-                r = c.post(self.url + "/api/generate", json={"prompt": prompt, "out": str(out), "seed": seed})
+                r = c.post(self.url + "/api/generate", json=body)
         except httpx.HTTPError as e:
             raise AssetError(f"the image server did not answer ({e.__class__.__name__})") from None
         if r.status_code != 200:
@@ -189,8 +197,11 @@ class Assets:
             return {}
 
     def generate(self, pid: str, name: str, prompt: str, art: dict | None = None, seed: int | None = None,
-                 variant: int = 0) -> dict:
-        """variant: 0 = the default take; 1, 2 = other takes of the same prompt (to replace a bad result)."""
+                 variant: int = 0, kind: str = "object") -> dict:
+        """variant: 0 = the default take; 1, 2 = other takes of the same prompt (to replace a bad result).
+        kind: "object" (cut out, transparent) or "scene" (a full-frame background plate, not cut out)."""
+        if kind not in ("object", "scene"):
+            raise AssetError('kind is "object" or "scene"')
         name = (name or "").strip().lower()
         if not NAME.match(name):
             raise AssetError("name: 2-41 lower-case letters, digits and dashes, e.g. vault-door")
@@ -200,7 +211,7 @@ class Assets:
         if BANNED.search(prompt):
             raise AssetError("assets are objects only - no logos, brands or real people's faces (use S.person_tag / "
                              "S.quote_card for people and headlines)")
-        full = f"{prompt}, {style_prefix(art)}, {BASE_STYLE}"
+        full = f"{prompt}, {style_prefix(art)}, {SCENE_STYLE if kind == 'scene' else BASE_STYLE}"
         seed = int(seed if seed is not None else int(hashlib.sha256(full.encode()).hexdigest()[:8], 16) % 2**31)
         seed = (seed + 7919 * max(0, min(int(variant or 0), 5))) % 2**31
         key = hashlib.sha256(f"{full}|{seed}".encode()).hexdigest()[:16]
@@ -209,8 +220,10 @@ class Assets:
         target = self.store.files_dir(pid) / "assets" / f"{name}.png"
         if old and old.get("key") == key and target.exists():
             return {**old, "name": name, "reused": True}
-        res = self.svc.generate(full, target, seed)
+        res = (self.svc.generate(full, target, seed, SCENE_SIZE, cutout=False) if kind == "scene"
+               else self.svc.generate(full, target, seed))
         entry = {"file": f"assets/{name}.png", "w": int(res["w"]), "h": int(res["h"]), "prompt": prompt, "seed": seed,
+                 "kind": kind,
                  "key": key, "seconds": res.get("seconds"), "made": time.time()}
         with self._lock:
             idx = self.index(pid)

@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import re
 
-KIT_VERSION = 3
+KIT_VERSION = 4
 MARKER = re.compile(r"^[ \t]*from[ \t]+op_kit[ \t]+import[ \t]+\*[ \t]*$", re.M)
 FONTS = ("Inter", "Bahnschrift", "Cambria", "Sitka", "Consolas", "Segoe UI", "Segoe UI Emoji", "Segoe Fluent Icons")
 
@@ -83,9 +83,11 @@ class Shot:
     def draft(self):
         return OP_QUALITY == "draft"
     def mblur(self, tool, quality=None):
-        """Motion blur. Drafts use 2 samples (owner, 2026-10-12: renders were ~15 min for 1:46), finals 6."""
-        q = quality or (2 if self.draft else 6)
-        tool.SetInput("MotionBlur", 1); tool.SetInput("Quality", q); tool.SetInput("ShutterAngle", 180)
+        """Motion blur in finals (6 samples). None in drafts: 2 samples drew moving text twice, a ghosted double
+        image (owner, 2026-10-12, "The informed buyers shift")."""
+        if self.draft and quality is None:
+            return tool
+        tool.SetInput("MotionBlur", 1); tool.SetInput("Quality", quality or 6); tool.SetInput("ShutterAngle", 180)
         return tool
 
     # -- 2D layers
@@ -211,6 +213,27 @@ class Shot:
         drop = self.add("Transform", Center={1: 0.5 + 0.006, 2: 0.5 - 0.012})
         drop.ConnectInput("Input", sh)
         return self.over(drop, m)
+    def scene(self, name, dim=0.6, blur=2.0, push=0.04, x=0.5, y=0.5):
+        """A generated scene plate (asset_generate kind="scene") as the shot's place: covers the frame, darkened
+        (dim = brightness kept) and softened so the hero reads in front of it, with a slow push for depth."""
+        info = OP_ASSETS.get(name) or OP_ASSETS.get(str(name).replace("assets/", "").rsplit(".", 1)[0])
+        if not info:
+            raise RuntimeError("No generated scene called %s (assets: %s)" % (name, ", ".join(sorted(OP_ASSETS)[:20])))
+        ld = self.add("Loader")
+        ld.Clip = OP_ROOT + "\\" + info["file"].replace("/", "\\")
+        ld.SetInput("Loop", 1)
+        cover = max(OP_W / float(info["w"]), OP_H / float(info["h"])) * 1.02
+        m = self.add("Merge", Center={1: x, 2: y}, Size=cover)
+        m.ConnectInput("Background", self.solid("#000000")); m.ConnectInput("Foreground", ld)
+        self.keys(m, "Size", [(0, cover), (self.last, cover * (1.0 + push))])
+        cc = self.add("ColorCorrector", MasterRGBGain=dim)
+        cc.ConnectInput("Input", m)
+        out = cc
+        if blur:
+            b = self.add("Blur", XBlurSize=blur)
+            b.ConnectInput("Input", cc)
+            out = b
+        return self.vignette(self.grain(out, 0.03), strength=0.5)
     def backdrop(self, base=None, light=None, grain=0.035, vignette=0.45):
         """A lit stage instead of a flat colour: base colour, two soft light pools, grain and a vignette."""
         bg = self.solid(base or self.c("bg", "#101418"))
@@ -437,7 +460,9 @@ the fixed kit code when the owner approves the script):
   S.c("accent") / S.font("heading")   colors and fonts from art.json
   S.media()                      a stock shot's footage (its Fusion MediaIn) - put graphics OVER it with S.over(S.media(),
                                  layer); None on pure motion-graphics shots
-  Stage and objects (v3): S.backdrop() a lit, textured stage (use it instead of a flat S.solid);
+  Stage and objects (v4): S.scene("vault-hall") a generated place as the shot's background (asset_generate
+    kind="scene"; darkened and softened, slow push) - the default stage; S.backdrop() a plain lit stage (only for
+    charts and quote cards);
     S.image("vault-door", x, y, h) a generated asset (name from asset_generate, transparent, soft contact shadow);
     S.float(layer) a slow bob; S.parallax([back, mid, front]) depth drift;
     S.quote_card(source, line, highlight, date, x, y, w, f0) a designed source card (plain source name, never a logo
