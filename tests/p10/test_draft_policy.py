@@ -125,3 +125,19 @@ def test_the_kit_reference_lists_every_shot_method():
     ref = fusion_kit.reference()
     for name in ("image(name, x=0.5", "backdrop(", "quote_card(", "person_tag(", "media()", "begin(name)", "finish(S, layer"):
         assert name in ref, name
+
+
+def test_long_instructions_go_in_a_file_not_on_the_command_line(tmp_path):
+    """v2 re-draft (2026-10-12): the check turn's instructions overflowed Windows' command line ("Claude Code not found")."""
+    pytest.importorskip("claude_agent_sdk")
+    from app.agent.claude_agent import LONG_PROMPT
+    run = SimpleNamespace(root=tmp_path, stopped=False, lock_check=None)
+    agent = ClaudeAgent(None, tmp_path)
+    long_text = "Judge every shot against the competitor. " * (LONG_PROMPT // 20)
+    opts = agent.options(run, SimpleNamespace(permit=None), {"id": "a", "provider": "claude", "profile_dir": str(tmp_path)},
+                         SimpleNamespace(tools=lambda: []), None, long_text, None, None)
+    assert "append" not in opts.system_prompt
+    assert Path(opts.extra_args["append-system-prompt-file"]).read_text(encoding="utf-8") == long_text
+    short = agent.options(run, SimpleNamespace(permit=None), {"id": "a", "provider": "claude", "profile_dir": str(tmp_path)},
+                          SimpleNamespace(tools=lambda: []), None, "be brief", None, None)
+    assert short.system_prompt["append"] == "be brief" and "append-system-prompt-file" not in short.extra_args

@@ -345,3 +345,32 @@ def test_an_episode_cut_off_by_a_shutdown_is_offered_again_on_start(client):
     last = [json.loads(line) for line in (proj / "chat.jsonl").read_text(encoding="utf-8").splitlines()][-1]
     assert last["episode"]["state"] == "stopped" and "Try this stage again" in last["text"]
     assert again is not None
+
+
+class CutOff(Deps):
+    """The last shot batch and the check turn die like the v2 re-draft's (Windows refused the long command line)."""
+    broken = True
+
+    async def turn(self, deps, a, sub, prompt):
+        from app.providers.base import Fail
+        if self.broken and ("Check the visuals" in prompt or ("Build these shots" in prompt and "- shot-004 " in prompt)):
+            return {**ok("", 0, 0), "error": Fail("fatal", "Claude Code not found at: claude.exe")}
+        return await super().turn(deps, a, sub, prompt)
+
+
+def test_trying_the_visuals_again_keeps_the_plan_and_built_shots(tmp_path, setup, monkeypatch):
+    """v2 re-draft (2026-10-12): the check turn failed after 30 of 34 shots; a retry must not plan and build again."""
+    monkeypatch.setattr(episode_mod, "BATCH", 2)
+    store, pid = setup
+    deps = CutOff(tmp_path, store, pid)
+    snap = run(make(tmp_path, store, pid, deps).go())
+    assert snap["state"] == "needs_you" and snap["result"]["stage"] == "visuals"
+    assert deps.auto_ran == ["shot-001", "shot-002"] and deps.visual_turns == 1
+    deps.broken = False
+    saved = json.loads((tmp_path / "episode.json").read_text(encoding="utf-8"))
+    again = EpisodeRun.from_snapshot(pid, saved, Run(pid, store.files_dir(pid)), deps, EpisodeConfig(poll=0.01),
+                                     state_file=tmp_path / "episode.json")
+    done = run(again.go("visuals"))
+    assert done["state"] == "done", (done["result"], done["flags"])
+    assert deps.visual_turns == 1                                              # the plan was kept
+    assert deps.auto_ran == ["shot-001", "shot-002", "shot-003", "shot-004"]   # only the unbuilt shots, once each

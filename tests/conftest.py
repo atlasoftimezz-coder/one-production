@@ -30,3 +30,12 @@ def isolated(tmp_path, monkeypatch):
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local"))
     monkeypatch.setenv("APPDATA", str(tmp_path / "roaming"))
     return tmp_path
+
+
+@pytest.fixture(autouse=True)
+def no_real_image_module(monkeypatch):
+    """On the studio PC the image module is installed on D: (C: was full), and image_home would find it from any
+    data folder - a test's too. Tests see only an image module inside their own data folder."""
+    import app.main
+    monkeypatch.setattr(app.main, "image_home",
+                        lambda data_dir, chosen, drives: Path(chosen) if chosen else data_dir / "modules" / "imagegen")

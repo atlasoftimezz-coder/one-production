@@ -111,6 +111,7 @@ class EpisodeRun(Team):
         ep.state = snap.get("state") or "running"
         ep.notes = list(snap.get("notes") or [])
         ep.flags = list(snap.get("flags") or [])
+        ep.kept = {t["id"] for t in snap.get("tasks") or [] if t.get("status") == "done"}
         return ep
 
     # ------------------------------------------------ reporting
@@ -487,6 +488,15 @@ class EpisodeRun(Team):
         except (OSError, ValueError):
             return []
 
+    def built_shots(self) -> set[str]:
+        """Shots whose script ran into the current Resolve project (saved after its fusion.json was written)."""
+        state_file = self.run.root / self.base / "fusion.json"
+        folder = self.run.root / self.base / "scripts"
+        if not state_file.is_file() or not folder.is_dir():
+            return set()
+        since = state_file.stat().st_mtime
+        return {f.stem for f in folder.glob("shot-*.py") if f.stat().st_mtime >= since}
+
     def fusion_state(self) -> dict | None:
         f = self.run.root / self.base / "fusion.json"
         try:
@@ -589,8 +599,14 @@ class EpisodeRun(Team):
                     files=[f"{self.base}/art.json", f"{self.base}/motion.py", f"{self.base}/shots.json"],
                     brief="art direction, motion library, shot list, Resolve project")
         self.tasks.append(plan)
+        # Trying the stage again keeps a finished plan and the shots already scripted into its Resolve project
+        # (v2 re-draft, 2026-10-12: the check turn failed after 30 of 34 shots were built).
+        kept = "visuals-plan" in getattr(self, "kept", set()) and self.fusion_state() is not None
+        built = self.built_shots() if kept else set()
+        if kept:
+            self.notice(f"Visuals: kept the plan and {len(built)} built shots - carrying on.")
         misses = 0
-        while True:
+        while not kept:
             res = await self.run_worker(plan, self.plan_prompt(plan), VISUALS_NOTE, "worker")
             self.locks.release(plan.id)
             if res.get("error"):
@@ -615,12 +631,14 @@ class EpisodeRun(Team):
         state = self.fusion_state()
         self.vo["resolve_project"] = state["project_name"]
         shots = state["shots"]
-        for n in range(0, len(shots), BATCH):
-            part = shots[n:n + BATCH]
+        todo = [s for s in shots if s["name"] not in built]
+        for n in range(0, len(todo), BATCH):
+            part = todo[n:n + BATCH]
             t = Task(id=f"shots-{n // BATCH + 1}", title=f"Shots {part[0]['name'][5:]}-{part[-1]['name'][5:]}",
                      providers=list(CLAUDE_ACCOUNTS), brief="script these shots")
             self.tasks.append(t)
-            await self.set_stage("visuals", "running", f"building shots {n + 1}-{n + len(part)} of {len(shots)}")
+            await self.set_stage("visuals", "running", f"building shots {part[0]['name'][5:]}-{part[-1]['name'][5:]} "
+                                                       f"of {len(shots)}")
             res = await self.run_worker(t, self.shots_prompt(t, part), VISUALS_NOTE, "worker")
             self.locks.release(t.id)
             if res.get("error"):

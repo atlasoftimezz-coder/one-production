@@ -49,6 +49,19 @@ def _sdk():
 # as one bigger JSON message, and the reader died mid-draft (v2 re-draft, 2026-10-12).
 MAX_MESSAGE = 64 * 1024 * 1024
 SHELLS = ("Bash", "PowerShell")
+LONG_PROMPT = 8000
+
+
+def prompt_file(text: str) -> Path:
+    """The instructions as a file the CLI reads (--append-system-prompt-file), named by content."""
+    import hashlib
+    import tempfile
+    folder = Path(tempfile.gettempdir()) / "oneprod-prompts"
+    folder.mkdir(parents=True, exist_ok=True)
+    f = folder / (hashlib.sha256(text.encode("utf-8")).hexdigest()[:20] + ".md")
+    if not f.exists():
+        f.write_text(text, encoding="utf-8")
+    return f
 FILE_TOOLS = ("Read", "Glob", "Grep", "Write", "Edit", "MultiEdit", "NotebookEdit")
 
 class ClaudeAgent:
@@ -131,15 +144,22 @@ class ClaudeAgent:
                 instructions = instructions.replace(RESOLVE_RULE, extra["instructions"])
             else:
                 instructions = instructions + "\n\n" + extra["instructions"]
+        system_prompt: dict = {"type": "preset", "preset": "claude_code", "append": instructions}
+        extra_args: dict = {"disable-slash-commands": None}
+        if len(instructions) > LONG_PROMPT:
+            # Windows caps a command line at 32767 characters and reports a longer one as a missing program:
+            # "Claude Code not found" on the draft's check turn (v2 re-draft, 2026-10-12). Long instructions go in a file.
+            system_prompt = {"type": "preset", "preset": "claude_code"}
+            extra_args["append-system-prompt-file"] = str(prompt_file(instructions))
         opts = sdk.ClaudeAgentOptions(
             cli_path=claude_exe(self.command), cwd=str(run.root), env=self.env(account),
             setting_sources=[], strict_mcp_config=True, mcp_servers={**extra["servers"], "studio": server},
             disallowed_tools=list(extra["disallowed"]),
-            system_prompt={"type": "preset", "preset": "claude_code", "append": instructions},
+            system_prompt=system_prompt,
             permission_mode="default", can_use_tool=can_use_tool,
             hooks={"PreToolUse": [sdk.HookMatcher(matcher=None, hooks=[pre_tool])]},
             include_partial_messages=True, resume=session_id, model=model or None,
-            effort=effort or None, extra_args={"disable-slash-commands": None},
+            effort=effort or None, extra_args=extra_args,
             max_buffer_size=MAX_MESSAGE)
         opts._studio_tools = {f"mcp__studio__{t.name}": t for t in sdk_tools}   # test seam: fake client calls these
         return opts

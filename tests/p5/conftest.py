@@ -122,8 +122,12 @@ class FakeAgent:
 
     async def query(self, prompt):
         self.prompt = prompt
+        system = dict(self.o.system_prompt)
+        prompt_file = (self.o.extra_args or {}).get("append-system-prompt-file")
+        if prompt_file:                                   # as the CLI does: long instructions come from a file
+            system["append"] = Path(prompt_file).read_text(encoding="utf-8")
         self.s.seen.append({"prompt": prompt, "cwd": self.o.cwd, "env": dict(self.o.env), "resume": self.o.resume,
-                            "setting_sources": self.o.setting_sources, "system": self.o.system_prompt,
+                            "setting_sources": self.o.setting_sources, "system": system,
                             "cli": self.o.cli_path, "mcp": list(self.o.mcp_servers),
                             "mcp_config": dict(self.o.mcp_servers), "disallowed": list(self.o.disallowed_tools),
                             "model": self.o.model, "effort": self.o.effort})
