@@ -59,6 +59,7 @@ def _pipe():
     pipe = FluxPipeline.from_pretrained(REPO, transformer=transformer, text_encoder_2=t5, torch_dtype=torch.bfloat16)
     for name in ("transformer", "text_encoder", "vae"):          # T5 is already on the card (4-bit)
         getattr(pipe, name).to("cuda")
+    pipe.vae.enable_tiling()                                       # decode in tiles: a smaller peak on a shared card
     STATE["pipe"] = pipe
     return pipe
 
@@ -69,7 +70,7 @@ def _cutter():
     import torch
     from transformers import AutoModelForImageSegmentation
     m = AutoModelForImageSegmentation.from_pretrained(CUTOUT_REPO, trust_remote_code=True)
-    m.to("cuda").eval().half()
+    m.eval().float()           # on the CPU: its 1024 px pass on the card pushed FLUX + Resolve past 16 GB (2026-10-12)
     STATE["cut"] = (m, torch)
     return STATE["cut"]
 
@@ -82,7 +83,7 @@ def cut_out(img):
     tf = transforms.Compose([transforms.Resize((1024, 1024)), transforms.ToTensor(),
                              transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])])
     with torch.no_grad():
-        pred = model(tf(img).unsqueeze(0).to("cuda").half())[-1].sigmoid().float().cpu()[0].squeeze()
+        pred = model(tf(img).unsqueeze(0))[-1].sigmoid().float().cpu()[0].squeeze()
     mask = transforms.ToPILImage()(pred).resize(img.size, Image.BILINEAR)
     out = img.convert("RGBA")
     out.putalpha(mask)
