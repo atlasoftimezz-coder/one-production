@@ -26,6 +26,10 @@ from .fusion_kit import FONTS, KIT_VERSION
 from .resolve import at_least
 from .storage import NotFound
 
+# Resolve's InsertFusionCompositionIntoTimeline makes a 5 s clip and the API cannot lengthen it: a longer shot left
+# pieces behind ("Expected 28 shot clips, Resolve has 31" - v2 re-draft, 2026-10-12).
+MAX_SHOT_FRAMES = 300
+
 FPS, WIDTH, HEIGHT = 60, 1920, 1080
 MIN_VERSION = '21.0'                 # Fusion compositions on the timeline by script, as verified on 21.1
 HEX = re.compile(r'^#[0-9A-Fa-f]{6}$')
@@ -281,6 +285,11 @@ class Fusion:
         short = [n + 1 for n, (_, f) in enumerate(timed) if f < MIN_SHOT * FPS]
         if short:
             raise FusionError(f'Shots {short[:8]} would last under {MIN_SHOT} s; move their anchors apart.')
+        long_ = [f'shot-{n + 1:03d} ({f / FPS:.1f} s)' for n, (_, f) in enumerate(timed) if f > MAX_SHOT_FRAMES]
+        if long_:
+            raise FusionError(f'A Fusion clip lasts at most {MAX_SHOT_FRAMES / FPS:g} s and these shots run longer: '
+                              f'{", ".join(long_[:8])}. Split each into two shots (add a shot anchored on a later '
+                              'phrase); do not drop footage or shots.')
         clips = {}
         for shot in shots:
             if shot.get('stock') and shot['stock'] not in clips:

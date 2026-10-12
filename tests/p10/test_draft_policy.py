@@ -103,3 +103,11 @@ def test_a_big_image_read_does_not_kill_the_run_or_look_like_a_limit(tmp_path):
     msg = ("Failed to decode JSON: JSON message exceeded maximum buffer size of 1048576 bytes...")
     assert classify_text(msg) == "fatal"
     assert classify_text("You've hit your limit") == "limit"
+
+
+def test_a_draft_denies_shell_commands_without_a_card(tmp_path):
+    """v2 re-draft (2026-10-12): the plan turn asked for sed cards and the owner had to answer them."""
+    run = SimpleNamespace(root=tmp_path, stopped=False, lock_check=None, shot_scripts=scripts(tmp_path))
+    cb, permits, sdk = can_use(tmp_path, run)
+    res = asyncio.run(cb("Bash", {"command": "sed -e '/stock/d' shots.json"}, None))
+    assert isinstance(res, sdk.PermissionResultDeny) and "no shell" in res.message and not permits

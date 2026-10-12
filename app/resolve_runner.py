@@ -168,11 +168,18 @@ def place_stock(timeline, pool, item, clip, shot: dict, base: int, fps: float):
     timeline's 60 fps to the clip's own rate (Resolve conforms it)."""
     src_fps = float(clip.GetClipProperty('FPS') or fps)
     first = int(round(float(shot.get('from') or 0) * src_fps))
-    last = first + max(1, int(round(shot['frames'] * src_fps / fps))) - 1
+    count = max(1, int(round(shot['frames'] * src_fps / fps)))
     need(timeline.DeleteClips([item], False), f'Could not clear {shot["name"]} for its stock clip.')
-    placed = pool.AppendToTimeline([{'mediaPoolItem': clip, 'startFrame': first, 'endFrame': last, 'mediaType': 1,
-                                     'trackIndex': 1, 'recordFrame': base + shot['start']}]) or []
-    new = need(placed and placed[0], f'Resolve would not place the stock clip of {shot["name"]}.')
+
+    def place(end):
+        return (pool.AppendToTimeline([{'mediaPoolItem': clip, 'startFrame': first, 'endFrame': end, 'mediaType': 1,
+                                        'trackIndex': 1, 'recordFrame': base + shot['start']}]) or [None])[0]
+    # Resolve 21.1 reads endFrame as one past the last frame: an inclusive end landed one source frame short
+    # (146 frames wanted, 144 placed - v2 re-draft, 2026-10-12). Should a version count it inclusive, redo it.
+    new = need(place(first + count), f'Resolve would not place the stock clip of {shot["name"]}.')
+    if new.GetDuration() > shot['frames'] + 1:
+        need(timeline.DeleteClips([new], False), f'Could not redo the stock clip of {shot["name"]}.')
+        new = need(place(first + count - 1), f'Resolve would not place the stock clip of {shot["name"]}.')
     need(new.GetStart() - base == shot['start'] and abs(new.GetDuration() - shot['frames']) <= 1,
          f'The stock clip of {shot["name"]} landed at {new.GetStart() - base}+{new.GetDuration()}, '
          f'expected {shot["start"]}+{shot["frames"]}.')

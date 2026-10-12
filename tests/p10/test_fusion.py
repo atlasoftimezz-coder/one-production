@@ -120,7 +120,8 @@ class Pool:
             tl = self.project.current
             if info["mediaType"] == 1:                 # video: the source range conformed to the timeline's rate
                 src = float(info["mediaPoolItem"].GetClipProperty("FPS"))
-                dur = round((info["endFrame"] - info["startFrame"] + 1) * tl.fps / src)
+                # Resolve 21.1: endFrame is one past the last source frame (real check, 2026-10-12)
+                dur = round((info["endFrame"] - info["startFrame"]) * tl.fps / src)
                 it = Item(info["recordFrame"], dur, Path(info["mediaPoolItem"].path).name, info["mediaPoolItem"].path)
                 it.source = (info["startFrame"], info["endFrame"])
                 tl.video.append(it)
@@ -246,7 +247,7 @@ def test_a_stock_shot_puts_the_clip_at_its_frames_with_a_comp_on_top(tmp_path):
     assert out["shots"][1] == {"name": "shot-002", "start": 90, "frames": 128}
     items = res.manager.current.current.GetItemListInTrack("video", 1)
     assert len(items) == 4 and items[1].path == str(clip) and items[1].name == "shot-002"
-    assert items[1].source == (60, 60 + 64 - 1)                            # 2 s into a 30 fps clip, 128 frames at 60 fps
+    assert items[1].source == (60, 60 + 64)                                # 2 s into a 30 fps clip, 128 frames at 60 fps
     assert items[1].comp.data["OneProduction.shot"]["stock"] == "stock/pexels-video-7.mp4"
     # stills: a stock shot with nothing on top still shows its footage, so it is not "empty"
     out_dir = tmp_path / "st"; out_dir.mkdir()
@@ -414,3 +415,8 @@ def test_setup_and_stills_through_the_service(tmp_path):
                                                                        {"anchor": "then the dollar", "idea": "b"}]}), encoding="utf-8")
     plan = svc.plan(pid, "work/shots.json", "work/art.json", "vo.wav", "vo.srt")
     assert plan["shots"][0]["stock_path"].endswith("pexels-video-9.mp4") and plan["shots"][0]["frames"] % 2 == 0
+    # Resolve's Fusion clip is 5 s and cannot be lengthened: a longer shot left extra pieces (v2 re-draft, 2026-10-12)
+    (files / "work" / "shots.json").write_text(json.dumps({"shots": [{"idea": "the whole thing"}]}), encoding="utf-8")
+    with pytest.raises(FusionError, match=r"at most 5 s.*shot-001 \(8\.0 s\).*Split"):
+        svc.plan(pid, "work/shots.json", "work/art.json", "vo.wav", "vo.srt")
+

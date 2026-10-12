@@ -26,8 +26,9 @@ from tests.p10.media_fixtures import FF, master, needs_ffmpeg, png, srt, video, 
 pytestmark = needs_ffmpeg
 SCRIPT = "## Hydrogen\nIn the beginning there was hydrogen and plenty of it.\n## Helium\nThen came helium and lithium born in the first minutes.\n" \
          "## A bad year\nIn nineteen eighty six a reactor failed.\n## The end\nThe end of the story for now.\n"
-CUES = [(0, 6, 'In the beginning there was hydrogen and plenty of it'), (6, 12, 'Then came helium and lithium born in the first minutes'),
-        (12, 18, 'In nineteen eighty six a reactor failed'), (18, 24, 'The end of the story for now')]
+# 4 s cues: every shot stays under Resolve's 5 s Fusion clip
+CUES = [(0, 4, 'In the beginning there was hydrogen and plenty of it'), (4, 8, 'Then came helium and lithium born in the first minutes'),
+        (8, 12, 'In nineteen eighty six a reactor failed'), (12, 16, 'The end of the story for now')]
 ART = {"concept": "Periodic-table cards on warm paper: each element is a tile that lights up when named.",
        "palette": {"bg": "#F3EEE3", "ink": "#1B1A17", "accent": "#C8892B"}, "fonts": {"heading": "Cambria", "body": "Inter"},
        "motion": "tiles rise with a soft overshoot, 6-frame stagger, slow push", "three_d": False}
@@ -93,8 +94,8 @@ class Deps(TeamDeps):
         self.jobs['v1'] = job
         async def finish():
             await asyncio.sleep(0.05)
-            master(voice(self.files / 'raw.wav', 120, 24), self.files / 'vo.wav')
-            srt(self.files / 'vo.srt', 24, CUES)
+            master(voice(self.files / 'raw.wav', 120, 16), self.files / 'vo.wav')
+            srt(self.files / 'vo.srt', 16, CUES)
             job.update(status='done', files=['vo.mp3', 'vo.wav', 'vo.srt'])
         asyncio.get_running_loop().create_task(finish())
         return dict(job)
@@ -167,7 +168,7 @@ def status(snap):
     return {s['id']: s['status'] for s in snap['stages']}
 
 
-def owner_renders(store, pid, name='render.mp4', seconds=24.0, **kw):
+def owner_renders(store, pid, name='render.mp4', seconds=16.0, **kw):
     files = store.files_dir(pid)
     video(files / name, files / 'vo.wav', seconds, **kw)
     return name
@@ -186,7 +187,7 @@ def test_full_episode_waits_for_the_owners_render_then_packages(tmp_path, setup)
     build = deps.resolve.requests[0]['spec']
     assert build['fps'] == 60 and build['style']['fonts']['heading'] == 'Cambria'
     starts = [s['start'] for s in build['shots']]
-    assert starts[0] == 0 and starts == sorted(starts) and sum(s['frames'] for s in build['shots']) == pytest.approx(24 * 60, abs=2)
+    assert starts[0] == 0 and starts == sorted(starts) and sum(s['frames'] for s in build['shots']) == pytest.approx(16 * 60, abs=2)
     visual_prompt = next(c[4] for c in deps.calls if c[0] == 'worker')
     assert 'from op_kit import *' in visual_prompt and 'fusion_setup' in visual_prompt and 'art.json' in visual_prompt
     stills = sorted((store.files_dir(pid) / 'work' / 'ep-1' / 'stills').glob('*.png'))
@@ -205,7 +206,7 @@ def test_a_bad_render_is_stopped_by_the_video_gate(tmp_path, setup):
     store, pid = setup
     ep, _ = make(tmp_path, store, pid, Deps(tmp_path, store, pid))
     assert run(ep.go())['state'] == 'waiting_render'
-    snap = run(ep.rendered(owner_renders(store, pid, 'short.mp4', seconds=15.0)))
+    snap = run(ep.rendered(owner_renders(store, pid, 'short.mp4', seconds=10.0)))
     assert snap['state'] == 'needs_you' and snap['result']['stage'] == 'edit' and 'video gate' in snap['result']['why']
     assert status(snap)['package'] == 'waiting'
 

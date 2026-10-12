@@ -41,7 +41,7 @@ class Deps(EpisodeDeps):
             return {"failed": True, "error": "Render job failed: disk full"}
         if job["polls"] < 2:
             return {"progress": 50}
-        video(self.files / job["file"], self.files / "vo.wav", 24.0)
+        video(self.files / job["file"], self.files / "vo.wav", 16.0)
         return {"done": True, "progress": 100}
 
     async def turn(self, deps, a, sub, prompt):

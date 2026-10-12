@@ -302,8 +302,8 @@ class EpisodeRun(Team):
                  f"2. Shot list: write {b}/shots.json {{\"shots\": [{{\"idea\": \"what the shot shows and how it moves\", "
                  "\"text\": \"on-screen words\"}, {\"anchor\": \"3-6 consecutive words exactly as in the subtitles\", "
                  "\"idea\": \"...\", \"text\": \"...\"}]}. The first shot starts at 0; every other shot starts when its anchor "
-                 f"words are spoken. One idea per shot, a new shot about every {self.cfg.shot_seconds:g} s and whenever the "
-                 "narration changes subject.",
+                 f"words are spoken. One idea per shot, a new shot about every {self.cfg.shot_seconds:g} s (never longer "
+                 "than 5 s, a Fusion clip's limit) and whenever the narration changes subject.",
                  f"3. Call fusion_setup with shots=\"{b}/shots.json\" art=\"{b}/art.json\" voiceover=\"{self.vo['wav']}\" "
                  f"subtitles=\"{self.vo['srt']}\"{music} name=\"{s['name']}\". Fix whatever it reports and call it again.",
                  "4. Script EVERY shot with its own mcp__davinci__run_script: the script starts with `from op_kit import *`, "
@@ -447,7 +447,8 @@ class EpisodeRun(Team):
                  "words exactly as in the subtitles\", \"idea\": \"what the shot shows and how it moves\", \"text\"}}]}. The "
                  f"first shot starts at 0; every other shot starts at its anchor words. Pace: shots of about {shot:g} s"
                  + (f", with about {hook:g} cuts per minute in the first 30 s" if hook else "") +
-                 " (the competitor's measured rhythm), and always a new shot when the narration changes subject."
+                 " (the competitor's measured rhythm), never longer than 5 s (a Fusion clip's limit), and always a new "
+                 "shot when the narration changes subject."
                  + (" Where real footage explains better than graphics (follow the style's share of footage; at most about "
                     "half of the shots), find a Pexels video with stock_search, download it with stock_fetch, and give that "
                     "shot \"stock\": \"stock/<file>.mp4\" and \"from\": seconds into the clip; the shot's graphics then go over "
