@@ -47,8 +47,24 @@ class ShotScripts:
     all name shots of this episode; anything else still asks. The AI's own code is saved per shot so the
     owner can read what ran."""
 
-    def __init__(self, project: str, shots: set[str], motion_file: Path | None, save_dir: Path | None, auto: bool):
+    def __init__(self, project: str, shots: set[str], motion_file: Path | None, save_dir: Path | None, auto: bool,
+                 root: Path | None = None, quality: str = "final"):
         self.project, self.shots, self.motion_file, self.save_dir, self.auto_ok = project, shots, motion_file, save_dir, auto
+        self.root, self.quality = root, quality
+
+    def settings(self) -> dict:
+        """What the kit needs: quality, the project folder and the generated assets (assets/index.json)."""
+        out: dict = {"quality": self.quality}
+        if self.root:
+            out["root"] = str(self.root)
+            idx = self.root / "assets" / "index.json"
+            try:
+                data = json.loads(idx.read_text(encoding="utf-8")) if idx.is_file() else {}
+            except ValueError:
+                data = {}
+            out["assets"] = {k: {"file": v["file"], "w": v["w"], "h": v["h"]} for k, v in data.items()
+                             if isinstance(v, dict) and {"file", "w", "h"} <= set(v)}
+        return out
 
     def motion(self) -> str | None:
         if not self.motion_file or not self.motion_file.is_file():
@@ -59,7 +75,7 @@ class ShotScripts:
             return None
 
     def expand(self, script: str) -> tuple[str, bool]:
-        return fusion_kit.expand(script, self.motion(), self.project)
+        return fusion_kit.expand(script, self.motion(), self.project, self.settings())
 
     def auto(self, script: str) -> str | None:
         """The completed script when it may run without a card, else None (-> the normal card)."""

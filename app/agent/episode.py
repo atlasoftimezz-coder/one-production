@@ -475,7 +475,8 @@ class EpisodeRun(Team):
         if state:
             sub.shot_scripts = ShotScripts(state["project_name"], {s["name"] for s in state["shots"]},
                                            self.run.root / self.base / "motion.py", self.run.root / self.base / "scripts",
-                                           auto=self.draft)
+                                           auto=self.draft, root=self.run.root,
+                                           quality="draft" if self.draft else "final")
 
     async def draft_visuals(self) -> bool:
         self.vo["seconds"] = await asyncio.to_thread(self.deps.duration, self.vo["wav"])

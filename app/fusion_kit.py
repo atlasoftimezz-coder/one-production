@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import re
 
-KIT_VERSION = 2
+KIT_VERSION = 3
 MARKER = re.compile(r"^[ \t]*from[ \t]+op_kit[ \t]+import[ \t]+\*[ \t]*$", re.M)
 FONTS = ("Inter", "Bahnschrift", "Cambria", "Sitka", "Consolas", "Segoe UI", "Segoe UI Emoji", "Segoe Fluent Icons")
 
@@ -37,6 +37,9 @@ KIT = r'''
 # ---- One Production Fusion kit v%(version)d (fixed code, added by One Production) ----
 OP_ICONS = %(icons)r
 OP_W, OP_H = 1920.0, 1080.0
+OP_QUALITY = "final"     # One Production sets "draft" for first-review drafts (lighter motion blur, no supersampling)
+OP_ROOT = ""             # the project's files folder (generated assets live in OP_ROOT\assets)
+OP_ASSETS = {}           # name -> {"file": "assets/<name>.png", "w": px, "h": px}
 _FAR = -32768
 
 def op_rgb(h):
@@ -76,8 +79,13 @@ class Shot:
         for f, v in pairs:
             tool.SetInput(inp, v, int(f))
         return tool
-    def mblur(self, tool, quality=6):
-        tool.SetInput("MotionBlur", 1); tool.SetInput("Quality", quality); tool.SetInput("ShutterAngle", 180)
+    @property
+    def draft(self):
+        return OP_QUALITY == "draft"
+    def mblur(self, tool, quality=None):
+        """Motion blur. Drafts use 2 samples (owner, 2026-10-12: renders were ~15 min for 1:46), finals 6."""
+        q = quality or (2 if self.draft else 6)
+        tool.SetInput("MotionBlur", 1); tool.SetInput("Quality", q); tool.SetInput("ShutterAngle", 180)
         return tool
 
     # -- 2D layers
@@ -131,9 +139,14 @@ class Shot:
         self.keys(text_tool, "End", [(f0, 0.0), (f1, 1.0)]); return text_tool
 
     # -- motion on a whole layer (returns the Transform to merge)
-    def move(self, layer, pivot=(0.5, 0.5)):
+    def move(self, layer, pivot=(0.5, 0.5), blur=None):
+        """blur=None: motion blur on every moving layer in a final, none in a draft (the shot's camera move
+        in finish() still blurs) - stacked per-layer blur multiplies render time."""
         t = self.add("Transform", Pivot={1: pivot[0], 2: pivot[1]}, Center={1: 0.5, 2: 0.5})
-        t.ConnectInput("Input", layer); self.mblur(t); return t
+        t.ConnectInput("Input", layer)
+        if blur if blur is not None else not self.draft:
+            self.mblur(t)
+        return t
     def pop(self, layer, x, y, f0, length=None, overshoot=1.08):
         """Scale in from nothing with a small overshoot, around (x, y)."""
         n = length or self.sec(0.35)
@@ -177,6 +190,93 @@ class Shot:
         m = self.circle(0.5, 0.5, 1.5, soft=0.45); m.SetInput("Invert", 1)
         edge.ConnectInput("EffectMask", m)
         return self.over(layer, edge)
+
+    # -- generated assets, stage and depth (kit v3, owner 2026-10-12: "use image generation for asset")
+    def image(self, name, x=0.5, y=0.5, h=0.45, shadow=True):
+        """A generated asset (assets/<name>.png, transparent) centred at (x, y), h = height in frame
+        heights. Returns a full-frame layer with the asset (and a soft contact shadow) on it."""
+        info = OP_ASSETS.get(name) or OP_ASSETS.get(str(name).replace("assets/", "").rsplit(".", 1)[0])
+        if not info:
+            raise RuntimeError("No generated asset called %s (assets: %s)" % (name, ", ".join(sorted(OP_ASSETS)[:20])))
+        ld = self.add("Loader")
+        ld.Clip = OP_ROOT + "\\" + info["file"].replace("/", "\\")
+        ld.SetInput("Loop", 1)
+        m = self.add("Merge", Center={1: x, 2: y}, Size=h * OP_H / float(info["h"]))
+        m.ConnectInput("Background", self.clear()); m.ConnectInput("Foreground", ld)
+        if not shadow:
+            return m
+        sh = self.add("Blur", XBlurSize=18)
+        dark = self.add("ColorCorrector", MasterRGBGain=0.0, MasterAlphaGain=0.55)
+        dark.ConnectInput("Input", m); sh.ConnectInput("Input", dark)
+        drop = self.add("Transform", Center={1: 0.5 + 0.006, 2: 0.5 - 0.012})
+        drop.ConnectInput("Input", sh)
+        return self.over(drop, m)
+    def backdrop(self, base=None, light=None, grain=0.035, vignette=0.45):
+        """A lit stage instead of a flat colour: base colour, two soft light pools, grain and a vignette."""
+        bg = self.solid(base or self.c("bg", "#101418"))
+        lc = light or self.c("accent", "#FFFFFF")
+        for (lx, ly, d, a) in ((0.32, 0.72, 0.9, 0.10), (0.78, 0.28, 0.7, 0.06)):
+            pool = self.masked(lc, self.circle(lx, ly, d, soft=0.5), alpha=a)
+            bg = self.over(bg, pool)
+        return self.vignette(self.grain(bg, grain), strength=vignette)
+    def float(self, layer, amount=0.006, period=None):
+        """A slow bob so a hero object never sits dead still."""
+        n = period or self.sec(3.0)
+        t = self.move(layer, blur=False)
+        keys, f, up = [], 0, True
+        while f <= self.last + n:
+            keys.append((f, {1: 0.5, 2: 0.5 + (amount if up else -amount)})); f += n // 2; up = not up
+        self.keys(t, "Center", keys)
+        return t
+    def parallax(self, layers, depth=0.02):
+        """Layers back to front; each drifts sideways a little more than the one behind it."""
+        out = None
+        for i, layer in enumerate(layers):
+            t = self.move(layer, blur=False)
+            d = depth * i / max(1, len(layers) - 1)
+            self.keys(t, "Center", [(0, {1: 0.5 + d / 2, 2: 0.5}), (self.last, {1: 0.5 - d / 2, 2: 0.5})])
+            out = t if out is None else self.over(out, t)
+        return out
+    def quote_card(self, source, line, highlight=None, date="", x=0.5, y=0.55, w=0.42, f0=0):
+        """A designed source card (no logo, no imitation of a real page): source name, date, the quoted line,
+        and the key phrase on a highlighter bar that wipes in. Returns the card layer."""
+        h = 0.30 if highlight else 0.24
+        card = self.masked("#F4F1EA", self.rect(x, y, w, h, radius=0.04))
+        edge = self.masked(self.c("accent", "#E0234E"), self.rect(x, y, w, h, radius=0.04, outline=0.004))
+        layer = self.over(self.over(self.clear(), card), edge)
+        layer = self.over(layer, self.text(str(source).upper(), x - w / 2 + 0.02, y + h / 2 - 0.045, 0.022, "#1B1A17",
+                                           style="Bold", align="left"))
+        if date:
+            layer = self.over(layer, self.text(date, x + w / 2 - 0.02, y + h / 2 - 0.045, 0.02, "#6B675F", align="right"))
+        words, rows, cur = str(line).split(), [], ""
+        for wd in words:
+            if len(cur) + len(wd) > 36 and cur:
+                rows.append(cur); cur = wd
+            else:
+                cur = (cur + " " + wd).strip()
+        if cur: rows.append(cur)
+        body = self.text("\n".join(rows[:4]), x - w / 2 + 0.02, y + 0.01, 0.034, "#1B1A17", role="heading",
+                         style="SemiBold", align="left")
+        layer = self.over(layer, body)
+        if highlight:
+            hy = y - h / 2 + 0.06
+            bar = self.add("RectangleMask", Center={1: x - w / 2 + 0.02, 2: hy}, Width=w - 0.04, Height=0.07, CornerRadius=0.2)
+            self.keys(bar, "Width", [(f0 + self.sec(0.4), 0.0), (f0 + self.sec(0.9), w - 0.04)])
+            self.keys(bar, "Center", [(f0 + self.sec(0.4), {1: x - w / 2 + 0.02, 2: hy}), (f0 + self.sec(0.9), {1: x, 2: hy})])
+            layer = self.over(layer, self.masked(self.c("accent", "#E0234E"), bar, alpha=0.85))
+            layer = self.over(layer, self.text(highlight, x, hy, 0.032, "#FFFFFF", style="Bold"))
+        return layer
+    def person_tag(self, name, role="", x=0.5, y=0.2, figure=None):
+        """A name chip (and optionally a generated generic figure asset above it). Never a real face."""
+        layer = self.clear()
+        if figure:
+            layer = self.over(layer, self.image(figure, x, y + 0.26, 0.42))
+        w = max(0.12, 0.012 * len(name) + 0.04)
+        layer = self.over(layer, self.masked(self.c("accent", "#E0234E"), self.rect(x, y, w, 0.06, radius=0.15)))
+        layer = self.over(layer, self.text(name.upper(), x, y + 0.004, 0.024, "#FFFFFF", style="Bold"))
+        if role:
+            layer = self.over(layer, self.text(role, x, y - 0.05, 0.02, self.c("muted", "#B8B8B8")))
+        return layer
 
     # -- charts
     def bars(self, values, x0, y0, width, height, color=None, f0=0, stagger=None, gap=0.35, highlight=None, hcolor=None):
@@ -289,14 +389,15 @@ class Stage3D:
             sun.SetInput("ShadowLightInputs3D.ShadowsEnabled", 1); sun.SetInput("ShadowLightInputs3D.ShadowDensity", density)
         amb = self.S.add("LightAmbient", Intensity=fill)
         self.keep(sun); self.keep(amb)
-    def render(self, supersample=3, blur=True):
+    def render(self, supersample=None, blur=True):
         m = self.S.add("Merge3D")
         for n, p in enumerate(self.parts, 1): m.ConnectInput("SceneInput%d" % n, p)
         r = self.S.add("Renderer3D"); r.ConnectInput("SceneInput", m)
         r.SetInput("RendererType", "RendererOpenGL")
         r.SetInput("RendererOpenGL.LightingEnabled", 1); r.SetInput("RendererOpenGL.ShadowsEnabled", 1)
-        r.SetInput("RendererOpenGL.AntiAliasing.Presets.Color.Supersampling.LowQuality.Rate", supersample)
-        if blur: self.S.mblur(r)
+        ss = supersample if supersample is not None else (1 if self.S.draft else 3)
+        r.SetInput("RendererOpenGL.AntiAliasing.Presets.Color.Supersampling.LowQuality.Rate", ss)
+        if blur and not self.S.draft: self.S.mblur(r)
         return r
 
 def begin(name):
@@ -318,7 +419,7 @@ def begin(name):
 
 def finish(S, layer, push=0.03, drift=(0.0, 0.0)):
     """Connect the final layer to the shot's output with a slow camera push (0 = none)."""
-    cam = S.move(layer)
+    cam = S.move(layer, blur=True)
     if push or drift[0] or drift[1]:
         S.keys(cam, "Size", [(0, 1.0), (S.last, 1.0 + push)])
         S.keys(cam, "Center", [(0, {1: 0.5, 2: 0.5}), (S.last, {1: 0.5 + drift[0], 2: 0.5 + drift[1]})])
@@ -336,6 +437,12 @@ the fixed kit code when the owner approves the script):
   S.c("accent") / S.font("heading")   colors and fonts from art.json
   S.media()                      a stock shot's footage (its Fusion MediaIn) - put graphics OVER it with S.over(S.media(),
                                  layer); None on pure motion-graphics shots
+  Stage and objects (v3): S.backdrop() a lit, textured stage (use it instead of a flat S.solid);
+    S.image("vault-door", x, y, h) a generated asset (name from asset_generate, transparent, soft contact shadow);
+    S.float(layer) a slow bob; S.parallax([back, mid, front]) depth drift;
+    S.quote_card(source, line, highlight, date, x, y, w, f0) a designed source card (plain source name, never a logo
+    or an imitated page); S.person_tag(name, role, x, y, figure) a name chip (figure = a generic generated figure,
+    never a real person's face)
   Layers: S.solid(color, alpha), S.gradient(tl, tr, bl, br), S.clear(), S.text(s, x, y, size, color, role, style,
     align), S.icon(name, x, y, size, color), S.masked(color, mask), S.over(back, front, fade=(f0, f1), mode, blend),
     S.grain(layer, 0.04), S.vignette(layer, color, 0.35), S.glow(layer, 0.8, 12), S.dashed(x0, x1, y, color)
@@ -361,13 +468,29 @@ def source() -> str:
     return KIT.replace("%(version)d", str(KIT_VERSION)).replace("%(icons)r", repr(ICONS))
 
 
-def expand(script: str, motion: str | None = None, project: str | None = None) -> tuple[str, bool]:
+def settings_block(settings: dict | None) -> str:
+    """Per-episode values the kit reads: draft quality, the project folder and the generated assets."""
+    if not settings:
+        return ""
+    lines = ["# ---- this episode's settings (One Production) ----"]
+    if settings.get("quality"):
+        lines.append(f"OP_QUALITY = {str(settings['quality'])!r}")
+    if settings.get("root"):
+        lines.append(f"OP_ROOT = {str(settings['root'])!r}")
+    if settings.get("assets") is not None:
+        lines.append(f"OP_ASSETS = {dict(settings['assets'])!r}")
+    return "\n" + "\n".join(lines) + "\n"
+
+
+def expand(script: str, motion: str | None = None, project: str | None = None,
+           settings: dict | None = None) -> tuple[str, bool]:
     """Replace `from op_kit import *` with the kit and `from ep_motion import *` with the episode's own
     motion library (owner, 2026-10-11: new animation for every script). `project`: the script may only
-    run while that Resolve project is open (a guard line after the kit). (script, whether expanded)."""
+    run while that Resolve project is open (a guard line after the kit). `settings`: quality / root /
+    assets for the kit (settings_block). (script, whether expanded)."""
     if not isinstance(script, str) or not (MARKER.search(script) or EP_MARKER.search(script)):
         return script, False
-    head = source() + (guard(project) if project else "")
+    head = source() + settings_block(settings) + (guard(project) if project else "")
     if MARKER.search(script):
         script = MARKER.sub(lambda _m: head, script, count=1)
         head = ""                                   # the kit is in; the motion library goes after it

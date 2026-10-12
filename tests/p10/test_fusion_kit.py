@@ -85,11 +85,11 @@ class Project:
 STYLE = {"palette": {"bg": "#101418", "ink": "#EEF2F6", "accent": "#FFB547", "muted": "#7C8796"}, "fonts": {"heading": "Bahnschrift"}}
 
 
-def kit(shot_code, frames=180, style=STYLE):
+def kit(shot_code, frames=180, style=STYLE, settings=None):
     comp = Comp({"OneProduction.style": style, "OneProduction.shot": {"frames": frames, "fps": 60, "idea": "test"}})
     old = comp.AddTool("Background", 0, 0)                      # what an earlier attempt left behind
     env = {"project": Project(Timeline([Item("shot-001", Tool(comp, "x", 0)), Item("shot-007", comp)]))}
-    script, used = fusion_kit.expand("from op_kit import *\n" + shot_code)
+    script, used = fusion_kit.expand("from op_kit import *\n" + shot_code, settings=settings)
     assert used
     exec(compile(script, "shot", "exec"), env)
     return comp, env, old
@@ -181,6 +181,68 @@ def test_3d_stage_sets_size_lock_off_per_face_colors_and_a_lit_renderer():
     assert r["RendererType"] == "RendererOpenGL" and r["RendererOpenGL.LightingEnabled"] == 1 and r["RendererOpenGL.ShadowsEnabled"] == 1
     merge = by(comp, "Merge3D")[-1]
     assert len(merge.links) == 5                                 # cube, cylinder, camera, sun, ambient
+
+
+ASSETS = {"vault-door": {"file": "assets/vault-door.png", "w": 1200, "h": 1600}}
+
+
+def test_draft_quality_blurs_only_the_camera_move_and_lightly():
+    """Owner's first draft rendered ~15 min for 1:46: every pop/rise carried 6-sample motion blur."""
+    code = ("S = begin('shot-007')\n"
+            "p = S.pop(S.icon('bank', 0.5, 0.5, 0.06), 0.5, 0.5, 10)\n"
+            "st = S.stage3d(); st.keep(st.cube('#FFB547', 1, 1, 1)); st.lights(); r = st.render()\n"
+            "result = finish(S, S.over(p, r))\n")
+    comp, env, _ = kit(code, settings={"quality": "draft"})
+    blurred = [t for t in comp.tools if t.inputs.get("MotionBlur") == 1]
+    assert [t.ID for t in blurred] == ["Transform"] and blurred[0] is comp.FindToolByID("MediaOut").links["Input"]
+    assert blurred[0].inputs["Quality"] == 2
+    assert env["r"].inputs["RendererOpenGL.AntiAliasing.Presets.Color.Supersampling.LowQuality.Rate"] == 1
+    comp, env, _ = kit(code)                                       # final quality: as before
+    assert env["p"].inputs["MotionBlur"] == 1 and env["p"].inputs["Quality"] == 6
+    assert env["r"].inputs["RendererOpenGL.AntiAliasing.Presets.Color.Supersampling.LowQuality.Rate"] == 3
+
+
+def test_generated_assets_load_from_the_project_at_their_height():
+    comp, env, _ = kit("S = begin('shot-007')\nv = S.image('vault-door', 0.4, 0.5, 0.6)\n",
+                       settings={"root": r"C:\proj\files", "assets": ASSETS})
+    ld = by(comp, "Loader")[0]
+    assert ld.Clip == r"C:\proj\files\assets\vault-door.png"
+    merge = [m for m in by(comp, "Merge") if m.links.get("Foreground") is ld][0]
+    assert merge.inputs["Center"] == {1: 0.4, 2: 0.5} and merge.inputs["Size"] == pytest.approx(0.6 * 1080 / 1600)
+    assert by(comp, "Blur")                                        # a soft contact shadow
+    with pytest.raises(RuntimeError, match="No generated asset called gold-bar"):
+        kit("S = begin('shot-007')\nS.image('gold-bar')\n", settings={"root": "C:\\p", "assets": ASSETS})
+
+
+def test_quote_card_person_tag_backdrop_and_depth():
+    comp, env, _ = kit("S = begin('shot-007')\n"
+                       "q = S.quote_card('Reuters', 'Central banks bought more than one thousand tonnes of gold in 2022', "
+                       "highlight='more than one thousand tonnes', date='Jan 2023', f0=10)\n"
+                       "t = S.person_tag('Treasury Secretary', 'United States')\n"
+                       "b = S.backdrop()\n"
+                       "f = S.float(q)\n"
+                       "px = S.parallax([b, q, t])\n", settings={"root": "C:\\p", "assets": ASSETS})
+    texts = [t.inputs.get("StyledText") for t in by(comp, "TextPlus")]
+    assert "REUTERS" in texts and "more than one thousand tonnes" in texts and "TREASURY SECRETARY" in texts
+    body = next(s for s in texts if s and s.startswith("Central banks"))
+    assert "\n" in body and all(len(row) <= 40 for row in body.split("\n"))     # wrapped for the card
+    hl = [m for m in by(comp, "RectangleMask") if "Width" in m.keys]
+    assert hl and min(hl[0].keys["Width"].values()) == 0.0                     # the highlighter wipes in
+    assert not by(comp, "Loader")                                              # no image of a real person
+    assert by(comp, "FastNoise") and len(env["f"].keys["Center"]) >= 3
+    drifts = [t for t in by(comp, "Transform") if "Center" in t.keys and len(t.keys["Center"]) == 2]
+    assert len(drifts) == 3
+
+
+def test_settings_block_and_shot_scripts_read_the_asset_index(tmp_path):
+    from app.fusion import ShotScripts
+    import json
+    (tmp_path / "assets").mkdir()
+    (tmp_path / "assets" / "index.json").write_text(json.dumps({"vault-door": {**ASSETS["vault-door"], "prompt": "x"}}), encoding="utf-8")
+    s = ShotScripts("P", {"shot-001"}, None, None, auto=True, root=tmp_path, quality="draft")
+    out = s.auto("from op_kit import *\nS = begin('shot-001')\n")
+    assert "OP_QUALITY = 'draft'" in out and "'vault-door'" in out and repr(str(tmp_path)) in out
+    assert out.index("OP_QUALITY = 'draft'") > out.index("class Shot")      # settings after the kit's defaults
 
 
 def test_guide_lists_every_icon_and_font():
