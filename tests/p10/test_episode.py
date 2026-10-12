@@ -192,7 +192,7 @@ def test_full_episode_waits_for_the_owners_render_then_packages(tmp_path, setup)
     stills = sorted((store.files_dir(pid) / 'work' / 'ep-1' / 'stills').glob('*.png'))
     assert len(stills) == 2 * len(build['shots'])
     # the owner renders in Resolve and picks the file
-    snap = run(ep.resume(owner_renders(store, pid)))
+    snap = run(ep.rendered(owner_renders(store, pid)))
     assert snap['state'] == 'done' and set(status(snap).values()) == {'passed'}, snap['result']
     bundle = store.files_dir(pid) / 'episode' / 'ep-1'
     assert json.loads((bundle / 'metadata.json').read_text(encoding='utf-8'))['title'].startswith('Every Element')
@@ -205,7 +205,7 @@ def test_a_bad_render_is_stopped_by_the_video_gate(tmp_path, setup):
     store, pid = setup
     ep, _ = make(tmp_path, store, pid, Deps(tmp_path, store, pid))
     assert run(ep.go())['state'] == 'waiting_render'
-    snap = run(ep.resume(owner_renders(store, pid, 'short.mp4', seconds=15.0)))
+    snap = run(ep.rendered(owner_renders(store, pid, 'short.mp4', seconds=15.0)))
     assert snap['state'] == 'needs_you' and snap['result']['stage'] == 'edit' and 'video gate' in snap['result']['why']
     assert status(snap)['package'] == 'waiting'
 
@@ -219,7 +219,7 @@ def test_the_waiting_run_resumes_from_its_snapshot_after_a_restart(tmp_path, set
     assert snap['state'] == 'waiting_render' and snap['vo']['wav'] == 'vo.wav'
     again = EpisodeRun.from_snapshot(pid, snap, Run(pid, store.files_dir(pid)), deps, EpisodeConfig(poll=0.01),
                                      state_file=tmp_path / 'episode.json')
-    done = run(again.resume(owner_renders(store, pid)))
+    done = run(again.rendered(owner_renders(store, pid)))
     assert done['state'] == 'done' and done['stages'][2]['status'] == 'passed'
 
 
@@ -264,7 +264,7 @@ def test_gate_misses_and_master_rounds_are_capped(tmp_path, setup):
     deps = Deps(tmp_path, store, pid, title='x' * 120)                          # package gate fails every time
     ep, _ = make(tmp_path, store, pid, deps, gate_rounds=2)
     assert run(ep.go())['state'] == 'waiting_render'
-    snap = run(ep.resume(owner_renders(store, pid)))
+    snap = run(ep.rendered(owner_renders(store, pid)))
     assert snap['state'] == 'needs_you' and snap['result']['stage'] == 'package'
     assert 'title length' in snap['result']['why'] and 'after 2 tries' in snap['result']['why']
     other = store.create_project('Other')['id']
@@ -291,3 +291,10 @@ def test_route_checks_inputs_before_anything_runs(client):
     client.post(f'/api/projects/{pid}/files', files={'files': ('r.mp4', b'0')})
     r = client.post(base + '/render', json={'video': 'r.mp4'})
     assert r.status_code == 409 and 'waiting' in r.json()['detail']
+
+
+def test_resume_on_a_paused_episode_is_the_teams_resume():
+    """v2 re-draft (2026-10-12): the Team panel's Resume hit the render hand-back and answered 500."""
+    from app.agent.episode import EpisodeRun
+    from app.agent.team import Team
+    assert EpisodeRun.resume is Team.resume and callable(EpisodeRun.rendered)

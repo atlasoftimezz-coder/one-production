@@ -63,6 +63,7 @@ _LIMIT = re.compile(r"rate.?limit|usage.?limit|quota|too many requests|\b429\b|l
                     r"hit your limit|exceeded", re.I)
 _AUTH = re.compile(r"not logged in|log ?in|login required|unauthori[sz]ed|invalid.{0,10}(api.?key|x-api-key|token)|"
                    r"authentication|\b401\b|\b403\b|forbidden|credentials", re.I)
+_OURS = re.compile(r"maximum buffer size|failed to decode json", re.I)
 _TRANSIENT = re.compile(r"overloaded|\b5\d\d\b|timed? ?out|timeout|connection|network|temporar|"
                         r"unavailable|ECONNRESET|ENOTFOUND|socket", re.I)
 
@@ -80,6 +81,8 @@ def classify_status(status: int | None) -> str:
 
 
 def classify_text(message: str) -> str:
+    if _OURS.search(message or ""):                # our side broke, not the account: never "limit" (2026-10-12)
+        return "fatal"
     if _LIMIT.search(message or ""):
         return "limit"
     if _AUTH.search(message or ""):

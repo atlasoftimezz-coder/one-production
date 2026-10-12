@@ -88,3 +88,18 @@ def test_the_agent_runs_own_shots_without_asking_and_asks_for_the_rest(tmp_path)
     cb2, permits2, _ = can_use(tmp_path, plain)
     asyncio.run(cb2("mcp__davinci__run_script", {"script": SHOT}, None))
     assert permits2 == ["mcp__davinci__run_script"]
+
+
+def test_a_big_image_read_does_not_kill_the_run_or_look_like_a_limit(tmp_path):
+    """v2 re-draft (2026-10-12): the AI Read a generated PNG, the SDK's 1 MB reader buffer overflowed, the account
+    was marked limited and the draft paused."""
+    from app.providers.base import classify_text
+    run = SimpleNamespace(root=tmp_path, stopped=False, lock_check=None)
+    pytest.importorskip("claude_agent_sdk")
+    agent = ClaudeAgent(None, tmp_path)
+    opts = agent.options(run, SimpleNamespace(permit=None), {"id": "a", "provider": "claude", "profile_dir": str(tmp_path)},
+                         SimpleNamespace(tools=lambda: []), None, "", None, None)
+    assert opts.max_buffer_size >= 32 * 1024 * 1024
+    msg = ("Failed to decode JSON: JSON message exceeded maximum buffer size of 1048576 bytes...")
+    assert classify_text(msg) == "fatal"
+    assert classify_text("You've hit your limit") == "limit"

@@ -2086,7 +2086,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
                                           state_file=state_file)
         teams[pid] = ep
         store.append_message(pid, "user", f"Rendered video: {body.video}", episode=True)
-        run.task = asyncio.get_running_loop().create_task(episode_work(pid, ep, run, ep.resume(body.video)))
+        run.task = asyncio.get_running_loop().create_task(episode_work(pid, ep, run, ep.rendered(body.video)))
         return StreamingResponse(follow(run), media_type="application/x-ndjson", headers={"Cache-Control": "no-store"})
 
     @app.post("/api/projects/{pid}/episode/retry")

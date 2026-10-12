@@ -176,7 +176,7 @@ class EpisodeRun(Team):
             self.publish()
         return self.snapshot()
 
-    async def resume(self, video: str) -> dict:
+    async def rendered(self, video: str) -> dict:
         """The owner rendered the timeline: check the file, then package."""
         self.vo["rendered"] = video
         return await self.go("edit")

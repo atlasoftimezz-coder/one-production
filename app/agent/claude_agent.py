@@ -45,6 +45,10 @@ def _sdk():
     return sdk
 
 
+# The SDK's default reader buffer is 1 MB; the AI Reading a generated asset or a 1080p still sends the image back
+# as one bigger JSON message, and the reader died mid-draft (v2 re-draft, 2026-10-12).
+MAX_MESSAGE = 64 * 1024 * 1024
+
 class ClaudeAgent:
     def __init__(self, command: str | None, data_dir: Path, *, client_factory: Callable | None = None,
                  api_key_of: Callable[[dict], str | None] | None = None,
@@ -124,7 +128,8 @@ class ClaudeAgent:
             permission_mode="default", can_use_tool=can_use_tool,
             hooks={"PreToolUse": [sdk.HookMatcher(matcher=None, hooks=[pre_tool])]},
             include_partial_messages=True, resume=session_id, model=model or None,
-            effort=effort or None, extra_args={"disable-slash-commands": None})
+            effort=effort or None, extra_args={"disable-slash-commands": None},
+            max_buffer_size=MAX_MESSAGE)
         opts._studio_tools = {f"mcp__studio__{t.name}": t for t in sdk_tools}   # test seam: fake client calls these
         return opts
 
