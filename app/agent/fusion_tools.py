@@ -2,8 +2,11 @@
 and fusion_stills (review stills). The shots themselves are scripted through Resolve's MCP."""
 import asyncio
 import json
+import logging
 
 from ..fusion import FusionError
+
+log = logging.getLogger("oneprod.fusion")
 
 
 def tools(studio):
@@ -17,6 +20,8 @@ def tools(studio):
                 str(args.get('subtitles') or ''), str(args.get('music') or ''), str(args.get('name') or 'Episode'),
                 str(args.get('sfx') or '')))
         except FusionError as exc:
+            # logged: the first real draft lost its only footage shot after a fusion_setup error nobody saw (2026-10-12)
+            log.warning("fusion_setup refused in %s: %s", pid, exc)
             return json.dumps({'error': str(exc)})
 
     async def stills(args):

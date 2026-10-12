@@ -13,7 +13,7 @@ import pytest
 from app.agent import episode as episode_mod
 from app.agent.episode import EpisodeConfig, EpisodeRun
 from app.agent.runs import Run
-from tests.p10.media_fixtures import needs_ffmpeg, video
+from tests.p10.media_fixtures import ff, needs_ffmpeg, video
 from tests.p10.test_episode import ART, Deps as EpisodeDeps, SCRIPT, ok, run, setup, status  # noqa: F401 - fixture
 
 pytestmark = needs_ffmpeg
@@ -143,6 +143,83 @@ def test_only_impossible_steps_stop_a_draft(tmp_path, setup):
     broken = Deps(tmp_path, store, other, render_fails=True)
     snap = run(make(tmp_path, store, other, broken).go())
     assert snap["state"] == "needs_you" and snap["result"]["stage"] == "edit" and "disk full" in snap["result"]["why"]
+
+
+def rich(path):
+    """A detailed still (test pattern): many colour shades, like a rendered frame."""
+    ff("-f", "lavfi", "-i", "testsrc2=size=640x360:rate=1:duration=1", "-frames:v", "1", path)
+    return path
+
+
+class QADeps(Deps):
+    """Competitor frames available; stills are rich (or flat), the check turn writes qa.json."""
+
+    def __init__(self, tmp_path, *a, our_stills="rich", scores=None, **kw):
+        super().__init__(tmp_path, *a, **kw)
+        refs = tmp_path / "competitor"
+        refs.mkdir(exist_ok=True)
+        self.refs = [str(rich(refs / f"f{n}.jpg")) for n in range(4)]
+        self.our_stills, self.scores, self.checks = our_stills, scores or [{}], 0
+        original = self.resolve.call
+
+        def call(request, timeout):
+            out = original(request, timeout)
+            for p in out.get("stills") or []:
+                rich(p) if self.our_stills == "rich" else None
+            return out
+        self.resolve.call = call
+
+    def style_profiles(self, ids):
+        return [{**s, "frames": self.refs} for s in super().style_profiles(ids)]
+
+    async def turn(self, deps, a, sub, prompt):
+        if "Check the visuals" in prompt:
+            self.checks += 1
+            override = self.scores[min(self.checks, len(self.scores)) - 1]
+            shots = [f"shot-00{n}" for n in range(1, 5)]
+            (self.files / "work" / "ep-1" / "qa.json").write_text(json.dumps({"shots": [
+                {"shot": s, "score": override.get(s, 8), "why": "too empty" if override.get(s, 8) < 7 else "ok"} for s in shots]}),
+                encoding="utf-8")
+            return ok("Checked.", 1000, 500)
+        return await super().turn(deps, a, sub, prompt)
+
+
+def test_shots_under_the_qa_bar_go_back_once_then_pass(tmp_path, setup):
+    store, pid = setup
+    deps = QADeps(tmp_path, store, pid, scores=[{"shot-002": 5}, {}])
+    snap = run(make(tmp_path, store, pid, deps).go())
+    assert snap["state"] == "done", snap["flags"]
+    checks = [c[4] for c in deps.calls if c[0] == "worker" and "Check the visuals" in c[4]]
+    assert len(checks) == 2 and "scored under 7: shot-002 (5: too empty)" in checks[1]
+    assert "Quality bar - the competitor" in checks[0] and "qa.json" in checks[0]
+    sheets = sorted((store.files_dir(pid) / "work" / "ep-1" / "qa").glob("qa-*.jpg"))
+    assert sheets and len(list((store.files_dir(pid) / "work" / "ep-1" / "style" / "refs").glob("*.jpg"))) == 4
+    assert snap["vo"]["qa"]["scores"]["shot-002"] == 8 and snap["vo"]["qa"]["flat"] == []
+
+
+def test_flat_shots_are_named_against_the_competitor_and_flagged(tmp_path, setup):
+    store, pid = setup
+    deps = QADeps(tmp_path, store, pid, our_stills="flat")
+    snap = run(make(tmp_path, store, pid, deps, gate_rounds=2).go())
+    assert snap["state"] == "done" and status(snap)["visuals"] == "passed_with_notes"
+    why = " | ".join(f["why"] for f in snap["flags"])
+    assert "measure flat next to the competitor" in why and "shot-001" in why and "generated asset" in why
+
+
+def test_a_missing_qa_file_is_asked_for(tmp_path, setup):
+    store, pid = setup
+    deps = QADeps(tmp_path, store, pid)
+    original = deps.turn
+
+    async def no_qa_first(d, a, sub, prompt):
+        if "Check the visuals" in prompt and deps.checks == 0:
+            deps.checks += 1
+            return ok("Checked, but forgot the file.", 10, 10)
+        return await original(d, a, sub, prompt)
+    deps.worker = no_qa_first
+    snap = run(make(tmp_path, store, pid, deps).go())
+    checks = [c[4] for c in deps.calls if c[0] == "worker" and "Check the visuals" in c[4]]
+    assert snap["state"] == "done" and "write work/ep-1/qa.json" in checks[1]
 
 
 def test_a_failed_render_is_retried_without_redoing_the_shots(tmp_path, setup):

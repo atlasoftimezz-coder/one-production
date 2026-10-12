@@ -214,6 +214,102 @@ def picture(frames: np.ndarray, shots: list[tuple[float, float]]) -> dict:
             "per_shot_motion": [round(m, 2) for m in per_shot]}
 
 
+COMP_W, COMP_H = 160, 90
+
+
+def image_pixels(ffmpeg: str, paths: list[Path]) -> np.ndarray:
+    """(n, 90, 160, 3) uint8 of the given stills (any size, letterboxed to 16:9)."""
+    import subprocess
+    out = []
+    for p in paths:
+        r = subprocess.run([ffmpeg, "-hide_banner", "-v", "error", "-i", str(p), "-vf",
+                            f"scale={COMP_W}:{COMP_H}:force_original_aspect_ratio=decrease,pad={COMP_W}:{COMP_H}:(ow-iw)/2:(oh-ih)/2",
+                            "-frames:v", "1", "-pix_fmt", "rgb24", "-f", "rawvideo", "-"],
+                           capture_output=True, timeout=60, creationflags=media.NO_WINDOW)
+        if r.returncode == 0 and len(r.stdout) == COMP_W * COMP_H * 3:
+            out.append(np.frombuffer(r.stdout, dtype=np.uint8).reshape(COMP_H, COMP_W, 3))
+    return np.stack(out) if out else np.zeros((0, COMP_H, COMP_W, 3), dtype=np.uint8)
+
+
+def composition(img: np.ndarray) -> dict:
+    """How full and how built-up one frame is (owner, 2026-10-12: our draft looked empty next to Bravo).
+
+    fill      share of pixels clearly away from the frame's background colour (the most common colour)
+    elements  separate things on screen: connected regions of non-background pixels larger than 0.15%
+              of the frame (after closing 1-pixel gaps, so a word is one element, not ten letters)
+    colours   distinct colour shades (16 levels a channel): rendered / illustrated objects have many,
+              flat icon tiles few. Real measure, 2026-10-12: Bravo 144 (median), our first draft 67 -
+              the clearest number for "flat" vs "rich"; fill and elements were close (0.14 vs 0.10, 4 vs 5)"""
+    q = (img // 16).astype(np.int32)
+    keys = q[..., 0] * 256 + q[..., 1] * 16 + q[..., 2]
+    vals, counts = np.unique(keys, return_counts=True)
+    colours = int(len(vals))
+    bg = vals[np.argmax(counts)]
+    bgc = np.array([(bg // 256) * 16 + 8, ((bg // 16) % 16) * 16 + 8, (bg % 16) * 16 + 8], dtype=np.float32)
+    dist = np.sqrt(((img.astype(np.float32) - bgc) ** 2).sum(axis=2))
+    fg = dist > 40
+    fill = float(fg.mean())
+    grown = fg.copy()                                         # close small gaps: one dilation step
+    grown[1:, :] |= fg[:-1, :]; grown[:-1, :] |= fg[1:, :]; grown[:, 1:] |= fg[:, :-1]; grown[:, :-1] |= fg[:, 1:]
+    h, w = grown.shape
+    seen = np.zeros_like(grown)
+    min_area = max(4, int(0.0015 * h * w))
+    elements = 0
+    for y0 in range(h):
+        for x0 in range(w):
+            if not grown[y0, x0] or seen[y0, x0]:
+                continue
+            stack, area = [(y0, x0)], 0
+            seen[y0, x0] = True
+            while stack:
+                y, x = stack.pop()
+                area += 1
+                for ny, nx in ((y + 1, x), (y - 1, x), (y, x + 1), (y, x - 1)):
+                    if 0 <= ny < h and 0 <= nx < w and grown[ny, nx] and not seen[ny, nx]:
+                        seen[ny, nx] = True
+                        stack.append((ny, nx))
+            if area >= min_area:
+                elements += 1
+    return {"fill": round(fill, 3), "elements": elements, "colours": colours}
+
+
+def compositions(ffmpeg: str, paths: list[Path]) -> dict:
+    """Median fill / elements / colours over stills, plus each still's numbers."""
+    imgs = image_pixels(ffmpeg, paths)
+    each = [composition(i) for i in imgs]
+    if not each:
+        return {"fill": None, "elements": None, "colours": None, "each": []}
+    return {"fill": round(float(np.median([e["fill"] for e in each])), 3),
+            "elements": float(np.median([e["elements"] for e in each])),
+            "colours": float(np.median([e["colours"] for e in each])), "each": each}
+
+
+def qa_sheets(ffmpeg: str, refs: list[Path], ours: list[tuple[str, Path]], out: Path, per: int = 6) -> list[dict]:
+    """Side-by-side review sheets: 3 competitor frames in the top row, then `per` of our shots (3 a row).
+    [{"sheet": path, "shots": [names in reading order after the top row]}]"""
+    shutil.rmtree(out, ignore_errors=True)
+    out.mkdir(parents=True)
+    top = (refs * 3)[:3] if refs else []
+    sheets = []
+    for n in range(0, len(ours), per):
+        part = ours[n:n + per]
+        tmp = out / f"seq{n // per + 1:02d}"
+        tmp.mkdir()
+        files = [p for p in top] + [p for _, p in part]
+        for i, p in enumerate(files, 1):
+            media.run([ffmpeg, "-y", "-hide_banner", "-v", "error", "-i", str(p), "-vf",
+                       "scale=640:360:force_original_aspect_ratio=decrease,pad=640:360:(ow-iw)/2:(oh-ih)/2",
+                       "-frames:v", "1", str(tmp / f"{i:03d}.png")], 60)
+        rows = (len(files) + 2) // 3
+        dst = out / f"qa-{n // per + 1:02d}.jpg"
+        media.run([ffmpeg, "-y", "-hide_banner", "-v", "error", "-framerate", "1", "-i", str(tmp / "%03d.png"),
+                   "-vf", f"tile=3x{rows}:padding=6:color=white", "-frames:v", "1", "-q:v", "3", str(dst)], 120)
+        shutil.rmtree(tmp, ignore_errors=True)
+        if dst.exists():
+            sheets.append({"sheet": dst, "shots": [name for name, _ in part]})
+    return sheets
+
+
 def keyframes(ffmpeg: str, video: Path, shots: list[tuple[float, float]], out: Path) -> list[dict]:
     """One still per shot (spread evenly when there are more than MAX_FRAMES) + 4x4 contact sheets."""
     frames_dir, sheets_dir = out / "frames", out / "sheets"
@@ -310,6 +406,8 @@ def analyse(ffmpeg: str, video: Path, out: Path, text: str = "", meta: dict | No
               "words": {k: v for k, v in measure(text, seconds).items()} if text else None}
     result["frames"] = keyframes(ffmpeg, video, beat_shots, out)       # one still per visible change
     result["sheets"] = sorted(f"sheets/{p.name}" for p in (out / "sheets").glob("*.jpg"))
+    comp = compositions(ffmpeg, [out / f["file"] for f in result["frames"]])
+    result["composition"] = {"fill": comp["fill"], "elements": comp["elements"], "colours": comp["colours"]}
     (out / "measure.json").write_text(json.dumps(result, indent=1), encoding="utf-8")
     if text:
         (out / "transcript.txt").write_text(text, encoding="utf-8")
@@ -325,6 +423,7 @@ def combine(measures: list[dict]) -> dict:
                      "beats_per_min", "beat_median", "beat_p10", "beat_p90", "first_30s_beats_per_min"),
             "picture": ("motion_inside_shots", "moving_shot_share", "flat_frame_share", "colourfulness", "brightness"),
             "sound": ("hits_per_min", "cuts_with_a_hit", "pause_level_db", "lufs"),
+            "composition": ("fill", "elements", "colours"),
             "words": ("wpm", "avg_sentence")}
     out = {group: {k: med((group, k)) for k in ks} for group, ks in keys.items()}
     cont = [bool((m.get("pace") or {}).get("continuous")) for m in measures]

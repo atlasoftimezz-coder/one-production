@@ -33,6 +33,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+import shutil
 import statistics
 import time
 from dataclasses import dataclass
@@ -44,6 +45,8 @@ from ..fusion_kit import FONTS
 from .team import Stopped, SubRun, Task, Team, TeamConfig
 
 BATCH = 10                          # shots per script turn in a draft
+REFS = 12                           # competitor frames copied for the shot QA sheets
+QA_PASS = 7                         # a shot scoring under this (1-10) against the competitor is re-scripted
 
 STAGES = (("script", "Script"), ("voice", "Voiceover"), ("visuals", "Visuals"), ("edit", "Render"), ("package", "Package"))
 ORDER = [s for s, _ in STAGES]
@@ -311,9 +314,34 @@ class EpisodeRun(Team):
             return False, "these shots are still empty in Resolve: " + ", ".join(out["empty"][:20]), {}
         if not out.get("stills"):
             return False, "no stills could be exported", {}
-        return True, "", {"detail": f"{out['shots']} Fusion shots in Resolve project {out['project']}",
-                          "files": [out["folder"], f"{self.base}/art.json", f"{self.base}/shots.json"],
-                          "project": out["project"]}
+        extra = {"detail": f"{out['shots']} Fusion shots in Resolve project {out['project']}",
+                 "files": [out["folder"], f"{self.base}/art.json", f"{self.base}/shots.json"], "project": out["project"]}
+        qa = out.get("qa")
+        if not (self.draft and qa):
+            return True, "", extra
+        self.vo["qa"] = {"target": qa["target"], "flat": qa["flat"]}
+        try:
+            scores = json.loads((self.run.root / self.base / "qa.json").read_text(encoding="utf-8-sig")).get("shots") or []
+        except (OSError, ValueError, AttributeError):
+            return False, f"write {self.base}/qa.json with a score for every shot against the competitor", extra
+        by_shot = {str(s.get("shot")): s for s in scores if isinstance(s, dict)}
+        missing = [n for n in qa["shots"] if n not in by_shot]
+        low = sorted(n for n, s in by_shot.items() if isinstance(s.get("score"), (int, float)) and s["score"] < QA_PASS)
+        self.vo["qa"]["scores"] = {n: by_shot[n].get("score") for n in by_shot}
+        problems = []
+        if missing:
+            problems.append("no QA score for " + ", ".join(missing[:15]))
+        if low:
+            problems.append(f"scored under {QA_PASS}: " + "; ".join(f"{n} ({by_shot[n].get('score')}: {str(by_shot[n].get('why', ''))[:80]})"
+                                                               for n in low[:12]))
+        if qa["flat"]:
+            t = qa["target"]
+            problems.append(f"measure flat next to the competitor (its median: {t.get('colours')} colour shades, fill "
+                            f"{t.get('fill')}): " + ", ".join(f"{n} ({qa['shots'][n]['colours']} shades, fill {qa['shots'][n]['fill']})"
+                                                             for n in qa["flat"][:12]) + " - add a generated asset or a real backdrop")
+        if problems:
+            return False, " | ".join(problems), extra
+        return True, "", extra
 
     async def do_visuals(self) -> bool:
         ok, why = self.deps.fusion_ready()
@@ -338,14 +366,28 @@ class EpisodeRun(Team):
 
     # visuals as a draft: plan turn -> script turns -> check turn --------------------------------
     def load_profiles(self) -> None:
-        """The chosen competitor style profiles, copied into the episode folder for the worker to read."""
+        """The chosen competitor style profiles, copied into the episode folder for the worker to read, and
+        up to REFS of the competitor's frames (spread over the video) for the shot QA sheets."""
         self.profiles = []
+        refs: list[str] = []
         for n, item in enumerate(self.deps.style_profiles(self.spec.get("styles") or []), 1):
             rel = f"{self.base}/style/{n}-{slug(item['name'])}.json"
             target = self.run.root / rel
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(json.dumps(item["profile"], indent=1), encoding="utf-8")
-            self.profiles.append({**item, "file": rel})
+            self.profiles.append({k: v for k, v in item.items() if k != "frames"} | {"file": rel})
+            refs += item.get("frames") or []
+        ref_dir = self.run.root / self.base / "style" / "refs"
+        shutil.rmtree(ref_dir, ignore_errors=True)
+        if refs:
+            ref_dir.mkdir(parents=True, exist_ok=True)
+            k = min(REFS, len(refs))
+            pick = [refs[int(round(i * (len(refs) - 1) / max(1, k - 1)))] for i in range(k)]
+            for i, src in enumerate(dict.fromkeys(pick), 1):
+                try:
+                    shutil.copyfile(src, ref_dir / f"ref-{i:02d}.jpg")
+                except OSError:
+                    continue
 
     def pace_target(self) -> tuple[float, float | None]:
         """(shot length to aim for in seconds, hook cuts per minute) from the competitor numbers."""
@@ -393,21 +435,39 @@ class EpisodeRun(Team):
                  + (" Where real footage explains better than graphics (follow the style's share of footage; at most about "
                     "half of the shots), find a Pexels video with stock_search, download it with stock_fetch, and give that "
                     "shot \"stock\": \"stock/<file>.mp4\" and \"from\": seconds into the clip; the shot's graphics then go over "
-                    "the footage." if getattr(self.deps, "stock_ready", lambda: False)() else ""),
-                 *([f"4. Sound effects, following the style's sound rules (which kinds, how often, on which cuts): "
-                    "sfx_search and sfx_fetch a small set (every download counts against the owner's Epidemic Sound plan - "
-                    f"reuse one effect for every similar moment), then write {b}/sfx.json [{{\"file\": \"sfx/...\", \"shot\": "
-                    "\"shot-NNN\" (plays on that cut) or \"anchor\": \"words from the subtitles\", \"offset_s\": 0, \"gain_db\": "
-                    "-18}]. Keep them under the voice: never more than one per cut."] if sfx else []),
-                 f"{5 if sfx else 4}. Call fusion_setup with shots=\"{b}/shots.json\" art=\"{b}/art.json\" voiceover=\"{self.vo['wav']}\" "
-                 f"subtitles=\"{self.vo['srt']}\"{music}" + (f" sfx=\"{b}/sfx.json\"" if sfx else "") +
-                 f" name=\"{s['name']}\". Fix whatever it reports and call it again.",
-                 "Do not script any shot in this turn. Finish with the concept in one line and the number of shots."]
+                    "the footage. If fusion_setup rejects a footage shot, FIX it (another \"from\", a longer clip, a slightly "
+                    "shorter shot) - never drop the footage silently." if getattr(self.deps, "stock_ready", lambda: False)() else "")]
+        steps = []
+        if getattr(self.deps, "assets_ready", lambda: False)():
+            steps.append("Hero objects: list what the shots need that Fusion can't draw well - buildings, vault doors, gold "
+                         "bars, coins, banknotes, maps, machines, a GENERIC person figure - and make each with asset_generate "
+                         "(name = short-kebab-name, prompt = ONE isolated object, no text, no logos, no real people; the "
+                         "episode's look is added for you). Look at every result (Read the PNG) and regenerate a bad one at "
+                         "most twice. Reuse an asset across shots; about 10-25 for a few minutes of video. Shots use them with "
+                         "S.image(name, x, y, h).")
+        if sfx:
+            steps.append("Sound effects, following the style's sound rules (which kinds, how often, on which cuts): "
+                         "sfx_search and sfx_fetch a small set (every download counts against the owner's Epidemic Sound plan - "
+                         f"reuse one effect for every similar moment), then write {b}/sfx.json [{{\"file\": \"sfx/...\", \"shot\": "
+                         "\"shot-NNN\" (plays on that cut) or \"anchor\": \"words from the subtitles\", \"offset_s\": 0, \"gain_db\": "
+                         "-18}]. Keep them under the voice: never more than one per cut.")
+        steps.append(f"Call fusion_setup with shots=\"{b}/shots.json\" art=\"{b}/art.json\" voiceover=\"{self.vo['wav']}\" "
+                     f"subtitles=\"{self.vo['srt']}\"{music}" + (f" sfx=\"{b}/sfx.json\"" if sfx else "") +
+                     f" name=\"{s['name']}\". Fix whatever it reports and call it again.")
+        lines += [f"{n}. {text}" for n, text in enumerate(steps, 4)]
+        lines += ["Do not script any shot in this turn. Finish with the concept in one line and the number of shots."]
         if s.get("visual_notes"):
             lines += ["", "The owner's directions for the look: " + s["visual_notes"]]
         if task.notes:
             lines += ["", "Fix this first:", task.notes]
         return "\n".join(lines)
+
+    def asset_names(self) -> list[str]:
+        f = self.run.root / "assets" / "index.json"
+        try:
+            return sorted(json.loads(f.read_text(encoding="utf-8"))) if f.is_file() else []
+        except (OSError, ValueError):
+            return []
 
     def fusion_state(self) -> dict | None:
         f = self.run.root / self.base / "fusion.json"
@@ -448,6 +508,12 @@ class EpisodeRun(Team):
                  "Script EACH shot with its own mcp__davinci__run_script. The script starts with `from op_kit import *`"
                  + (" then `from ep_motion import *`" if use_motion else "") + ", then S = begin(\"shot-NNN\"), builds the "
                  "shot for its idea in this episode's style, and ends with result = finish(S, layer).",
+                 "Every shot is a full, layered frame like the competitor's: S.backdrop() (never a flat empty colour), "
+                 "ONE clear hero (a generated asset with S.image, a chart, a quote card or footage) filling 35-60% of the "
+                 "frame height, then labels; captions at least size 0.02; all text fully on screen by 60% of the shot "
+                 "(no word still typing at the end); nothing tiny floating in empty space. Real people and headlines are "
+                 "S.person_tag / S.quote_card - never a real face, logo or imitated page."
+                 + (f" Generated assets for this episode: {', '.join(self.asset_names())}." if self.asset_names() else ""),
                  "These scripts run straight away without an approval card, because they only touch this episode's own "
                  "Resolve project; anything else still asks. If Resolve reports an error, fix the script and run it again.",
                  "Finish with one line per shot you could not build and why."]
@@ -458,11 +524,24 @@ class EpisodeRun(Team):
     def check_prompt(self, task: Task) -> str:
         b = self.base
         lines = [f"Check the visuals of the episode \"{self.spec['name']}\". Call fusion_stills with state=\"{b}/fusion.json\", "
-                 f"open the stills (Read the PNG files in {b}/stills/) and re-script (mcp__davinci__run_script, same rules: "
-                 "`from op_kit import *`" + ("" if self.motion_ok() else ", `from ep_motion import *`") + ", begin, finish) "
-                 "every shot that is empty, unclear, off-style, cramped, overlapping or cut off. Then call fusion_stills again.",
-                 *([""] + self.style_lines() if self.profiles else []),
-                 "Finish with the shots you changed and anything still weak."]
+                 f"open the stills (Read the PNG files in {b}/stills/; judge the LATER still of each shot - the earlier one "
+                 "may be mid-animation) and re-script (mcp__davinci__run_script, same rules: `from op_kit import *`"
+                 + ("" if self.motion_ok() else ", `from ep_motion import *`") + ", begin, finish) every shot that is "
+                 "empty, unclear, off-style, cramped, overlapping or cut off. Then call fusion_stills again.",
+                 *([""] + self.style_lines() if self.profiles else [])]
+        if self.profiles:
+            lines += ["",
+                      "Quality bar - the competitor (owner, after the first draft: \"competitor actually did very well in "
+                      "terms of overall quality\"): fusion_stills also returns \"qa\": side-by-side sheets (top row = the "
+                      "competitor's frames, below = our shots in the listed order), each shot's measured fill and colour "
+                      "richness against the competitor's, and the shots that measure flat. LOOK at every sheet.",
+                      f"Score every shot 1-10 against the competitor on: a clear hero object (a generated asset, a chart, a "
+                      "card - not a lone icon), a full layered frame (backdrop + hero + labels), readable text, motion that "
+                      "shows the idea, and the style. Re-script every shot under {QA_PASS} (more assets, a real backdrop, a "
+                      "bigger hero, fewer floating words), then call fusion_stills again and score again.",
+                      f"Write {b}/qa.json: {{\"shots\": [{{\"shot\": \"shot-001\", \"score\": 8, \"why\": \"...\"}}, ...]}} with "
+                      "your FINAL scores for every shot."]
+        lines += ["Finish with the shots you changed and anything still weak."]
         if task.notes:
             lines += ["", "Fix this first:", task.notes]
         return "\n".join(lines)

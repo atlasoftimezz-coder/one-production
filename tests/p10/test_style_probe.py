@@ -71,6 +71,36 @@ def test_beats_catch_a_continuous_canvas_with_no_cuts():
     assert len(ms) == 4
 
 
+def test_composition_tells_an_empty_flat_frame_from_a_rich_one():
+    import numpy as np
+    empty = np.full((90, 160, 3), 20, dtype=np.uint8)
+    flat = empty.copy()
+    flat[30:60, 70:90] = (230, 180, 40)                                    # one icon tile, one colour
+    rng = np.random.default_rng(1)
+    rich = (rng.random((90, 160, 3)) * 255).astype(np.uint8)
+    rich[:20] = 20
+    e, f, r = (style_probe.composition(x) for x in (empty, flat, rich))
+    assert e["fill"] == 0 and e["elements"] == 0 and e["colours"] == 1
+    assert f["elements"] == 1 and f["colours"] <= 3 and 0.03 < f["fill"] < 0.06
+    assert r["colours"] > 100 and r["fill"] > 0.5
+
+
+@needs_ffmpeg
+def test_qa_sheets_put_the_competitor_above_our_shots(tmp_path, clip):
+    from tests.p10.media_fixtures import ff
+    refs, ours = [], []
+    for n in range(3):
+        refs.append(ff("-f", "lavfi", "-i", "testsrc2=size=640x360:rate=1:duration=1", "-frames:v", "1", tmp_path / f"r{n}.jpg") and tmp_path / f"r{n}.jpg")
+    for n in range(8):
+        ff("-f", "lavfi", "-i", "color=c=0x203040:size=1920x1080:rate=1:duration=1", "-frames:v", "1", tmp_path / f"s{n}.png")
+        ours.append((f"shot-00{n + 1}", tmp_path / f"s{n}.png"))
+    sheets = style_probe.qa_sheets(FF, refs, ours, tmp_path / "qa")
+    assert [s["shots"] for s in sheets] == [[f"shot-00{n}" for n in range(1, 7)], ["shot-007", "shot-008"]]
+    assert all(s["sheet"].is_file() for s in sheets)
+    c = style_probe.compositions(FF, [p for _, p in ours[:2]])
+    assert c["colours"] <= 2 and c["fill"] == 0
+
+
 def test_combine_takes_medians_by_code():
     a = {"pace": {"cuts_per_min": 10, "shot_median": 3}, "sound": {"has_audio": True, "music_bed_hint": True}}
     b = {"pace": {"cuts_per_min": 20, "shot_median": 5}, "sound": {"has_audio": True, "music_bed_hint": False}}

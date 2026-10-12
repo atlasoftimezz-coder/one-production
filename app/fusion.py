@@ -20,7 +20,7 @@ import shutil
 import time
 from pathlib import Path
 
-from . import fusion_kit, media
+from . import fusion_kit, media, style_probe
 from .animation import MIN_SHOT, anchor_times, word_times, words
 from .fusion_kit import FONTS, KIT_VERSION
 from .resolve import at_least
@@ -388,5 +388,30 @@ class Fusion:
                 stills.append(Path(p).resolve().relative_to(files_root.resolve()).as_posix())
             except ValueError:
                 continue
-        return {'project': state['project_name'], 'stills': stills, 'empty': answer.get('empty') or [],
-                'shots': len(state['shots']), 'folder': out_dir.relative_to(files_root).as_posix()}
+        out = {'project': state['project_name'], 'stills': stills, 'empty': answer.get('empty') or [],
+               'shots': len(state['shots']), 'folder': out_dir.relative_to(files_root).as_posix()}
+        refs = sorted((out_dir.parent / 'style' / 'refs').glob('*.jpg'))
+        ffmpeg = media.find_ffmpeg(self.data_dir)
+        if refs and ffmpeg and stills:
+            out['qa'] = self.qa(files_root, out_dir, refs, stills, ffmpeg)
+        return out
+
+    def qa(self, files_root: Path, out_dir: Path, refs: list[Path], stills: list[str], ffmpeg: str) -> dict:
+        """Owner, 2026-10-12 (first draft 5/10 next to Bravo): every shot's late still next to competitor
+        frames, plus measured fill / colour richness against the competitor's - "flat" shots are named."""
+        late: dict[str, Path] = {}
+        for rel in stills:                                # the later still of each shot (fully built)
+            late[Path(rel).name.split('_f')[0]] = files_root / rel
+        names = sorted(late)
+        ours = style_probe.compositions(ffmpeg, [late[n] for n in names])
+        target = style_probe.compositions(ffmpeg, refs)
+        flat = []
+        for n, c in zip(names, ours['each']):
+            if target['colours'] and c['colours'] < 0.6 * target['colours']:
+                flat.append(n)
+            elif target['fill'] and c['fill'] < 0.5 * target['fill']:
+                flat.append(n)
+        sheets = style_probe.qa_sheets(ffmpeg, refs[:3], [(n, late[n]) for n in names], out_dir.parent / 'qa')
+        return {'sheets': [{'sheet': s['sheet'].relative_to(files_root).as_posix(), 'shots': s['shots']} for s in sheets],
+                'target': {k: target[k] for k in ('fill', 'elements', 'colours')},
+                'shots': {n: c for n, c in zip(names, ours['each'])}, 'flat': flat}

@@ -1903,7 +1903,9 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
             out = []
             for sid in ids:
                 try:
-                    out.append({"id": sid, "name": styles.get(sid)["name"], "profile": styles.profile(sid)})
+                    folder = styles.folder(sid)
+                    out.append({"id": sid, "name": styles.get(sid)["name"], "profile": styles.profile(sid),
+                                "frames": [str(p) for p in sorted(folder.glob("*/frames/*.jpg"))]})
                 except (StyleError, OSError, ValueError):
                     continue
             return out
