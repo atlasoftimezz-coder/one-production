@@ -28,6 +28,7 @@ from .knowledge_api import mount as mount_knowledge
 from .resolve import Resolve
 from . import resolve_mcp
 from . import mcp_servers
+from .cloud_storage import Storage, StorageError
 from .resolve_api import mount as mount_resolve
 from .gates_api import Gates, mount as mount_gates
 from .editor import Editor
@@ -254,6 +255,29 @@ class RenderedIn(BaseModel):
     video: str
 
 
+class StorageInternalIn(BaseModel):
+    path: str = ""
+    auto: bool = False
+
+
+class StorageDriveIn(BaseModel):
+    client_id: str = ""
+    client_secret: str | None = None
+    folder: str = "One Production"
+    auto: bool = False
+
+
+class StorageImportIn(BaseModel):
+    location: str
+    ids: list[str]
+
+
+class StorageExportIn(BaseModel):
+    paths: list[str]
+    name: str
+    locations: list[str]
+
+
 class InsightsIn(BaseModel):
     retention: str
     account: str | None = None
@@ -332,7 +356,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
                codex_transport=None, backup_delay: float = 120, backup_tick: float = 3600,
                restart=None, gpu_probe=None, tune_script: Path | None = None, relaunch=None,
                updater: Updater | None = None, ytdlp=None, stock_transport=None, google_transport=None,
-               sfx_transport=None, image_transport=None) -> FastAPI:
+               sfx_transport=None, image_transport=None, mcp_transport=None, drive_transport=None) -> FastAPI:
     if login_console is None:
         login_console = settings.login_console
     token = token or secrets.token_urlsafe(32)
@@ -1052,13 +1076,87 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
 
     @app.put("/api/mcp-servers")
     def mcp_save(body: McpServersIn) -> dict:
+        """Header values ({name: value}; "" keeps the saved one) go to Credential Manager, never settings.json."""
+        secrets: dict = {}
         try:
-            clean = mcp_servers.check(body.servers)
+            clean = mcp_servers.check(body.servers, secrets)
         except mcp_servers.McpError as e:
             raise HTTPException(400, str(e))
+        old = mcp_servers.check(getattr(settings, "mcp_servers", None) or {})
+        mcp_servers.save_secrets(old, clean, secrets)
         settings.mcp_servers = clean
         save_setting("mcp_servers", clean)
         return {"servers": clean}
+
+    # ---------------------------------------------------------------- custom storage (owner, 2026-10-12)
+    storage = Storage(settings, save_setting, store, drive_transport)
+    app.state.storage = storage
+
+    def storage_call(fn, *a):
+        try:
+            return fn(*a)
+        except StorageError as e:
+            raise HTTPException(400, str(e))
+
+    @app.get("/api/storage")
+    def storage_state() -> dict:
+        return storage.status()
+
+    @app.put("/api/storage/internal")
+    def storage_internal(body: StorageInternalIn) -> dict:
+        return storage_call(storage.set_internal, body.path, body.auto)
+
+    @app.put("/api/storage/drive")
+    def storage_drive(body: StorageDriveIn) -> dict:
+        return storage_call(storage.set_drive, body.client_id, body.client_secret, body.folder, body.auto)
+
+    @app.delete("/api/storage/drive")
+    def storage_drive_off() -> dict:
+        return storage.disconnect()
+
+    @app.post("/api/storage/drive/connect")
+    def storage_connect() -> dict:
+        return storage_call(storage.connect)
+
+    @app.get("/api/storage/drive/connect/{state}")
+    async def storage_connect_state(state: str) -> dict:
+        return await asyncio.to_thread(storage_call, storage.connect_status, state)
+
+    @app.get("/api/storage/drive/quota")
+    async def storage_quota() -> dict:
+        return await asyncio.to_thread(storage_call, storage.quota)
+
+    @app.get("/api/storage/browse")
+    async def storage_browse(location: str, where: str = "") -> dict:
+        return await asyncio.to_thread(storage_call, storage.browse, location, where)
+
+    @app.post("/api/projects/{pid}/storage/import")
+    async def storage_import(pid: str, body: StorageImportIn) -> dict:
+        _project(pid)
+        return await asyncio.to_thread(storage_call, storage.import_files, pid, body.location, body.ids)
+
+    @app.post("/api/projects/{pid}/storage/export")
+    def storage_export(pid: str, body: StorageExportIn) -> dict:
+        _project(pid)
+        return {"jobs": storage_call(storage.export, pid, body.paths, body.name, body.locations)}
+
+    def episode_paths(snap: dict) -> list[str]:
+        """A finished episode's package folder, plus its video when that sits outside the package."""
+        res, vo = snap.get("result") or {}, snap.get("vo") or {}
+        folder = res.get("folder") or ""
+        video = res.get("video") or vo.get("video") or ""
+        out = [folder] if folder else []
+        if video and not (folder and video.startswith(folder.rstrip("/") + "/")):
+            out.append(video)
+        return out
+
+    @app.post("/api/mcp-servers/{name}/test")
+    async def mcp_test(name: str) -> dict:
+        """Connect to one saved server and list its tools (the MCP page's Test button)."""
+        servers = mcp_servers.check(getattr(settings, "mcp_servers", None) or {})
+        if name not in servers:
+            raise HTTPException(404, "no such MCP server")
+        return await asyncio.to_thread(mcp_servers.probe, name, servers[name], mcp_transport)
 
     @app.get("/api/terms")
     def terms_state() -> dict:
@@ -1787,6 +1885,14 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
     def competitors_script():
         return FileResponse(WEB_DIR / "competitors.js", media_type="text/javascript")
 
+    @app.get("/mcp.js")
+    def mcp_script():
+        return FileResponse(WEB_DIR / "mcp.js", media_type="text/javascript")
+
+    @app.get("/storage.js")
+    def storage_script():
+        return FileResponse(WEB_DIR / "storage.js", media_type="text/javascript")
+
     @app.post("/api/projects/{pid}/style")
     async def start_style(pid: str, body: StyleRunIn) -> StreamingResponse:
         """Watch competitor videos (download, measure, keyframes) and learn their editing style."""
@@ -2043,6 +2149,15 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
         snap = await steps
         if snap["state"] == "done":
             text = ep.final or "Episode finished."
+            auto = storage.auto_locations()
+            paths = episode_paths(snap)
+            if auto and paths:
+                try:
+                    storage.export(pid, paths, Path(paths[0]).name, auto)
+                    text += "\n\nCopying it to storage: " + " and ".join(
+                        "your storage folder" if a == "internal" else "Google Drive" for a in auto) + "."
+                except StorageError as e:
+                    text += f"\n\nCould not copy it to storage: {e}"
         elif snap["state"] == "waiting_render":
             text = (f"The visuals are built in Resolve project \"{snap['result'].get('project')}\". Render its \"Episode\" "
                     "timeline (Deliver page: H.264, 1920x1080, 60 fps) into this project's folder, then pick the file in "

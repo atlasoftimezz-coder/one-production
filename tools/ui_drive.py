@@ -218,6 +218,39 @@ try:
         shot("resolve-plans")
         js("document.querySelector('#resolveclose').click()")
 
+    if os.environ.get("UI_DRIVE_PAGES") == "1":
+        # MCP page (owner, 2026-10-12): add a custom server, test it, switch it off, remove it
+        js("document.querySelector('#mcpbtn').click()")
+        check("MCP page opens", wait_for("document.querySelector('#mcpmodal').classList.contains('open')"))
+        check("MCP page starts empty", wait_for("document.querySelector('#mcp_list').innerText.includes('No outside servers')", 5))
+        js("""document.querySelector('#mcp_name').value='local';
+              document.querySelector('#mcp_target').value=%r;
+              document.querySelector('#mcp_args').value=%r;
+              document.querySelector('#mcp_form').requestSubmit()""" % (os.environ.get("UI_DRIVE_PY", "python"),
+                                                                       f'"{os.environ.get("UI_DRIVE_FAKE_MCP", "")}"'))
+        check("a custom stdio server is added and its tools are listed",
+              wait_for("document.querySelector('#mcp_list').innerText.includes('read_file')", 30),
+              js("document.querySelector('#mcp_list').innerText"))
+        js("document.querySelector('[data-mcp=local] [data-mcpon]').click()")
+        check("the server can be switched off",
+              wait_for("document.querySelector('[data-mcp=local] [data-mcpon]') && !document.querySelector('[data-mcp=local] [data-mcpon]').checked", 10))
+        shot("mcp-page")
+        js("document.querySelector('[data-mcp=local] [data-mcpdel]').click()")
+        check("the server can be removed", wait_for("document.querySelector('#mcp_list').innerText.includes('No outside servers')", 10))
+        js("document.querySelector('#mcpclose').click()")
+        # Storage page: an internal folder, then its files listed for import
+        js("document.querySelector('#storbtn').click()")
+        check("Storage page opens", wait_for("document.querySelector('#stormodal').classList.contains('open')"))
+        check("Drive explains the owner's own OAuth client",
+              "Desktop app" in (js("document.querySelector('#stor_drv').innerText") or ""))
+        js("document.querySelector('#stor_path').value=%r; document.querySelector('#stor_int_auto').checked=true; "
+           "document.querySelector('#stor_int').requestSubmit()" % os.environ.get("UI_DRIVE_STORE", ""))
+        check("internal storage is saved and ready", wait_for("document.querySelector('#stor_int_state').innerText.toLowerCase().includes('ready')", 10))
+        check("its files are listed for import", wait_for("document.querySelector('#stor_items').innerText.includes('sample.txt')", 10),
+              js("document.querySelector('#stor_items').innerText"))
+        shot("storage-page")
+        js("document.querySelector('#storclose').click()")
+
     if os.environ.get("UI_DRIVE_COMPETITORS") == "1":
         js("document.querySelector('#compbtn').click()")
         check("competitors tab opens", wait_for("document.querySelector('#compmodal').classList.contains('open')"))

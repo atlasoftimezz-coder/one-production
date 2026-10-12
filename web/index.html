@@ -679,6 +679,8 @@
     <button class="topbtn" id="accbtn" title="Your AI accounts"><svg class="icon"><use href="#i-key"/></svg><span class="tlabel">Accounts</span>
       <span class="badge" id="accbadge" style="display:none"></span></button>
     <button class="topbtn" id="compbtn" title="Learn the editing style of competitor videos"><svg class="icon"><use href="#i-play"/></svg><span class="tlabel">Competitors</span></button>
+    <button class="topbtn" id="mcpbtn" title="Outside MCP servers for Claude"><svg class="icon"><use href="#i-swap"/></svg><span class="tlabel">MCP</span></button>
+    <button class="topbtn" id="storbtn" title="Internal and Google Drive storage"><svg class="icon"><use href="#i-drive"/></svg><span class="tlabel">Storage</span></button>
     <button class="topbtn" id="bkbtn" title="Backups of your projects"><svg class="icon"><use href="#i-archive"/></svg><span class="tlabel">Backups</span></button>
     <button class="topbtn" id="sysbtn" title="What this PC has"><svg class="icon"><use href="#i-cpu"/></svg><span class="tlabel">System</span></button>
     <button class="topbtn" id="guidebtn" title="How One Production works"><span style="font-weight:800">?</span><span class="tlabel">Guide</span></button>
@@ -851,14 +853,9 @@
       <button class="iconbtn" id="sysclose" title="Close"><svg class="icon"><use href="#i-x"/></svg></button>
     </div>
     <div class="mbody"><div class="upd" id="sysupd"></div><div id="sysbody"></div>
-      <div class="mcpbox" style="margin-top:16px;border-top:1px solid var(--line);padding-top:12px">
-        <b>Outside MCP servers</b> <span style="color:var(--muted);font-size:13px">for Claude chats - e.g. a local OS server. Every call asks you first; writing, deleting, running programs or uploading is asked every time.</span>
-        <div id="mcplist" style="margin:8px 0;display:grid;gap:6px"></div>
-        <form id="mcpadd" style="display:flex;gap:6px;flex-wrap:wrap">
-          <input id="mcpname" placeholder="name, e.g. desktop" maxlength="32" style="width:9em" required>
-          <input id="mcpcmd" placeholder="command or https:// url" style="flex:1;min-width:12em" required>
-          <input id="mcpargs" placeholder="arguments (space separated)" style="flex:2;min-width:12em">
-          <button class="btn">Add</button></form>
+      <div class="mcpbox" style="margin-top:16px;border-top:1px solid var(--line);padding-top:12px;display:flex;gap:8px;align-items:center">
+        <span style="flex:1"><b>Outside MCP servers</b> <span style="color:var(--muted);font-size:13px">now have their own page.</span></span>
+        <button class="btn" id="sysmcp">Open MCP servers</button>
       </div></div>
   </div>
 </div>
@@ -2640,33 +2637,8 @@ $("#bkkeep").onchange = () => saveBackupSettings({ keep: Number($("#bkkeep").val
 
 // ---------- system scan (R13 step 2)
 const SYS_WORD = { ok: "good", warn: "check", bad: "problem", info: "info" };
-async function openSystem() { $("#sysmodal").classList.add("open"); renderUpdates(false); renderMcp(); await runScan(); }
-let mcpServers = {};
-async function renderMcp() {
-  try { mcpServers = (await (await api("/api/mcp-servers")).json()).servers || {}; } catch (e) { mcpServers = {}; }
-  const names = Object.keys(mcpServers);
-  $("#mcplist").innerHTML = names.length ? names.map(n => { const s = mcpServers[n];
-    return `<div style="display:flex;gap:8px;align-items:center"><b>${esc(n)}</b><code style="flex:1;overflow:hidden;text-overflow:ellipsis">${esc(s.url || [s.command, ...(s.args || [])].join(" "))}</code>
-      <button class="iconbtn" data-mcpdel="${esc(n)}" title="Remove">✕</button></div>`; }).join("")
-    : `<span style="color:var(--muted)">None connected.</span>`;
-  $("#mcplist").querySelectorAll("[data-mcpdel]").forEach(b => b.onclick = async () => {
-    const next = { ...mcpServers }; delete next[b.dataset.mcpdel]; await saveMcp(next);
-  });
-}
-async function saveMcp(servers) {
-  try { await api("/api/mcp-servers", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ servers }) });
-        toast("Saved - new Claude chats use it"); }
-  catch (e) { toast(e.message, true); }
-  renderMcp();
-}
-$("#mcpadd").onsubmit = async e => {
-  e.preventDefault();
-  const name = $("#mcpname").value.trim(), cmd = $("#mcpcmd").value.trim();
-  const entry = /^https?:\/\//.test(cmd) ? { type: "http", url: cmd }
-    : { type: "stdio", command: cmd, args: $("#mcpargs").value.trim() ? $("#mcpargs").value.trim().split(/\s+/) : [] };
-  await saveMcp({ ...mcpServers, [name]: entry });
-  $("#mcpname").value = $("#mcpcmd").value = $("#mcpargs").value = "";
-};
+async function openSystem() { $("#sysmodal").classList.add("open"); renderUpdates(false); await runScan(); }
+$("#sysmcp").onclick = () => { $("#sysmodal").classList.remove("open"); openMcp(); };
 async function runScan() {
   $("#sysagain").disabled = true;
   $("#sysbody").innerHTML = `<div class="navempty">Looking at this PC…</div>`;
@@ -3306,5 +3278,7 @@ async function bootApp() {
 <script src="/resolve.js"></script>
 <script src="/episode.js"></script>
 <script src="/competitors.js"></script>
+<script src="/mcp.js"></script>
+<script src="/storage.js"></script>
 </body>
 </html>

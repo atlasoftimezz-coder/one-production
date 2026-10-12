@@ -127,6 +127,7 @@ function renderEpisode(bubble, d, pid, prev) {
     ${(d.flags || []).length ? `<div class="epflags"><b>To check in your review (${d.flags.length})</b>${d.flags.map(f =>
         `<div class="tnote">${esc(f.stage)}: ${esc(f.why)}</div>`).join('')}</div>` : ''}
     ${d.draft && d.state === 'done' && (d.vo || {}).video ? `<div class="tnote">Draft video: <b>${esc(d.vo.video)}</b> · Resolve project: ${esc(d.vo.resolve_project || '')}</div>` : ''}
+    ${d.state === 'done' && (d.result || {}).folder ? `<div class="tpause" style="gap:8px"><span style="flex:1">Package: ${esc(d.result.folder)}</span><button class="btn" data-storage>Send to storage</button></div>` : ''}
     ${['needs_you', 'stopped'].includes(d.state) && (d.result || {}).stage ? `<div class="tpause" style="flex-wrap:wrap;gap:8px"><span style="flex:1 1 100%">Stopped at ${esc(d.result.stage)}: ${esc(d.result.why || '')}</span>
       <button class="btn" data-retry>Try this stage again</button>
       ${d.result.stage === 'edit' ? `<span style="flex:1 1 100%">…or you rendered it in Resolve yourself: put the file in this project and pick it</span>
@@ -152,6 +153,12 @@ function renderEpisode(bubble, d, pid, prev) {
     retry.disabled = true;
     addMsg('user', `Try the ${d.result.stage} stage again`);
     await consumeReply(() => api(`/api/projects/${pid}/episode/retry`, { method: 'POST' }), null);
+  };
+  const send = t.el.querySelector('[data-storage]');
+  if (send) send.onclick = () => {
+    const folder = d.result.folder, video = d.result.video || (d.vo || {}).video || '';
+    const paths = [folder].concat(video && !video.startsWith(folder.replace(/\/$/, '') + '/') ? [video] : []);
+    sendEpisodeToStorage(pid, paths, folder.split('/').pop());
   };
   const pick = t.el.querySelector('[data-video]');
   if (pick) episodeVideos(pid, pick, t.el.querySelector('[data-rendered]'));
