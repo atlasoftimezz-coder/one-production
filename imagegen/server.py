@@ -33,8 +33,10 @@ class GenIn(BaseModel):
     prompt: str
     out: str
     seed: int = 0
-    width: int = 1024
-    height: int = 1024
+    # 768, not 1024: with DaVinci Resolve also on the 16 GB card, 1024 filled it and Windows spilled into system
+    # RAM - 214 s an object instead of 26 (first real draft, 2026-10-12). Heroes are at most ~650 px tall at 1080p.
+    width: int = 768
+    height: int = 768
     steps: int = 4
     cutout: bool = True
 
@@ -114,6 +116,8 @@ def generate(body: GenIn):
     except torch.cuda.OutOfMemoryError:
         unload()
         raise HTTPException(507, "the graphics card ran out of memory - close other GPU programs and try again")
+    finally:
+        torch.cuda.empty_cache()                       # hand cached blocks back - Resolve shares the card
     target = Path(body.out)
     target.parent.mkdir(parents=True, exist_ok=True)
     out.save(target)
@@ -137,5 +141,6 @@ if __name__ == "__main__":
     ap.add_argument("--host", default="127.0.0.1")
     a = ap.parse_args()
     os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
+    os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")   # less fragmentation on a shared card
     import uvicorn
     uvicorn.run(app, host=a.host, port=a.port, log_level="warning")
