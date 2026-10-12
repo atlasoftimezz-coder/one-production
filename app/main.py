@@ -2051,13 +2051,40 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
             text = f"Episode stopped at {snap['result']['stage']}: {snap['result']['why']}"
         else:
             text = "Episode run stopped."
-        store.append_message(pid, "assistant", text, episode={
-            "id": snap["id"], "state": snap["state"], "stages": snap["stages"], "result": snap["result"],
-            "master": snap["master"], "spec": {"name": ep.spec["name"], "script": ep.spec["script"]},
-            "draft": snap.get("draft"), "flags": snap.get("flags") or [], "vo": snap.get("vo") or {}, "final": snap.get("final") or "",
-            "tasks": [{k: t[k] for k in ("id", "title", "status", "pins", "rounds", "tokens", "why", "handoffs")} for t in snap["tasks"]]})
+        episode_message(pid, snap, text)
         runs.finish(run)
         run.emit({"t": "done"})
+
+    def episode_message(pid: str, snap: dict, text: str) -> None:
+        spec = snap.get("spec") or {}
+        store.append_message(pid, "assistant", text, episode={
+            "id": snap["id"], "state": snap["state"], "stages": snap["stages"], "result": snap["result"],
+            "master": snap.get("master"), "spec": {"name": spec.get("name"), "script": spec.get("script")},
+            "draft": snap.get("draft"), "flags": snap.get("flags") or [], "vo": snap.get("vo") or {}, "final": snap.get("final") or "",
+            "tasks": [{k: t.get(k) for k in ("id", "title", "status", "pins", "rounds", "tokens", "why", "handoffs")}
+                      for t in snap.get("tasks") or []]})
+
+    def recover_episodes() -> None:
+        """An episode still marked working when the app starts was cut off - the app closed or the PC shut down
+        mid-draft (v2 re-draft, 2026-10-12). Mark it stopped at its open stage so "Try this stage again" shows."""
+        for proj in store.list_projects():
+            f = store.project_dir(proj["id"]) / "episode.json"
+            try:
+                snap = json.loads(f.read_text(encoding="utf-8")) if f.exists() else None
+            except (OSError, ValueError):
+                continue
+            stage = retry_stage(snap, busy=False)
+            if not snap or snap.get("state") not in ("paused", "running") or not stage:
+                continue
+            why = "One Production closed while this episode was working"
+            snap.update(state="stopped", paused_why="", result={"stage": stage, "why": why})
+            snap["tasks"] = [{**t, "status": "stopped"} if t.get("status") in ("running", "paused", "waiting") else t
+                             for t in snap.get("tasks") or []]
+            f.write_text(json.dumps(snap, indent=1), encoding="utf-8")
+            episode_message(proj["id"], snap, f"Episode stopped at {stage}: {why}. Try this stage again to carry on.")
+            log.info("episode %s in %s was cut off at %s; marked stopped", snap.get("id"), proj["id"], stage)
+
+    recover_episodes()
 
     @app.post("/api/projects/{pid}/episode/render")
     async def episode_rendered(pid: str, body: RenderedIn):

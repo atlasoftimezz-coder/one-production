@@ -322,3 +322,26 @@ def test_release_stops_only_the_voice_app_it_started(tmp_path):
     assert run(svc.release()) is False                                    # someone else's (or none): left alone
     svc._proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
     assert run(svc.release()) is True and svc._proc is None
+
+
+def test_an_episode_cut_off_by_a_shutdown_is_offered_again_on_start(client):
+    """v2 re-draft (2026-10-12): the PC shut down mid-plan; after restart the panel still said running, with no button."""
+    from fastapi.testclient import TestClient
+    from app.config import Settings
+    from app.main import create_app
+    pid = client.post("/api/projects", json={"name": "Ep"}).json()["id"]
+    proj = client.data_dir / "projects" / pid
+    stages = [{"id": "script", "title": "Script", "status": "passed", "detail": "", "report": "", "files": []},
+              {"id": "voice", "title": "Voice", "status": "passed_with_notes", "detail": "", "report": "", "files": []},
+              {"id": "visuals", "title": "Visuals", "status": "running", "detail": "", "report": "", "files": []}]
+    snap = {"kind": "episode", "id": "x1", "state": "running", "spec": {"name": "Ep", "script": "s.md", "draft": True},
+            "stages": stages, "result": {}, "vo": {}, "config": {}, "draft": True,
+            "tasks": [{"id": "visuals-plan", "title": "Visuals: plan", "status": "running"}]}
+    (proj / "episode.json").write_text(json.dumps(snap), encoding="utf-8")
+    again = TestClient(create_app(Settings(data_dir=client.data_dir), token="t" * 32), base_url="http://127.0.0.1")
+    saved = json.loads((proj / "episode.json").read_text(encoding="utf-8"))
+    assert saved["state"] == "stopped" and saved["result"]["stage"] == "visuals"
+    assert saved["tasks"][0]["status"] == "stopped"
+    last = [json.loads(line) for line in (proj / "chat.jsonl").read_text(encoding="utf-8").splitlines()][-1]
+    assert last["episode"]["state"] == "stopped" and "Try this stage again" in last["text"]
+    assert again is not None
