@@ -36,6 +36,44 @@ class AssetError(RuntimeError):
     pass
 
 
+# FLUX.1-schnell is Apache-2.0 but its Hugging Face repo is gated behind a free "accept the terms" click
+# (first real install, 2026-10-12: 401 GatedRepoError). The owner's own read token, in Credential Manager.
+HF_KEY = "huggingface"
+HF_GATED = "https://huggingface.co/black-forest-labs/FLUX.1-schnell/resolve/main/model_index.json"
+
+
+def hf_token() -> str | None:
+    import keyring
+    from .accounts import KEYRING_SERVICE
+    try:
+        return keyring.get_password(KEYRING_SERVICE, HF_KEY)
+    except keyring.errors.KeyringError:
+        return None
+
+
+def set_hf_token(token: str, transport: httpx.BaseTransport | None = None) -> dict:
+    """Check the token and that the owner accepted FLUX.1-schnell's terms, then keep it in Credential Manager."""
+    import keyring
+    from .accounts import KEYRING_SERVICE
+    token = (token or "").strip()
+    if not re.fullmatch(r"hf_[A-Za-z0-9]{20,80}", token):
+        raise AssetError("That doesn't look like a Hugging Face token (it starts with hf_). Make a 'Read' token at "
+                         "huggingface.co/settings/tokens.")
+    try:
+        with httpx.Client(transport=transport, timeout=20, follow_redirects=True) as c:
+            who = c.get("https://huggingface.co/api/whoami-v2", headers={"Authorization": f"Bearer {token}"})
+            if who.status_code != 200:
+                raise AssetError("Hugging Face refused the token - check it at huggingface.co/settings/tokens.")
+            gate = c.head(HF_GATED, headers={"Authorization": f"Bearer {token}"})
+    except httpx.HTTPError as e:
+        raise AssetError(f"Hugging Face could not be reached ({e.__class__.__name__}).") from None
+    if gate.status_code in (401, 403):
+        raise AssetError("The token works, but this account hasn't accepted FLUX.1-schnell's terms yet: open "
+                         "huggingface.co/black-forest-labs/FLUX.1-schnell, press 'Agree and access repository', then save again.")
+    keyring.set_password(KEYRING_SERVICE, HF_KEY, token)
+    return {"hf_token": True, "hf_user": (who.json() or {}).get("name")}
+
+
 def style_prefix(art: dict | None) -> str:
     """One look for every asset of an episode, from its art.json (palette + concept)."""
     art = art or {}

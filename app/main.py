@@ -36,7 +36,7 @@ from .animation import Animation
 from .packaging import Packaging
 from .stock import Stock, StockError
 from .sfx import Sfx, SfxError
-from .assets import AssetError, Assets, ImageService
+from .assets import AssetError, Assets, ImageService, hf_token, set_hf_token
 from .installer import IMAGE_LIBS_MB, IMAGE_MODELS_MB, ImageRecipe, image_home
 from .fusion import Fusion
 from .insights import InsightError, Insights, parse_lessons
@@ -424,7 +424,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
     async def reconfigure_image() -> None:
         r = await image_recipe()
         if r.ready():
-            image_svc.configure(r.python, IMAGEGEN_DIR / "server.py", r.env(), None)
+            image_svc.configure(r.python, IMAGEGEN_DIR / "server.py", r.run_env(), None)
         else:
             image_svc.configure(None, None, {}, "the image module isn't installed yet - open System, Modules")
 
@@ -1013,7 +1013,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
                               "PNGs that the Fusion shots animate (FLUX.1-schnell, free, on your graphics card).",
                          needs=f"An NVIDIA card with 12 GB+ (yours: {gpu.get('vram_gb', '?') if gpu else 'none'} GB) and about "
                                f"{(IMAGE_MODELS_MB + IMAGE_LIBS_MB + 3400) / 1000:.0f} GB of disk, installed in {r.root}.",
-                         detail="installed" if r.ready() else "not installed yet")
+                         detail="installed" if r.ready() else "not installed yet", hf_token=bool(hf_token()))
             if m["id"] == "sfx":                    # Epidemic Sound (owner, 2026-10-11)
                 st = sfx.status()
                 m.update(state="ready" if st["key_set"] else "off", key_set=st["key_set"], key_hint=st["key_hint"],
@@ -1022,6 +1022,13 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
                                  f"{st['cached']} effect(s) kept for reuse." if st["key_set"]
                                  else "Add your Epidemic Sound API key to switch it on."))
         return {"modules": mods, "gpu": gpu}
+
+    @app.post("/api/image/hf-token")
+    async def image_hf_token(body: StockKeyIn) -> dict:
+        try:
+            return await asyncio.to_thread(set_hf_token, body.key)
+        except AssetError as e:
+            raise HTTPException(400, str(e))
 
     @app.get("/api/sfx")
     def sfx_status() -> dict:

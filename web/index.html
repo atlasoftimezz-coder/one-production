@@ -3000,12 +3000,24 @@ async function stepModules() {
       ${m.id === "stock" ? `<div class="opts">${m.key_set ? `<button class="opt" id="stockdel">Remove the Pexels key</button>`
           : `<input id="stockkey" type="password" autocomplete="off" placeholder="Pexels API key" style="flex:1;min-width:12em">
              <button class="opt" id="stocksave">Check and save</button>`}</div>` : ""}
-      ${m.id === "image" && m.state !== "ready" ? `<div class="opts"><button class="opt" id="imginstall">Install image assets…</button></div>` : ""}
+      ${m.id === "image" && m.state !== "ready" ? `<div class="opts">${m.hf_token ? `<span class="tick">✓</span> Hugging Face token saved` :
+          `<input id="hfkey" type="password" autocomplete="off" placeholder="Hugging Face read token (hf_...)" style="flex:1;min-width:12em">
+           <button class="opt" id="hfsave">Check and save</button>`}
+          <button class="opt" id="imginstall" ${m.hf_token ? "" : "disabled title='Save your Hugging Face token first'"}>Install image assets…</button></div>
+          ${m.hf_token ? "" : `<p class="wnote">FLUX's model page asks you to accept its terms once: open huggingface.co/black-forest-labs/FLUX.1-schnell, press "Agree and access repository", then make a free "Read" token at huggingface.co/settings/tokens.</p>`}` : ""}
       ${m.id === "sfx" ? `${m.licence_note ? `<p class="wnote warn">${esc(m.licence_note)}</p>` : ""}<div class="opts">${m.key_set ? `<button class="opt" id="sfxdel">Remove the Epidemic Sound key</button>`
           : `<input id="sfxkey" type="password" autocomplete="off" placeholder="Epidemic Sound API key (epidemic_live_...)" style="flex:1;min-width:12em">
              <button class="opt" id="sfxsave">Check and save</button>`}</div>` : ""}
     </div>`).join("");
   if ($("#imginstall")) $("#imginstall").onclick = () => { wiz.module = "image"; wiz.installOk = {}; showStep(3); };
+  if ($("#hfsave")) $("#hfsave").onclick = async () => {
+    $("#hfsave").disabled = true;
+    try {
+      const r = await (await api("/api/image/hf-token", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: $("#hfkey").value }) })).json();
+      toast(`Hugging Face token saved${r.hf_user ? " (" + r.hf_user + ")" : ""} - in Windows Credential Manager`);
+    } catch (e) { toast(e.message, true); }
+    stepModules();
+  };
   const ssave = $("#sfxsave"), sdel = $("#sfxdel");
   if (ssave) ssave.onclick = async () => {
     ssave.disabled = true;

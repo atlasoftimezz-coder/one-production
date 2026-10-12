@@ -445,7 +445,16 @@ class ImageRecipe(VoiceRecipe):
         self.torch_kind = torch_kind("gpu", gpu)
 
     def env(self) -> dict[str, str]:
-        return {"HF_HOME": str(self.hf_home), "HF_HUB_DISABLE_SYMLINKS_WARNING": "1"}
+        env = {"HF_HOME": str(self.hf_home), "HF_HUB_DISABLE_SYMLINKS_WARNING": "1"}
+        from .assets import hf_token                      # FLUX's repo is gated: the owner's own read token
+        token = hf_token()
+        if token:
+            env["HF_TOKEN"] = token
+        return env
+
+    def run_env(self) -> dict[str, str]:
+        """For the server after the install: everything is local, so no network and no token are needed."""
+        return {"HF_HOME": str(self.hf_home), "HF_HUB_OFFLINE": "1", "HF_HUB_DISABLE_SYMLINKS_WARNING": "1"}
 
     def _models_present(self) -> bool:
         hub = self.hf_home / "hub"
@@ -471,7 +480,8 @@ class ImageRecipe(VoiceRecipe):
                  "encoder), GGUF (5-bit FLUX), timm/kornia (the cut-out model).", IMAGE_LIBS_MB, "pypi.org", self._libs,
                  lambda: self._imports("diffusers", "transformers", "bitsandbytes", "gguf", "timm", "fastapi")),
             Item("models", "FLUX.1-schnell and the cut-out model", "FLUX.1-schnell (Apache-2.0, free for commercial "
-                 "use): its text encoders, VAE and a 5-bit transformer; BiRefNet (MIT) cuts each object out.",
+                 "use): its text encoders, VAE and a 5-bit transformer; BiRefNet (MIT) cuts each object out. Needs your "
+                 "free Hugging Face read token (FLUX's page asks you to accept its terms once).",
                  IMAGE_MODELS_MB, "huggingface.co", self._image_models, self._models_present),
         ]
 

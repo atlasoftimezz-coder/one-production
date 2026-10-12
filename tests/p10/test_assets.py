@@ -28,6 +28,17 @@ def image_server(request: httpx.Request) -> httpx.Response:
 
 
 @pytest.fixture
+def memory_keyring():
+    import keyring
+    from app.security.memkeyring import MemoryKeyring
+    prev = keyring.get_keyring()
+    kr = MemoryKeyring()
+    keyring.set_keyring(kr)
+    yield kr
+    keyring.set_keyring(prev)
+
+
+@pytest.fixture
 def svc(tmp_path):
     CALLS.clear()
     store = Store(tmp_path / "data")
@@ -85,6 +96,34 @@ def test_the_module_lives_on_a_drive_with_room(tmp_path):
 def test_style_prefix_carries_the_episode_look():
     s = style_prefix(ART)
     assert "#0E1A16" in s and "Vault ledger" in s and style_prefix(None).startswith("matte stylised 3D render")
+
+
+def test_hugging_face_token_is_checked_for_the_flux_terms(memory_keyring):
+    """First real install (2026-10-12): FLUX.1-schnell's repo is gated - 401 until the owner accepts its terms."""
+    from app.assets import hf_token, set_hf_token
+    accepted = {"v": False}
+
+    def hf(request):
+        if request.headers.get("Authorization") != "Bearer hf_GoodToken0123456789abcdef":
+            return httpx.Response(401)
+        if request.url.path == "/api/whoami-v2":
+            return httpx.Response(200, json={"name": "owner"})
+        return httpx.Response(200 if accepted["v"] else 403)
+    t = httpx.MockTransport(hf)
+    with pytest.raises(AssetError, match="starts with hf_"):
+        set_hf_token("sk-not-a-token", t)
+    with pytest.raises(AssetError, match="refused the token"):
+        set_hf_token("hf_WrongToken0123456789abcdef", t)
+    with pytest.raises(AssetError, match="Agree and access repository"):
+        set_hf_token("hf_GoodToken0123456789abcdef", t)
+    assert hf_token() is None
+    accepted["v"] = True
+    assert set_hf_token(" hf_GoodToken0123456789abcdef ", t) == {"hf_token": True, "hf_user": "owner"}
+    assert hf_token() == "hf_GoodToken0123456789abcdef"
+    from app.installer import ImageRecipe
+    r = ImageRecipe(Path("D:/x/imagegen"), Path("imagegen"), {"vram_gb": 16, "blackwell": True})
+    assert r.env()["HF_TOKEN"] == "hf_GoodToken0123456789abcdef"                # for the download only
+    assert "HF_TOKEN" not in r.run_env() and r.run_env()["HF_HUB_OFFLINE"] == "1"
 
 
 def test_the_gpu_job_asks_unless_the_draft_ok_covers_it(tmp_path):
