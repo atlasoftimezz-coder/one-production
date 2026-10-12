@@ -445,7 +445,9 @@ class ImageRecipe(VoiceRecipe):
         self.torch_kind = torch_kind("gpu", gpu)
 
     def env(self) -> dict[str, str]:
-        env = {"HF_HOME": str(self.hf_home), "HF_HUB_DISABLE_SYMLINKS_WARNING": "1"}
+        # HF_HUB_DISABLE_XET: the newer xet downloader kept a chunk cache in memory and doubled the disk use; on the
+        # studio PC (15 GB RAM) the download was stopped for low memory at ~10 GB (2026-10-12). Plain HTTP resumes too.
+        env = {"HF_HOME": str(self.hf_home), "HF_HUB_DISABLE_SYMLINKS_WARNING": "1", "HF_HUB_DISABLE_XET": "1"}
         from .assets import hf_token                      # FLUX's repo is gated: the owner's own read token
         token = hf_token()
         if token:
