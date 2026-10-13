@@ -12,6 +12,78 @@ phase log and the plan, checks the PC, runs the last gate and reports before tou
 
 ---
 
+## Checkpoint - Claude, 2026-10-12: draft quality (Part C), MCP + Storage pages, many real-run fixes
+
+Last pushed commit on `main`: `a2506bb`. Full P12 gate: 570/571 PASS (the skip is the real-voiceover
+test, by design).
+
+**Built:**
+- **Generated assets on the GPU** (`imagegen/`, `app/assets.py`, `app/agent/asset_tools.py`).
+  - FLUX.1-schnell, slimmed: GGUF Q5_K_S transformer + T5 in 4-bit, then BiRefNet cut-out (on the CPU).
+  - Installed as the "Image assets" module. Needs the owner's own Hugging Face read token, because the
+    FLUX repo is gated: accept its terms on huggingface.co first.
+  - `asset_generate kind="object"|"scene"`. Scene plates are 1024x576 full-frame places, used with
+    `S.scene(name)`.
+  - Objects are 768 px. The heavy job `image_assets` is OK'd once in the draft's start dialog.
+- **Fusion kit v4** (`app/fusion_kit.py`):
+  - `S.image`, `S.scene`, `S.backdrop`, `S.float`, `S.parallax`, `S.quote_card`, `S.person_tag`;
+  - no motion blur in drafts (2 samples drew moving text twice);
+  - `op_kit.md`, a function reference written into each episode's work folder for the shot workers.
+- **Draft QA**:
+  - competitor frames are compared with our stills on side-by-side sheets;
+  - the check turn writes `qa.json`; shots under 7 go back once, then become flags;
+  - shots over 5 s are refused.
+- **MCP page** (`web/mcp.js`, `app/mcp_servers.py`):
+  - custom stdio/http/sse servers with an on/off switch;
+  - header tokens go to Credential Manager;
+  - Test connects and lists the tools.
+- **Storage page** (`web/storage.js`, `app/cloud_storage.py`):
+  - an internal folder, and Google Drive through the owner's own OAuth Desktop client (scopes drive.file + drive.readonly);
+  - finished episodes are copied (auto switch, or "Send to storage"), with resumable uploads;
+  - browse and import into `files/imports/`.
+  - Drive was tested against a stand-in only; a real Drive connect is still to do.
+
+**Real-run fixes (each has a test):**
+- Resolve 21.1:
+  - a Fusion clip is always 5 s (the API can't lengthen it), so shots must be <= 300 frames;
+  - `AppendToTimeline` endFrame is EXCLUSIVE;
+  - `ExportCurrentFrameAsStill` fails when Resolve is out of memory ("Memory allocation failed" in
+    ResolveDebug.txt). Restart Resolve.
+- Windows caps a command line at 32767 characters, so long agent instructions go through
+  `--append-system-prompt-file`.
+- Agent SDK message buffer: raised to 64 MB, because Reading a big PNG killed the reader.
+- An episode cut off by an app restart or PC shutdown is marked stopped on start. "Try this stage
+  again" keeps the visuals plan and the shots already built.
+- Drafts deny shell commands and file access outside the project WITHOUT a card.
+- Memory: the voice model is released before the visuals. The image server is stopped (not just
+  unloaded) after the plan: it held ~9 GB and Resolve starved.
+- Tests never see a real image module installed on another drive (autouse fixture in `tests/conftest.py`).
+
+**Where it stands:**
+- Second real draft "Central banks gold v2" (Test2): 34 shots, 3 footage inserts, rendered 1:46.
+- The owner was still not satisfied: shots were objects floating on a dark void, icon tiles, and ghosted
+  text. The scene plates fix most of that (three shots rebuilt by hand looked much better), but there is
+  no full re-draft with them yet.
+- Owner, 2026-10-13: "train the editor more like professional, check the DaVinci manual".
+  - The manual is installed at `C:\Program Files\Blackmagic Design\DaVinci Resolve\Documents\DaVinci Resolve.pdf`
+    (4351 pages).
+  - The useful chapters: Spline Editor p1535, Modifiers/Follower p2396, Effect nodes p2271, Film p2309,
+    Particles p1890/p2646, 3D p1819.
+  - Kit v5 (ease curves, Text+ Follower kinetic type, Rays, dust particles, whip transitions, film
+    finish) is on the LOCAL branch `wip/pro-motion-kit`, NOT pushed. Its first live test made Fusion's
+    render fail ("Render failed ... Last frame rendered: (none)") and left Resolve's scripting
+    unresponsive.
+  - Verified Fusion IDs: `StyledTextFollower` (Text, Delay, Order, DelayType, Opacity1, Softness1,
+    CharacterOffset, CharacterSizeX/Y); Text+ Write On = `Start`/`End`; `Fuse.OCLRays` (Center, Weight,
+    Decay, Exposure, Threshold); `FilmGrain` (Monochrome, MasterStrength, MasterXSize); `DirectionalBlur`
+    (Type, Length, Angle); `SoftGlow`; `pEmitter`/`pRender`; `ImagePlane3D`/`Camera3D`/`Renderer3D`.
+
+**Open:**
+- Voiceover gate keeps failing loudness (-14.9 LUFS) and "subtitles end 1.9 s early". Drafts only flag it.
+- Image generation beside an open Resolve can spill VRAM (8 min per scene plate). With a fresh Resolve
+  it's ~20 s.
+- Docs not yet updated: CHANGELOG, phase-log, P10 manual.
+
 ## Checkpoint - Claude, 2026-10-11 (later): Competitors tab + draft episodes
 
 **Owner, 2026-10-11:**
