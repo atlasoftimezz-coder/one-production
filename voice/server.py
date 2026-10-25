@@ -3,7 +3,7 @@
 Run:  python server.py            (then open http://127.0.0.1:8720)
       python server.py --host 0.0.0.0 --port 8720   to reach it from another machine
 """
-import argparse, pathlib, shutil, subprocess, sys
+import argparse, pathlib, shutil, subprocess, sys, tempfile
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from pydantic import BaseModel
@@ -24,6 +24,7 @@ class JobSpec(BaseModel):
     target_wpm: Optional[float] = None
     grid_gap: float = 1.5
     auto_fix: bool = True
+    seed: int = 4242
     exaggeration: Optional[float] = None
     cfg_weight: Optional[float] = None
     temperature: Optional[float] = None
@@ -41,6 +42,28 @@ def meta():
     return {"presets": engine.PRESETS, "voices": engine.voices(),
             "problems": config.problems(), "outputs": str(config.OUTPUTS),
             "voices_dir": str(config.VOICES), "wer_limit": engine.WER_LIMIT}
+
+
+@app.post('/api/compare-voice')
+def compare_voice(reference: UploadFile = File(...), candidate: UploadFile = File(...)):
+    """Bounded local uploads; no external paths or model downloads."""
+    import similarity
+    limit = 20 * 1024 * 1024
+    with tempfile.TemporaryDirectory(prefix='voice-compare-', dir=config.JOBS) as folder:
+        paths = []
+        for label, upload in [('reference', reference), ('candidate', candidate)]:
+            data = upload.file.read(limit + 1)
+            if len(data) > limit:
+                raise HTTPException(413, 'Comparison clips must be under 20 MB each.')
+            path = pathlib.Path(folder) / (label + '.wav')
+            path.write_bytes(data)
+            paths.append(path)
+        try:
+            with engine._lock:
+                resident = engine._tts.ve if engine._tts is not None else None
+                return similarity.compare_files(*paths, encoder=resident)
+        except Exception as exc:
+            raise HTTPException(503, 'Speaker comparison unavailable: ' + str(exc)[:300])
 
 
 @app.post("/api/jobs")

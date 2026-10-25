@@ -678,6 +678,7 @@
     <button class="topbtn" id="usagebtn" title="How much each account has used"><svg class="icon"><use href="#i-chart"/></svg><span class="tlabel">Usage</span></button>
     <button class="topbtn" id="accbtn" title="Your AI accounts"><svg class="icon"><use href="#i-key"/></svg><span class="tlabel">Accounts</span>
       <span class="badge" id="accbadge" style="display:none"></span></button>
+    <button class="topbtn" id="voicepagebtn" title="Voiceovers: scripts, speakers and audio"><svg class="icon"><use href="#i-play"/></svg><span class="tlabel">Voiceovers</span></button>
     <button class="topbtn" id="compbtn" title="Learn the editing style of competitor videos"><svg class="icon"><use href="#i-play"/></svg><span class="tlabel">Competitors</span></button>
     <button class="topbtn" id="mcpbtn" title="Outside MCP servers for Claude"><svg class="icon"><use href="#i-swap"/></svg><span class="tlabel">MCP</span></button>
     <button class="topbtn" id="storbtn" title="Internal and Google Drive storage"><svg class="icon"><use href="#i-drive"/></svg><span class="tlabel">Storage</span></button>
@@ -1016,12 +1017,15 @@
 // ---- session token: from the URL fragment, kept in memory only, scrubbed from the address bar
 const TOKEN = (() => {
   const m = location.hash.match(/(?:^#|&)t=([^&]+)/);
-  if (m) history.replaceState(null, "", location.pathname);
+  if (m) history.replaceState(null, "", location.pathname + location.search);
   return m ? decodeURIComponent(m[1]) : null;
 })();
 
 const $ = s => document.querySelector(s);
 const state = { current: null, projects: [], busy: false };
+document.querySelector('#voicepagebtn').onclick = () => {
+  location.href = '/voiceovers' + (state.current ? '?project=' + encodeURIComponent(state.current) : '') + '#t=' + encodeURIComponent(TOKEN || '');
+};
 const PALETTE = ["#ff6b4a", "#a855f7", "#7c8cff", "#22c3a6", "#f59e0b", "#ec4899", "#3b82f6", "#10b981"];
 const FTYPES = {
   audio: { ext: ["mp3", "wav", "flac", "m4a", "ogg", "aac"], color: "#a855f7" },
@@ -1749,7 +1753,7 @@ function addAskCard(bubble, ev, pid) {
     ${ev.detail ? `<pre>${esc(ev.detail)}</pre>` : ""}
     <div class="why">Why it asks: ${esc(ev.reason)}</div>
     ${ev.risky ? `<div class="risk">⚠ This ${esc(ev.risky)} - you'll be asked every time.</div>` : ""}
-    <div class="row2">${ASK_BUTTONS[ev.gate ? "gate" : ev.risky ? "risky" : "normal"].map(([a, label, cls]) =>
+    <div class="row2">${ASK_BUTTONS[ev.per_request ? "risky" : ev.gate ? "gate" : ev.risky ? "risky" : "normal"].map(([a, label, cls]) =>
       `<button class="${cls}" data-a="${a}">${label}</button>`).join("")}</div>`;
   card.querySelectorAll("[data-a]").forEach(b => b.onclick = async () => {
     card.querySelectorAll("button").forEach(x => x.disabled = true);
@@ -3265,7 +3269,16 @@ async function bootApp() {
     const su = await (await api("/api/setup")).json();
     if (!su.done && (su.first_run || su.chose_folder)) openSetup(su.chose_folder ? Math.max(1, su.step) : 0);
     await loadAccounts();
-    await loadProjects();
+    await loadProjects(new URLSearchParams(location.search).get('project'));
+    if (new URLSearchParams(location.search).get('voiceover') === 'reviewed' && state.current) {
+      const composer = document.querySelector('#input');
+      composer.value = 'Generate my last reviewed Voiceovers plan using use_reviewed_plan=true. Keep its speakers, effects, pacing and preview/full setting. Show me the plan and ask for generation approval first. Report the outputs and any review flags when finished.';
+      composer.dispatchEvent(new Event('input', {bubbles:true}));
+      composer.focus();
+      const handoffUrl = new URL(location.href);
+      handoffUrl.searchParams.delete('voiceover');
+      history.replaceState(null, '', handoffUrl.pathname + handoffUrl.search);
+    }
     // refresh login status in the background so dead logins show up early
     api("/api/accounts/check", { method: "POST" }).then(r => r.json())
       .then(list => { state.accounts = list; renderPicker(); renderAccounts(); })

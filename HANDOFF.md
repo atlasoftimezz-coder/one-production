@@ -12,6 +12,93 @@ phase log and the plan, checks the PC, runs the last gate and reports before tou
 
 ---
 
+## Checkpoint — 2026-10-25: dedicated Voiceovers workspace
+
+Owner is beginning a real test on a friend's **RTX 5070 / 32 GB RAM** PC and requested a push
+to the same GitHub repository. Added `docs/VOICEOVERS_PC_TEST.md`, linked from README, with
+fresh setup and staged acceptance checks. `docs/examples/voiceovers-smoke-test.txt` tests Miles-first
+speaker routing, separate effects, an explicit half-second gap and complete two-speaker assembly.
+Pre-push dedicated Voiceovers/clone tests: **43 passed**. This is source delivery for hardware
+testing, not a claim that real GPU/voice-fidelity or the entire production system has passed.
+
+Owner next requested automatic regeneration until the clone matches. Implemented bounded automatic
+refinement in the same clone/check tool, API and voice cards: default five takes, maximum ten per
+fresh approval; optional user-calibrated cosine target; stop for target attainment, two trials with
+no meaningful progress (0.005 cosine heuristic), scorer failure or cap. Varies supported Chatterbox
+and ElevenLabs controls; MiniMax retries preserve its identity/settings. Reuses provider clone IDs.
+Retains best eligible take and provisional production defaults, excluding known Chatterbox misreads.
+`use_clone_settings` loads them in production; native UI changes can override. Last-reviewed plan
+freezes its parameters across later tuning changes. No “perfect” score or automatic listening
+acceptance is claimed. Do not chain fresh jobs past the cap; report best take and stop reason.
+
+Latest cloning request: after upload, Claude/Codex should clone with Chatterbox by default or the requested
+ElevenLabs/MiniMax provider and compare with the source. Added **Clone & check voice match** to voice cards
+and `voiceover_clone_and_check` to both agents. One approved workflow reuses/prepares identity, generates
+bounded clean test takes and scores via the coworker voice module’s trained speaker encoder. Normal
+project uploads can first be imported via `voiceover_save_voice`, with explicit permission and project/role
+checks (competitor and paired radio references rejected). There are now ten shared voiceover tools.
+
+Comparison uses resident trained `model.ve` or cache-only ve checkpoint loading, never random weights or
+silent model download. Fixed the older `voice/tune.py` bare/untrained encoder bug by reusing `model.ve`.
+The comparison endpoint requires the coworker voice engine to be updated/restarted. Scores are cosine,
+not percentages or automatic acceptance; no calibrated threshold exists. All reports need listening
+review, with reference/test A/B audio in the voice card. Missing scorer stops additional synthesis and
+preserves the first take. Provider verification is honored. Real fidelity is unvalidated until samples arrive.
+
+Latest owner feedback: the UI was overwhelming. Added contextual **Page guide** for all four pages plus
+Settings, History, Claude/Codex and Review & repair; concise `docs/VOICEOVERS_USER_GUIDE.md`; next-step hint;
+and a reviewed-plan handoff that prefills studio chat without sending. Speaker labels are never synthesized,
+including Miles-first dialogue (provider-payload regression coverage). Agents can reuse the exact reviewed
+snapshot via `use_reviewed_plan=true` alone, preserving preview/full mode.
+
+The owner requires an agent to actually listen, catch artifacts/pronunciation/incorrect delivery, and repair
+only the faulty passage. **Selected-passage repair is implemented** in History, API and shared agent tools;
+other source audio is reused, new output is remastered, original take retained, fresh approval required.
+Chatterbox repair uses a fresh seed and retains its bounded ASR retries. The eight shared voiceover tools
+include `voiceover_studio_repair`. No audio-capable performance reviewer is connected yet; never claim
+generation, ASR or level checks prove the agent listened. Owner will provide 20 annotated audio examples
+after the guide is ready. Use them to define/validate delivery expectations; this is not model-weight
+training. Remaining work: real auditory evaluation, issue-specific correction controls and a bounded
+review/repair loop. Current repair feedback is recorded but does not condition pronunciation/emotion.
+
+Owner took over the repository on a different PC. Python 3.12.13 and the locked core dependencies are installed.
+The initial full P12 gate stalled in P4 TestClient/AnyIO teardown; see `docs/TAKEOVER-2026-10-25.md`. Do not
+substitute old studio-PC results for a new local full-suite pass.
+
+The owner runs **voice generation on coworkers' own installations**, not on this PC. Coworkers have RTX 50-series
+cards with 12/16 GB VRAM. Existing setup handles the CUDA 12.8 branch; no model download/GPU work has been run here.
+
+Built a dedicated `/voiceovers` page reached from the studio top bar. It has a complete dialogue editor,
+top-right speaker count, independent speaker/provider/model controls, Settings/History with separate restore
+text/settings actions, voice/reference libraries and a bottom player. Backend is shared by Claude and Codex
+through ten `voiceover_*` tools. Chatterbox, ElevenLabs and MiniMax are supported; keys stay in keyring.
+
+Owner's concrete workflow: one clean ~1-minute sample for **Peter**, one for **Miles**, plus a separate Miles
+radio sample. Clone only permitted voices; competitors teach delivery only. The voice library retains clean
+identity and processed samples separately. Cloud preparation requires fresh approval and honors provider verification.
+
+Owner supplied Resolve Distortion values for Miles: low cut **666 Hz**, high cut **1.65 kHz**, mode **Distort**,
+level **68.2**, ceiling **-4.7 dB**, dry/wet **100%**, output **+5.4 dB**, Auto Level on. Stored as a named preset,
+implemented as a portable approximation. Do not claim bit-identical Resolve processing before a real A/B test.
+
+The pipeline generates both speakers in order from one labeled script, applies per-speaker processing, saves
+preprod, trims dead air / normalizes quiet gaps, assembles and masters the mix, measures WAV and MP3, and exports
+`#19 VO Final.wav` (example) plus MP3/SRT/report and optional aligned pre-master stems. Explicit `<#0.5#>` pauses
+are handled outside TTS. Targets: -14 LUFS +/-0.5, true peak <= -1 dBTP. Estimated subtitles and missing
+independent read checks are flagged. Prepared outputs are registered for the existing episode picker.
+
+Details and source map: `docs/VOICEOVERS.md`. Tests are synthetic/stand-in only; no real provider credits,
+GPU render or live Resolve project was used. Next real validation needs the owner's three audio samples
+and the coworker environment. The earlier kit-v5 recovery/other production work below remains outstanding.
+
+Validation: **104 focused tests passed across separate runs**: 83 core/Voiceovers/policy/page/file,
+8 Codex, 13 Claude. The combined run stalled in the existing Windows TestClient/AnyIO teardown and
+was stopped; the dedicated Voiceovers/clone suite passed 43 tests. The disposable Chrome walkthrough
+passed **29 checks**, including retry controls, saved defaults/manual overrides, playable clone comparison,
+page guides, assistant handoff, selected-passage repair,
+actual audio decoding, mastering targets, History restoration and mobile layout. An existing fake-CLI
+teardown warning remains; this is not a fresh full P12 gate pass. Reproduce with `tools/voiceovers_ui_check.py`.
+
 ## Checkpoint - Claude, 2026-10-12: draft quality (Part C), MCP + Storage pages, many real-run fixes
 
 Last pushed commit on `main`: `a2506bb`. Full P12 gate: 570/571 PASS (the skip is the real-voiceover

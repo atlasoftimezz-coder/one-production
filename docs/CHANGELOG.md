@@ -3,6 +3,29 @@
 What changed in each version, in plain words. "Check for updates" shows the newest section.
 
 ## Unreleased - P10 production engine, knowledge, learning and Resolve; P11 stock footage; P12 safety and learning
+- **Automatic clone refinement**: generate, compare and adjust supported voice controls within an approved
+  limit (five takes by default, at most ten). Stop for a calibrated identity target, stalled progress,
+  unavailable scoring or the cap. Retain the best eligible take/settings for production; exclude known
+  Chatterbox misreads. Identity scores remain evidence requiring listening review, not perfect-match claims.
+- **Clone and check voices**: save a clean uploaded voice, then let Claude/Codex clone it with Chatterbox
+  or the requested ElevenLabs/MiniMax provider and generate bounded comparison takes. Voice cards provide
+  reference/test playback and local trained speaker-encoder cosine evidence, with explicit listening-review
+  status. Existing clones are reused; provider verification is honored; missing scoring stops extra takes.
+  Fixed the older Chatterbox tuner to use the loaded trained encoder instead of a fresh untrained instance.
+- **Voiceovers guides and passage repair**: Page guide explains each page and its controls. A next-step hint
+  shows missing setup, and Continue in Claude / Codex hands off the reviewed script/settings without sending
+  chat automatically. Speaker labels route voices without being spoken, including Miles-first scripts.
+  History and both assistants can regenerate selected passages, reuse other source audio and rebuild a new
+  mastered take while keeping the original. Chatterbox uses a fresh repair seed with bounded transcript
+  retries. An audio-listening performance evaluator is still required before autonomous production approval.
+  Start with `VOICEOVERS_USER_GUIDE.md`.
+- **Dedicated Voiceovers workspace**: a full script editor, independent Peter/Miles voice/provider settings,
+  Settings/History tabs with text/settings restoration and a bottom player. Prepare permitted clean voices
+  with Chatterbox, ElevenLabs or MiniMax; retain Miles's processed reference separately. Generate the whole
+  conversation in order, apply the saved Miles distortion reference, normalize silence/pauses, master and
+  measure WAV/MP3 delivery at -14 LUFS with a -1 dBTP ceiling, and export `#Number VO Final` plus preprod and
+  optional aligned speaker stems. Claude and Codex share the backend tools. Reference analysis uses Scribe
+  after approval. See `VOICEOVERS.md` for setup, the portable distortion approximation and validation limits.
 - **Competitors tab**: paste competitor videos or channels. One Production downloads a small copy
   of each video (for measuring only, deleted afterwards), measures every cut, the pictures and the
   sound, and the AI looks at the frames and writes the editing style down: pacing, kinds of shots,

@@ -84,6 +84,8 @@ from .accounts import CAP_FIELDS, TOKEN_PREFIX, chaining_allowed, check_token, s
 from . import terms
 from .version import __version__
 from .voice import VoiceTuner, VoiceError, VoiceJobs, VoiceService
+from .voice_studio import VoiceStudio
+from .voice_studio_api import mount as mount_voice_studio
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 IMAGEGEN_DIR = Path(__file__).resolve().parent.parent / "imagegen"
@@ -356,7 +358,8 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
                codex_transport=None, backup_delay: float = 120, backup_tick: float = 3600,
                restart=None, gpu_probe=None, tune_script: Path | None = None, relaunch=None,
                updater: Updater | None = None, ytdlp=None, stock_transport=None, google_transport=None,
-               sfx_transport=None, image_transport=None, mcp_transport=None, drive_transport=None) -> FastAPI:
+               sfx_transport=None, image_transport=None, mcp_transport=None, drive_transport=None,
+               voice_studio_transport=None) -> FastAPI:
     if login_console is None:
         login_console = settings.login_console
     token = token or secrets.token_urlsafe(32)
@@ -370,6 +373,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
     approvals = Approvals(settings.data_dir)
     voice_svc = VoiceService(settings, voice_transport)
     voice_jobs = VoiceJobs(voice_svc, store, settings.data_dir)
+    voice_studio = VoiceStudio(store, settings, voice_svc, voice_jobs, transport=voice_studio_transport)
     gates = Gates(store, settings.data_dir, voice_svc, voice_jobs)
     editor = Editor(store, settings.data_dir, gates)
     animation = Animation(store, settings.data_dir)
@@ -465,6 +469,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
         ticker = asyncio.get_running_loop().create_task(daily_backups())
         yield
         ticker.cancel()
+        await voice_studio.close()
         shutdown_handoffs()
         await asyncio.to_thread(knowledge.close)
 
@@ -485,6 +490,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
     app.state.token = token          # read by the launcher only; never sent in a response
     app.state.resolve = resolve      # tests swap in a stand-in Resolve helper
     app.state.assets = assets        # tests configure a stand-in image server
+    app.state.voice_studio = voice_studio
 
     def _project(pid: str) -> None:
         try:
@@ -494,6 +500,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
 
     mount_knowledge(app, knowledge, _project, WEB_DIR)
     mount_learning(app, learning, _project)
+    mount_voice_studio(app, voice_studio, _project, WEB_DIR)
     mount_resolve(app, resolve, _project, WEB_DIR)
 
     @app.get("/episode.js")
@@ -684,6 +691,8 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
     @app.delete("/api/projects/{pid}")
     def delete_project(pid: str) -> dict:
         _project(pid)
+        if any(j['project'] == pid for j in voice_studio.live.values()):
+            raise HTTPException(409, 'A Voiceovers job is running in this project. Stop it before deleting.')
         if any(j.get("project") == pid and j.get("status") not in ("done", "failed")
                for j in voice_jobs.jobs.values()):
             raise HTTPException(409, "a voiceover is still running in this project - wait for it to finish")
@@ -1532,7 +1541,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
         prompt = message if sid else build_prompt(store.history(pid), message).replace(SYSTEM + "\n\n", "", 1)
         store.append_message(pid, "user", message)
         studio = Studio(pid, store, voice_svc, voice_jobs, tuned=tuner.for_voice, knowledge=knowledge, learning=learning, resolve=resolve, gates=gates, editor=editor, animation=animation, packaging=packaging, stock=stock, fusion=fusion, sfx=sfx, assets=assets,
-                        on_job=lambda job: run.emit({"t": "voicejob", "id": job["id"], "source": job["source"],
+                        voice_studio=voice_studio, on_job=lambda job: run.emit({"t": "voicejob", "id": job["id"], "source": job["source"],
                                                      "voice": job["voice"]}))
 
         async def work():
@@ -1680,7 +1689,7 @@ def create_app(settings: Settings, token: str | None = None, *, api_transport=No
             instructions = (STUDIO_INSTRUCTIONS + "\n\n" + actions.context(files, voices, presets, jobs)
                             + "\n\n" + note + "\n\n" + learning.instructions(pid, prompt))
             studio = Studio(pid, store, voice_svc, voice_jobs, tuned=tuner.for_voice, knowledge=knowledge, learning=learning, resolve=resolve, gates=gates, editor=editor, animation=animation, packaging=packaging, stock=stock, fusion=fusion, sfx=sfx, assets=assets,
-                            on_job=lambda job: sub.emit({"t": "voicejob", "id": job["id"], "source": job["source"],
+                            voice_studio=voice_studio, on_job=lambda job: sub.emit({"t": "voicejob", "id": job["id"], "source": job["source"],
                                                          "voice": job["voice"]}))
             eff = M.effort_for(acc["provider"], model, effort, acc.get("codex_models"))
             try:

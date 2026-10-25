@@ -43,7 +43,6 @@ def main():
     import config
     import pipeline
     from chatterbox.tts import ChatterboxTTS
-    from chatterbox.models.voice_encoder import VoiceEncoder
 
     ref = pathlib.Path(args.ref)
     if not ref.is_file():
@@ -83,9 +82,9 @@ def main():
     render(builtin, None, 0.5, 0.5, 0.8)
     print(f"STEP {len(grid) + 1}/{total} rendered the built-in voice for comparison", flush=True)
 
-    ve = VoiceEncoder()
-    if device == "cuda":
-        ve = ve.to("cuda")
+    # The bare VoiceEncoder constructor has random weights. Reuse the trained
+    # encoder loaded with Chatterbox, otherwise the ranking is meaningless.
+    ve = model.ve.eval()
 
     def emb(p):
         w, _ = librosa.load(str(p), sr=16000)

@@ -13,6 +13,14 @@ from pathlib import Path
 LIGHT, HEAVY, DOWNLOAD, PAID = "light", "heavy", "download", "paid"
 
 TOOLS = {
+    'voice_reference_analysis': {
+        'label': 'Reference voice analysis', 'cost_class': PAID, 'per_request': True,
+        'uses': 'ElevenLabs Scribe API credits and uploads this reference recording for speaker/timing analysis',
+    },
+    'voice_studio_generation': {
+        'label': 'Voiceovers generation', 'cost_class': PAID, 'per_request': True,
+        'uses': 'credits for selected ElevenLabs/MiniMax voices, or Chatterbox on the voice workstation; review the script and speaker mapping',
+    },
     "voiceover": {
         "label": "Voiceover",
         "cost_class": HEAVY,
@@ -67,6 +75,8 @@ class Approvals:
         """None = may run. Otherwise a description of what needs approving.
         approve: None (ask) | "once" | "always"."""
         info = TOOLS[tool]
+        if info.get('per_request'):
+            return None if approve == 'once' else {'tool': tool, **info}
         if info["cost_class"] == LIGHT or self.always(tool):
             return None
         if approve == "always":

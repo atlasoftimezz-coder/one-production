@@ -27,7 +27,9 @@ STUDIO_LOOK = {"list_voices", "script_stats", "voiceover_status", "knowledge_sou
 STUDIO_MEMORY = {"remember_direction", "propose_lesson"}
 STUDIO_PLAN = {"resolve_status", "resolve_propose_plan", "edit_status"}
 STUDIO_DRAW = {"build_animation", "package_episode"}   # light CPU, writes only inside the project   # look / save a plan; only the owner executes
-STUDIO_GATED = {"make_voiceover", "render_edit", "asset_generate"}
+STUDIO_GATED = {"make_voiceover", "render_edit", "asset_generate", "voiceover_reference_analyze", "voiceover_studio_generate", 'voiceover_prepare_voice', 'voiceover_studio_repair', 'voiceover_clone_and_check'}
+PER_REQUEST = {'voiceover_reference_analyze', 'voiceover_studio_generate', 'voiceover_prepare_voice', 'voiceover_studio_repair', 'voiceover_clone_and_check'}
+STUDIO_LOOK |= {'voiceover_studio_status', 'voiceover_provider_voices', 'voiceover_studio_plan', 'voiceover_studio_job', 'voiceover_save_voice'}
 # Pexels with the owner's own free key (owner, 2026-10-06): one fixed site, files only into the
 # project's stock/ folder, the key never shown to the agent - so no card, unlike open web access.
 STUDIO_STOCK = {"stock_search", "stock_fetch"}
@@ -38,7 +40,9 @@ STUDIO_SFX = {"sfx_search", "sfx_fetch"}
 # owner has Resolve control and the Resolve MCP switched on.
 STUDIO_FUSION = {"fusion_setup", "fusion_stills"}
 HEAVY = {"make_voiceover": "voiceover", "render_edit": "video_render",   # tools.TOOLS key per gated tool
-         "asset_generate": "image_assets"}
+         "asset_generate": "image_assets", 'voiceover_reference_analyze': 'voice_reference_analysis',
+         'voiceover_studio_generate': 'voice_studio_generation', 'voiceover_prepare_voice': 'voice_studio_generation',
+         'voiceover_studio_repair': 'voice_studio_generation', 'voiceover_clone_and_check': 'voice_studio_generation'}
 PATH_KEYS = ("file_path", "path", "notebook_path", "directory", "cwd")
 
 
@@ -132,6 +136,21 @@ def describe(tool: str, tool_input: dict, root: Path) -> tuple[str, str]:
     s = studio_name(tool)
     if s == "render_edit":
         return "Render video", str(tool_input.get("edit", ""))
+    if s == 'voiceover_reference_analyze':
+        return 'Analyze reference speakers and delivery', f"Reference {tool_input.get('reference_id', '')}; {tool_input.get('expected_speakers', 2)} speaker(s). Uploads audio to ElevenLabs Scribe."
+    if s == 'voiceover_prepare_voice':
+        return 'Prepare a permitted channel voice', f"Clean channel voice {tool_input.get('channel_voice_id')} → {tool_input.get('provider')}. The processed/radio reference is not cloned."
+    if s == 'voiceover_clone_and_check':
+        return 'Clone and improve a permitted voice', f"Clean voice {tool_input.get('channel_voice_id')} → {tool_input.get('provider', 'chatterbox')}; up to {tool_input.get('attempts', 5)} comparison take(s). Automatic refinement: {tool_input.get('auto_retry', True)}; identity target: {tool_input.get('target_similarity', 'not calibrated')}. Can create a cloud clone and use voice credits. Retains the best eligible take/settings; stops for no progress, target reached, missing scorer or the cap. Listening review is still required."
+    if s == 'voiceover_studio_repair':
+        return 'Repair selected voiceover passages', f"Take {tool_input.get('job_id')}; sections {tool_input.get('sections')}. {tool_input.get('reason', '')}\nOnly selected passages use new synthesis. Rebuilds the final mix and keeps the old take."
+    if s == 'voiceover_studio_generate':
+        if tool_input.get('use_reviewed_plan'):
+            return 'Generate the reviewed Voiceovers plan', 'Uses this project’s last reviewed script, speaker voices, effects and preview/full setting. Check the plan shown in chat before approving.'
+        mapping = '; '.join(f"{v.get('label') or v.get('id')}: {v.get('provider')} / {v.get('voice_id')} / {v.get('wpm', 'profile')} WPM / {v.get('effect', 'clean')}"
+                            for v in tool_input.get('speakers', []) if isinstance(v, dict))
+        source = tool_input.get('file') or f"{len(str(tool_input.get('text') or ''))} script characters"
+        return 'Generate voiceover preview' if tool_input.get('preview') else 'Generate full voiceover', f'{source}\n{mapping}'
     if s == "make_voiceover":
         pace = tool_input.get("pace_mode") or "natural"
         wpm = f" at {tool_input.get('target_wpm')} wpm" if pace == "wpm" else ""

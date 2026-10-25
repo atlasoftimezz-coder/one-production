@@ -25,6 +25,44 @@ INSTRUCTIONS = """You are the production agent inside One Production, a local st
 uses to plan, script and produce videos. You work in this project's folder: read, edit and create
 files there directly. Besides your usual tools you have studio tools:
   list_voices, script_stats, make_voiceover, voiceover_status.
+- The dedicated Voiceovers page shares voiceover_studio_* tools with Claude and Codex. Inspect
+  voiceover_studio_status and voiceover_provider_voices, plan a speaker mapping, then generate
+  a preview or narration. Analysis learns delivery, not model weights. Review speaker labels
+  and radio-effect suggestions. Never invent voice IDs or claim estimated subtitles are verified.
+  Reference analysis and generation require fresh approval every time.
+- Prefer this dedicated workspace for new voiceover requests, especially Peter/Miles dialogue.
+  Send the complete labeled script in one studio generation operation; it generates turns,
+  assembles them, edits silence and masters the final output without manual Resolve stitching.
+  Preserve Peter's clean identity and Miles's separate clean identity/radio effect. The owner's
+  saved Resolve reference is effect "miles_radio"; competitor samples guide delivery only.
+  Supply episode_number for outputs such as #19 VO Final. Inspect measured delivery flags.
+  Peter:/Miles: (or configured names) are routing labels, never spoken text. Either speaker
+  may speak first. When asked to use the last reviewed Voiceovers plan, call plan and generate
+  with only use_reviewed_plan=true. Keep its preview/full setting; ask the user to review a
+  full-script plan if the saved one is a preview and they want the final. Unsaved editor text
+  is not shared. Follow voiceover_studio_job until done and report outputs and review flags.
+  For a faulty passage, inspect result.sections, then use voiceover_studio_repair with the
+  1-based section numbers and a reason. It regenerates only those passages and rebuilds a new
+  final, keeping the earlier take. Fresh approval is required. Chatterbox does bounded ASR
+  retries internally, but transcript/level checks do not prove natural pronunciation, absence
+  of artifacts or correct emotion. Never claim you listened unless an audio-capable reviewer
+  actually consumed the audio. Automatic performance review against samples is not available yet.
+  When asked to clone/check an uploaded channel voice, inspect channel_voices in status and use
+  voiceover_clone_and_check. For an ordinary project audio upload, first use voiceover_save_voice
+  with its project filename, the requested speaker name and the user's explicit cloning permission.
+  Do not import competitor or processed radio recordings as clean identity. Reuse saved identities.
+  Default to Chatterbox unless the user names a supported provider;
+  do not silently switch providers. It prepares a clone or reuses its ID, then generates bounded
+  clean comparison takes. Poll the job, report its speaker cosine and offer reference/test audio
+  for listening. The trained encoder is local to the voice workstation. A missing scorer or
+  provider verification is not a match. Never call cosine a percent match or claim perfection.
+  Automatic refinement uses up to five takes by default (maximum ten per approved job). It stops on
+  a calibrated identity target, stalled scores, scorer failure or the approved cap, retaining the
+  best eligible take and production settings. Never invent a target or describe it as perfection.
+  Do not keep launching new jobs after a stop/cap; report the best result and why it stopped.
+  The owner will calibrate delivery/acceptance expectations with their audio examples. A cosine
+  target alone cannot certify pronunciation, emotion or artifacts, even if reached.
+  Keep processed Miles audio separate: verify clean identity first, add the radio effect later.
 - make_voiceover clones a reference voice, reads a script file from this folder, checks every
   section with speech recognition and adds mp3 + wav + subtitles here. "Faster/slower by N wpm"
   means the measured wpm of the latest voiceover (see below) plus or minus N, with pace_mode "wpm".
@@ -80,7 +118,8 @@ class Studio:
 
     def __init__(self, pid: str, store, voice_svc, voice_jobs, on_job: Callable[[dict], None],
                  tuned: Callable[[str], dict | None] | None = None, knowledge=None, learning=None, resolve=None, gates=None, editor=None, animation=None, packaging=None,
-                 stock=None, fusion=None, sfx=None, assets=None):
+                 stock=None, fusion=None, sfx=None, assets=None, voice_studio=None):
+        self.voice_studio = voice_studio
         self.stock = stock
         self.sfx = sfx
         self.assets = assets
@@ -105,7 +144,8 @@ class Studio:
         from .fusion_tools import tools as fusion_tools
         from .sfx_tools import tools as sfx_tools
         from .asset_tools import tools as asset_tools
-        return (knowledge_tools(self) if self.knowledge else []) + (learning_tools(self) if self.learning else []) + (
+        from .voiceover_tools import tools as voiceover_tools
+        return (voiceover_tools(self) if self.voice_studio else []) + (knowledge_tools(self) if self.knowledge else []) + (learning_tools(self) if self.learning else []) + (
             resolve_tools(self) if self.resolve else []) + (gate_tools(self) if self.gates else []) + (
             edit_tools(self) if self.editor else []) + (
             stock_tools(self) if self.stock and self.stock.key() else []) + (   # only once the owner added a key

@@ -6,6 +6,9 @@ Runs on your own PC; nothing is shared with anyone.
 
 Full plan: `docs\PLAN.txt` · Progress: `docs\phase-log.md`
 
+For the new Voiceovers workspace, start with the [short user guide](docs/VOICEOVERS_USER_GUIDE.md).
+Testing on another PC? Follow the [RTX 5070 / first-PC test checklist](docs/VOICEOVERS_PC_TEST.md).
+
 ## Setup (development)
 
 Needs Python 3.12 and [uv](https://docs.astral.sh/uv/) (`winget install astral-sh.uv`).

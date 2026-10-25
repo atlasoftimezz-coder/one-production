@@ -1,0 +1,6 @@
+Miles: Peter, can you hear me?
+Peter: Loud and clear. This is a two speaker voiceover test.
+Miles: My voice should have the radio effect.
+Peter: Mine should stay clean. <#0.5#> This sentence follows a half-second pause.
+Miles: The score is twenty-one to seven. Let's check the pacing.
+Peter: Both voices should finish in the order written.

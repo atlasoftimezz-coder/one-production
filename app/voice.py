@@ -134,6 +134,18 @@ class VoiceService:
                 raise VoiceError(r.json().get("detail", f"HTTP {r.status_code}"))
             return r.json()
 
+    async def compare_voice(self, reference: Path, candidate: Path) -> dict:
+        await self.ensure_running()
+        async with self._client(timeout=180) as client:
+            with reference.open('rb') as ref, candidate.open('rb') as take:
+                response = await client.post(self.url + '/api/compare-voice', files={
+                    'reference': ('clean-reference.wav', ref, 'audio/wav'),
+                    'candidate': ('clone-comparison.wav', take, 'audio/wav')})
+            if response.status_code != 200:
+                detail = response.json().get('detail', '') if response.headers.get('content-type', '').startswith('application/json') else ''
+                raise VoiceError(detail or 'Update/start the coworker’s voice module for speaker comparison.')
+            return response.json()
+
     async def make_srt(self, audio: Path, script: Path, out: Path) -> None:
         """vo-app's make_srt.py: timing from speech recognition, text from the script."""
         proc = await asyncio.create_subprocess_exec(
@@ -244,6 +256,19 @@ class VoiceJobs:
             return self.jobs[jid]
         f = self.dir / f"{jid}.json"
         return json.loads(f.read_text(encoding="utf-8")) if f.is_file() and jid.isalnum() else None
+
+    def register_finished(self, pid: str, name: str, files: list[str], result: dict,
+                          source: str = '', job_id: str | None = None) -> dict:
+        """Register studio output for episode reuse without claiming a read-check passed."""
+        job = {'id': job_id or secrets.token_hex(6), 'project': pid, 'name': name,
+               'status': 'done', 'step': 'done', 'voice': '', 'source': source,
+               'created': time.time(), 'files': files, 'sections': [], 'result': result,
+               'origin': 'voice_studio', 'read_check_verified': False, 'error': None}
+        self.store.project(pid)
+        self.jobs[job['id']] = job
+        self._save(job)
+        self.store.append_message(pid, 'tool', '', tool='voiceover', job=job['id'], status='done')
+        return job
 
     def _save(self, job: dict) -> None:
         (self.dir / f"{job['id']}.json").write_text(json.dumps(job, indent=1), encoding="utf-8")

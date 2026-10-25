@@ -162,7 +162,8 @@ def _run_job(jid):
     for i, s in enumerate(sections):
         raw = work / ("s%d_raw.wav" % i)
         best_wav = work / ("s%d_best.wav" % i)
-        seeds = [4242] + (RETRY_SEEDS if spec.get("auto_fix", True) else [])
+        initial_seed = int(spec.get('seed', 4242)) % (2**31)
+        seeds = [initial_seed] + ([s for s in RETRY_SEEDS if s != initial_seed] if spec.get("auto_fix", True) else [])
         best = None
         for attempt, seed in enumerate(seeds):
             label = "rendering" if attempt == 0 else ("retry %d after a misread" % attempt)
