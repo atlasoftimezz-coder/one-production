@@ -5,8 +5,22 @@ const mcpModal = document.createElement('div');
 mcpModal.id = 'mcpmodal';
 mcpModal.className = 'scrim';
 mcpModal.innerHTML = `<div class="modal wide" role="dialog" aria-label="MCP servers">
-  <div class="mhead"><div style="flex:1"><h3>MCP servers</h3><p>Outside tools for Claude chats and episodes: a program on this PC (stdio) or a server on the web (http / sse). Every call is shown to you first; writing, deleting, running programs or uploading is asked every time. Header values (tokens) go to Windows Credential Manager; a stdio server's environment values are saved in the app's settings file.</p></div><button class="iconbtn" id="mcpclose" aria-label="Close MCP servers">×</button></div>
+  <div class="mhead"><div style="flex:1"><h3>Sources &amp; MCP</h3><p>Connect your sources for Claude and Codex agent chats. Review external actions through the app’s approval controls. API tokens and browser sign-ins stay in Windows Credential Manager; a local program’s environment values are saved in settings.</p></div><button class="iconbtn" id="mcpclose" aria-label="Close MCP servers">×</button></div>
   <div style="padding:20px;max-height:75vh;overflow:auto;display:grid;gap:16px">
+    <section class="stylecard drive-connector" aria-labelledby="mcp_drive_title">
+      <div class="drive-heading">
+        <div class="drive-logo" aria-hidden="true"><svg viewBox="0 0 48 48" width="32" height="32"><path fill="#34a853" d="M17 4h14L12 37H0z"/><path fill="#fbbc04" d="M31 4l17 29-7 12-17-29z"/><path fill="#4285f4" d="M12 25h29l7 12-7 8H0z"/></svg></div>
+        <div style="flex:1"><h4 id="mcp_drive_title">Google Drive</h4><p class="stnote">Videos, transcripts and reference files</p></div>
+        <span id="mcp_drive_state" class="tst" aria-live="polite">Loading…</span>
+      </div>
+      <p id="mcp_drive_detail" class="stnote">Connect your account, then choose files to import into a project.</p>
+      <div class="drive-actions">
+        <button class="btn primary" id="mcp_drive_connect">Connect Google Drive</button>
+        <button class="btn" id="mcp_drive_test" disabled>Test connection</button>
+        <button class="btn" id="mcp_drive_browse" disabled>Import files</button>
+      </div>
+      <p id="mcp_drive_result" class="drive-result" role="status" hidden></p>
+    </section>
     <div><div class="sect" style="padding:0 0 6px">Connected servers</div><div id="mcp_list" aria-live="polite"></div></div>
     <form id="mcp_form" class="stylecard" style="display:grid;gap:8px">
       <b>Add a server</b>
@@ -31,7 +45,53 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') mcpModal.cla
 let mcpSaved = {};
 const mcpTests = {};
 
-function openMcp() { mcpModal.classList.add('open'); loadMcp(); }
+function openMcp() {
+  mcpModal.classList.add('open'); loadMcp(); loadMcpDrive();
+  if (typeof loadSources === 'function') loadSources();
+}
+
+async function loadMcpDrive() {
+  const badge = $('#mcp_drive_state');
+  try {
+    const { drive } = await (await api('/api/storage')).json();
+    badge.className = 'tst' + (drive.connected ? ' done' : '');
+    badge.textContent = drive.connected ? 'Connected' : 'Not connected';
+    $('#mcp_drive_detail').textContent = drive.connected
+      ? (drive.email ? `Signed in as ${drive.email}. ` : '') + 'Choose videos and transcripts to copy into the current project.'
+      : 'Connect your account, then choose files to import into a project.';
+    $('#mcp_drive_connect').textContent = drive.connected ? 'Manage connection' : 'Connect Google Drive';
+    $('#mcp_drive_test').disabled = !drive.connected;
+    $('#mcp_drive_browse').disabled = !drive.connected;
+  } catch (e) {
+    badge.className = 'tst failed'; badge.textContent = 'Unavailable';
+    $('#mcp_drive_detail').textContent = e.message;
+    $('#mcp_drive_test').disabled = true; $('#mcp_drive_browse').disabled = true;
+  }
+}
+
+function openDriveFromMcp(browse = false) {
+  mcpModal.classList.remove('open');
+  openStorage({ drive: true, browse, returnToMcp: true });
+}
+$('#mcp_drive_connect').onclick = () => openDriveFromMcp();
+$('#mcp_drive_browse').onclick = () => openDriveFromMcp(true);
+$('#mcp_drive_test').onclick = async () => {
+  const button = $('#mcp_drive_test'), result = $('#mcp_drive_result');
+  button.disabled = true; button.textContent = 'Testing…';
+  result.hidden = false; result.className = 'drive-result'; result.textContent = 'Checking access to your Drive…';
+  try {
+    await testDriveConnection();
+    result.textContent = 'Connection verified. You can browse and import files.';
+    result.classList.add('success');
+  } catch (e) {
+    result.textContent = e.message; result.classList.add('error');
+  } finally { button.textContent = 'Test connection'; await loadMcpDrive(); }
+};
+
+document.addEventListener('oneprod:drive-changed', () => {
+  $('#mcp_drive_result').hidden = true;
+  if (mcpModal.classList.contains('open')) loadMcpDrive();
+});
 
 $('#mcp_type').onchange = () => {
   const stdio = $('#mcp_type').value === 'stdio';

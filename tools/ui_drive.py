@@ -9,6 +9,10 @@ import base64, json, os, re, subprocess, sys, time, urllib.request
 from pathlib import Path
 from websockets.sync.client import connect
 
+# The parent test decodes UTF-8; Windows otherwise prints through a legacy code page.
+sys.stdout.reconfigure(encoding="utf-8")
+sys.stderr.reconfigure(encoding="utf-8")
+
 LAUNCH = sys.argv[1]
 OUT = Path(sys.argv[2]); OUT.mkdir(parents=True, exist_ok=True)
 SCR = OUT
@@ -238,11 +242,15 @@ try:
         js("document.querySelector('[data-mcp=local] [data-mcpdel]').click()")
         check("the server can be removed", wait_for("document.querySelector('#mcp_list').innerText.includes('No outside servers')", 10))
         js("document.querySelector('#mcpclose').click()")
+        from drive_connector_checks import check_drive_connector
+        check_drive_connector(js, wait_for, check, shot, send, SCR)
+        from source_connector_checks import check_source_connectors
+        check_source_connectors(js, wait_for, check, shot, send, SCR)
         # Storage page: an internal folder, then its files listed for import
         js("document.querySelector('#storbtn').click()")
         check("Storage page opens", wait_for("document.querySelector('#stormodal').classList.contains('open')"))
         check("Drive explains the owner's own OAuth client",
-              "Desktop app" in (js("document.querySelector('#stor_drv').innerText") or ""))
+              wait_for("document.querySelector('#stor_drv').innerText.includes('Desktop app')"))
         js("document.querySelector('#stor_path').value=%r; document.querySelector('#stor_int_auto').checked=true; "
            "document.querySelector('#stor_int').requestSubmit()" % os.environ.get("UI_DRIVE_STORE", ""))
         check("internal storage is saved and ready", wait_for("document.querySelector('#stor_int_state').innerText.toLowerCase().includes('ready')", 10))

@@ -3,6 +3,29 @@
 What changed in each version, in plain words. "Check for updates" shows the newest section.
 
 ## Unreleased - P10 production engine, knowledge, learning and Resolve; P11 stock footage; P12 safety and learning
+- **Shared CLI tab**: launch PowerShell, Claude Code or Codex in the same terminal.
+  The shell uses this PC's CLI logins; assistant launchers use matching saved
+  accounts and native setup. Codex receives the studio/source MCP bridge with
+  one-use approval forms. Provider setup is kept separately and older Claude
+  preferences/routes remain readable. See `docs/CLI_WORKSPACE.md`.
+- **Native Claude Code in the chat workspace**: an embedded interactive CLI with
+  saved-account OAuth, configurable working/setup folders, normal CLAUDE.md,
+  skills, hooks, plugins and MCP discovery, terminal keyboard input, reconnect
+  and native transcript resume. An optional private MCP bridge supplies the
+  existing studio/source tools with per-request native approval for gated work.
+  Studio chat remains available. See `docs/CLAUDE_CODE.md`.
+- **Shared sources for Claude and Codex**: MCP-page cards for n8n, Nexlev and
+  Neon, Credential Manager OAuth/browser sign-in, tool discovery and shared
+  source calls. Added Drive agent tools, the existing Discord script reader
+  through n8n, and Agent Reach X account setup, diagnostics and bounded imports.
+  The Discord workflow was adapted without publishing or executing it. Source
+  imports are project files, separate from automatic analysis or model training.
+  See `docs/SOURCES_AND_MCP.md`.
+- **Google Drive connection card in MCP**: guided Desktop OAuth setup with local
+  client JSON import, browser sign-in and popup fallback, connection testing,
+  account status, disconnect and a focused file browser/import flow. Reuses the
+  existing Storage account. Reference imports remain separate from automatic
+  competitor analysis. See `docs/GOOGLE_DRIVE_SETUP.md`.
 - **Automatic clone refinement**: generate, compare and adjust supported voice controls within an approved
   limit (five takes by default, at most ten). Stop for a calibrated identity target, stalled progress,
   unavailable scoring or the cap. Retain the best eligible take/settings for production; exclude known

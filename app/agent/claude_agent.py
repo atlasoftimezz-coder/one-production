@@ -11,6 +11,7 @@ auto-memory - the user's personal Claude Code setup never steers the studio agen
 from __future__ import annotations
 
 import asyncio
+import os
 import shutil
 from pathlib import Path
 from typing import Any, Callable
@@ -28,15 +29,27 @@ ISOLATION = {"CLAUDE_CODE_DISABLE_CLAUDE_MDS": "1", "CLAUDE_CODE_DISABLE_AUTO_ME
 
 def claude_exe(override: str | None) -> str | None:
     """The SDK needs claude.exe itself; npm installs a claude.cmd shim next to the package."""
+    def bundled():
+        try:
+            sdk = _sdk()
+            binary = Path(sdk.__file__).parent / "_bundled" / ("claude.exe" if os.name == 'nt' else "claude")
+            return str(binary) if binary.is_file() else None
+        except ImportError:
+            return None
+
     found = resolve("claude", override)
     if not found:
-        return None
+        # The official SDK ships a native CLI as well. An explicit override must
+        # still fail visibly if it is wrong, rather than selecting another binary.
+        if override:
+            return None
+        return bundled()
     p = Path(found)
     if p.suffix.lower() == ".cmd":
         exe = p.parent / "node_modules" / "@anthropic-ai" / "claude-code" / "bin" / "claude.exe"
         if exe.exists():
             return str(exe)
-        return shutil.which("claude.exe")
+        return shutil.which("claude.exe") or (bundled() if not override else None)
     return str(p)
 
 

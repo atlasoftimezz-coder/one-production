@@ -35,6 +35,8 @@ def test_codex_runs_in_the_project_with_studio_tools_and_isolated_home(agent):
         "list_voices", "script_stats", "make_voiceover", "voiceover_status", "knowledge_sources",
         "knowledge_search", "knowledge_read", "learning_recall", "remember_direction", "propose_lesson",
         "resolve_status", "resolve_propose_plan", "quality_gate", "render_edit", "edit_status", "package_episode",
+        'source_status', 'source_tools', 'source_call', 'drive_browse', 'drive_import',
+        'discord_read', 'discord_result', 'x_read', 'x_digest',
         'voiceover_studio_status', 'voiceover_provider_voices', 'voiceover_reference_analyze',
         'voiceover_studio_plan', 'voiceover_studio_generate', 'voiceover_studio_job', 'voiceover_prepare_voice', 'voiceover_studio_repair', 'voiceover_clone_and_check', 'voiceover_save_voice'}
     assert "ep1.md" in start["developerInstructions"] and "apply_patch" in start["developerInstructions"]

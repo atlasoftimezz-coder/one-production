@@ -8,6 +8,9 @@ Full plan: `docs\PLAN.txt` · Progress: `docs\phase-log.md`
 
 For the new Voiceovers workspace, start with the [short user guide](docs/VOICEOVERS_USER_GUIDE.md).
 Testing on another PC? Follow the [RTX 5070 / first-PC test checklist](docs/VOICEOVERS_PC_TEST.md).
+To connect your Drive from the MCP page, follow [Google Drive setup](docs/GOOGLE_DRIVE_SETUP.md).
+For n8n, Nexlev, Neon, Discord scripts and Agent Reach X accounts, see [Sources and MCP](docs/SOURCES_AND_MCP.md).
+For the shared CLI workspace (PowerShell, Claude Code and Codex), see [CLI setup](docs/CLI_WORKSPACE.md). The [Claude-specific guide](docs/CLAUDE_CODE.md) covers saved OAuth and native setup.
 
 ## Setup (development)
 

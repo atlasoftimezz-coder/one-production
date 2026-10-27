@@ -2,6 +2,14 @@
 
 Local Windows studio for YouTube production (FastAPI + single-page UI). Built in gated phases.
 
+**Latest continuation:** read the newest checkpoint at the top of `HANDOFF.md`
+first. The shared CLI supports PowerShell, Claude Code and Codex; Gemini was
+cancelled. See `docs/CLI_WORKSPACE.md` for account and native setup behavior.
+
+**For voiceover work:** also read `../SESSION_HANDOFF_2026-10-27.md` when present
+and the 27 October session-close section of `HANDOFF.md`. A fresh clone may lack
+the original parent workspace; the handoff records its status and missing assets.
+
 **New to this project or this PC? Run `/handoff`** - or read `HANDOFF.md` first. It holds the full
 context: architecture, decisions, phase status, tool facts, preferences and known traps.
 

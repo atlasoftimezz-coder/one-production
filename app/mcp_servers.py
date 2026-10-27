@@ -98,6 +98,16 @@ def check(servers: dict, secrets: dict | None = None) -> dict:
             raise McpError(f"{name}: type must be stdio, http or sse.")
         if s.get("enabled") is False:
             out[name]["enabled"] = False
+        if s.get("auth") == "oauth":
+            if kind != "http":
+                raise McpError(f"{name}: browser sign-in requires HTTP transport.")
+            if any(h.lower() == "authorization" for h in out[name].get("headers", [])):
+                raise McpError(f"{name}: choose browser sign-in or an Authorization header, not both.")
+            out[name]["auth"] = "oauth"
+        elif s.get("auth") not in (None, "header"):
+            raise McpError(f"{name}: auth must be header or oauth.")
+        if s.get("preset") in ("n8n", "neon", "nexlev"):
+            out[name]["preset"] = s["preset"]
     return out
 
 
@@ -126,7 +136,7 @@ def headers_of(name: str, s: dict) -> dict:
 
 def connection(name: str, s: dict) -> dict:
     """The server as the Claude agent gets it (header values filled in from Credential Manager)."""
-    c = {k: v for k, v in s.items() if k not in ("enabled", "headers")}
+    c = {k: v for k, v in s.items() if k not in ("enabled", "headers", "auth", "preset")}
     if s.get("headers"):
         c["headers"] = headers_of(name, s)
     return c
@@ -256,7 +266,9 @@ def for_agent(settings) -> dict:
         extra = check(getattr(settings, "mcp_servers", None) or {})
     except McpError:
         extra = {}                                   # a broken entry never blocks the agent
-    extra = {n: connection(n, s) for n, s in extra.items() if s.get("enabled", True)}
+    # OAuth is handled by the shared source tools so refresh tokens never enter a CLI profile.
+    extra = {n: connection(n, s) for n, s in extra.items()
+             if s.get("enabled", True) and s.get("auth") != "oauth" and not s.get('preset')}
     if not extra:
         return base
     note = NOTE.format(names=", ".join(sorted(extra)))

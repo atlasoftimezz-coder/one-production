@@ -30,6 +30,8 @@ STUDIO_DRAW = {"build_animation", "package_episode"}   # light CPU, writes only 
 STUDIO_GATED = {"make_voiceover", "render_edit", "asset_generate", "voiceover_reference_analyze", "voiceover_studio_generate", 'voiceover_prepare_voice', 'voiceover_studio_repair', 'voiceover_clone_and_check'}
 PER_REQUEST = {'voiceover_reference_analyze', 'voiceover_studio_generate', 'voiceover_prepare_voice', 'voiceover_studio_repair', 'voiceover_clone_and_check'}
 STUDIO_LOOK |= {'voiceover_studio_status', 'voiceover_provider_voices', 'voiceover_studio_plan', 'voiceover_studio_job', 'voiceover_save_voice'}
+STUDIO_LOOK |= {'source_status'}
+SOURCE_REQUESTS = {'source_tools', 'source_call', 'drive_browse', 'drive_import', 'discord_read', 'discord_result', 'x_read', 'x_digest'}
 # Pexels with the owner's own free key (owner, 2026-10-06): one fixed site, files only into the
 # project's stock/ folder, the key never shown to the agent - so no card, unlike open web access.
 STUDIO_STOCK = {"stock_search", "stock_fetch"}
@@ -77,6 +79,8 @@ def paths_of(tool_input: dict) -> list[str]:
 
 def decide(tool: str, tool_input: dict, root: Path) -> tuple[str, str]:
     """('allow' | 'ask' | 'gate' | 'deny', reason shown on the card)."""
+    if tool.removeprefix('mcp__studio__') in SOURCE_REQUESTS:
+        return 'ask', 'accesses an external source selected by the owner'
     if tool in resolve_mcp.DENY:
         return "deny", "runs a script with full access to your PC - One Production never allows it"
     if tool in resolve_mcp.LOOK:
@@ -193,6 +197,8 @@ _MCP_RISKY = re.compile(r"(?i)(write|edit|delete|remove|move|rename|create|exec|
 
 def risky(tool: str, tool_input: dict, root: Path) -> str | None:
     """Why this action must be asked every time (no session allowance), or None."""
+    if tool.removeprefix('mcp__studio__') == 'source_call':
+        return 'calls an external tool; review its operation and arguments each time'
     if tool in SHELL:
         cmd = unwrap_shell(str(tool_input.get("command") or tool_input.get("code") or ""))
         if _DELETE.search(cmd):

@@ -12,6 +12,646 @@ phase log and the plan, checks the PC, runs the last gate and reports before tou
 
 ---
 
+## 28 October 2026 - GitHub continuation checkpoint
+
+The owner requested a GitHub push through the shared CLI work. Start the next
+session with this section, the shared CLI section below and
+[CLI workspace](docs/CLI_WORKSPACE.md). The current task is complete; wait for
+the owner's next request. **Gemini was explicitly cancelled.**
+Repository `AGENTS.md`, `CLAUDE.md` and `/handoff` point future Codex and Claude
+sessions here, including on a fresh clone without the parent workspace.
+
+- Included work: the Google Drive connection UI, shared sources/MCP cards and
+  tools, native Claude Code, account discovery fixes, and the shared PowerShell /
+  Claude Code / Codex terminal. Studio chat remains available.
+- Next manual step: restart One Production, open a project and choose **CLI**.
+  PowerShell can run `claude` or `codex` using this PC's existing CLI setup.
+  Direct assistant launches require a matching account connected on this PC.
+  Native model calls using owner accounts have not been tested in this work.
+- Credentials stay local and are not transferred by Git. This PC's active data
+  folder had no saved account registry; the owner explained the earlier logins
+  were connected on their friend's PC. Reconnect through Accounts as needed.
+- Drive was owner-confirmed earlier. The owner will authorize/test n8n, Nexlev,
+  Neon, the Discord workflow binding and X separately. Saved cards do not prove
+  live access. Agent Reach's development installation under `build/` is local;
+  use the documented explicit setup on a new PC. The Discord workflow remains
+  unpublished and was not executed against Discord.
+- The earlier focused checks covered 65 distinct tests, including real browser,
+  ConPTY and MCP flows with synthetic assistants/accounts. Full phase gates and
+  owner manual approval remain pending; this checkpoint does not grant approval.
+- Before committing, the exact staged source tree was exported to
+  `build/github-checkpoint-review-20261028` without unrelated voiceover edits.
+  Verification passed: **61** backend/agent/source/OAuth tests, **3** encoding/page
+  checks and **4** Chrome terminal/Drive/MCP flows (**68 passed**). The existing
+  Windows asyncio subprocess-destructor warning remains non-failing. No owner
+  credentials, inference, paid calls or GPU work were used. Generated previews,
+  builds, local data and credentials are excluded from the commit.
+- Separate voiceover implementation edits and generated previews remain local,
+  outside this push. Earlier voiceover sections record that work's context,
+  including paths under the original parent workspace; those assets/runtimes
+  are not delivered by cloning this repository. If the dated parent checkpoint
+  is unavailable, use the voiceover summary here and obtain the original files
+  before resuming audio work. **Miles's 15 mastered sections stay approved and
+  locked; Peter's identity stays rejected; automatic audio-review retakes stay off.**
+
+## 28 October 2026 - shared CLI: PowerShell, Claude Code and Codex
+
+The owner explained their friend connected the accounts on another PC; those
+private credentials were not pushed with the repository. They then requested a
+general **CLI** tab that can start either Claude Code or Codex. Their subsequent
+message explicitly cancelled the proposed Gemini integration. Do not add it.
+
+- Replaced the Claude-specific tab label with **CLI**, a **Launch** selector for
+  PowerShell, Claude Code and Codex, and provider-specific setup/account fields.
+  PowerShell needs no One Production account: type `claude` or `codex` to use the
+  PC's normal installations/configuration/logins. Direct launchers use matching
+  saved accounts and optionally the studio/source MCP bridge. Studio chat remains.
+- Core is now `app/terminal.py`, `terminal_api.py`, `terminal_providers.py` and
+  `web/terminal.js`. Earlier Python imports and Claude HTTP/WebSocket/assets
+  remain aliases. Neutral API is `/api/projects/{pid}/terminal`. Preference
+  migration reads earlier `claude-code.json` but saves `terminal.json`, retaining
+  the old file. Each provider retains its own account/setup and conversation scope.
+- Codex uses the selected account's `CODEX_HOME`, clears unrelated inherited
+  API keys, retains native AGENTS.md/config/skills/MCP/permissions and launches
+  interactively with `--no-daemon`. Installed official CLI **0.164.0** supports
+  that flag. New conversation is default; uncheck to open its native resume
+  picker. Browser-login profiles remain separate so selecting a setup folder
+  cannot silently use another account. Native npm resolution selects the right
+  Windows architecture or launches its JS entry directly, never a batch shim.
+- Codex receives a session-only TOML MCP override. Private bridge key is passed
+  by environment-variable name, not value on argv. Existing native MCP settings
+  and config files are retained. Studio/source operations use MCP elicitation:
+  a fresh Allow once boolean must be accepted, then a matching one-use grant
+  is consumed by the backend. Decline/cancel/unsupported prompting fails closed.
+  Claude's existing native studio hook remains. Native permissions are not bypassed.
+- Shared terminal retains origin/token/PIN checks, reconnect/replay and scoped
+  process cleanup. Only one active CLI/agent per project; end it before changing
+  programs. Account refresh preserves active processes and setup drafts.
+- Verification: focused agent/source/OAuth checks **59 passed**; two additional
+  architecture-resolution and plain-CLI-default cases passed in the **10-case provider suite**. Native
+  browser flows **3 passed** (Claude saved/missing account and Codex), plus
+  existing Drive/MCP page browser regression **1 passed**. **65 distinct tests**.
+  Browser checks include real PowerShell, launching both command names from the
+  shell, native profile separation, keyboard/Unicode/resize, switching, reopen,
+  MCP calls and Codex approve/decline. Test assistants/credentials only; no owner
+  inference. The older Windows subprocess-destructor warning remains, no failures.
+  Evidence: `build/shared-cli-regression-a`, `shared-cli-browser-a`,
+  `shared-cli-pages-a`, `shared-cli-launch-final`; screenshots
+  `.ui-previews/shared-cli/`. The official Codex launch flags and MCP config read
+  are also checked without login using an empty temporary CODEX_HOME.
+- Guide: [CLI workspace](docs/CLI_WORKSPACE.md). Restart One Production to load
+  new routes. No accounts, source authorizations or approved audio were changed;
+  no phase approval is implied.
+
+## 28 October 2026 - Claude account dropdown follow-up
+
+The owner showed an empty CLI dropdown and asked what Studio chat meant. They
+confirmed Adiitya was missing from Accounts too. Read-only diagnostics located
+the active app on port 8730, data folder
+`C:\Users\yuvan\AppData\Local\OneProduction`: no `accounts.json` registry and no
+profile subfolders. A scoped Windows Credential Manager metadata lookup outside
+the sandbox also found no OneProduction Claude-token entries. No token values
+were displayed or inference requests made. The owner must reconnect Adiitya in
+Accounts; do not claim the earlier token is currently saved in this instance.
+
+- Fixed the new CLI page's account list becoming stale after Accounts changes.
+  `renderAccounts` emits a change event; the CLI refreshes metadata without
+  resetting edited folders, terminal output or a running process.
+- Discovery now includes turned-off Claude accounts with explicit disabled
+  labels, explains no supported accounts vs another provider, shows the current
+  data folder and offers **Add/Manage accounts** and **Refresh accounts**.
+  A removed saved selection falls back to an existing enabled account. Empty
+  lists no longer show misleading browser-login setup instructions.
+- Studio chat is the existing message interface, with app agent tools/approval
+  cards; native Claude Code is the interactive CLI using the chosen native
+  setup. Added tab descriptions and a troubleshooting section to the guide.
+- Verification: **18** native/API checks and **2** real Chrome/ConPTY/MCP cases
+  passed. Browser cases cover a stale saved account, starting with no accounts,
+  adding an OAuth account through the actual UI, enable/disable updates, draft
+  preservation and refreshing while the terminal runs. Only synthetic accounts.
+  Evidence: `build/claude-account-discovery-a`, `build/claude-account-browser-a`;
+  screenshots `.ui-previews/claude-accounts/`. Read-only diagnostic helper:
+  `tools/inspect_claude_accounts.py` (optional `--credential-names` never prints
+  credential blobs). Restart the app to load changed discovery metadata.
+- Owner data, source credentials and locked audio outputs were not modified.
+
+## 28 October 2026 - native Claude Code in One Production
+
+The owner deferred the remaining service authorizations until tomorrow and
+clarified that the chat must be the actual Claude Code CLI with One Production's
+skin, loading CLAUDE.md and whatever skills/hooks/plugins/MCP setup they choose.
+They primarily intend to use Adiitya's saved OAuth-token account. Guide:
+[Claude Code inside One Production](docs/CLAUDE_CODE.md).
+
+- Added `app/claude_terminal.py`, `claude_terminal_api.py`,
+  `claude_code_bridge.py`, `web/claude-code.js` and `claude-code.css`.
+  **Claude Code · CLI** above chat starts an interactive native executable in a
+  ConPTY, rather than SDK print/chat mode. Studio chat remains a separate tab.
+  Native commands, permissions, plan mode, questions, skills, plugins, memory,
+  project/user settings and native MCP discovery are left to Claude Code.
+- Per-project working folder, setup folder and account selection. Existing
+  saved OAuth is read from Credential Manager into the CLI environment only.
+  **Use this PC's Claude setup** reuses the local configuration with the selected
+  token account's authentication. Browser-login accounts retain their own profile.
+  Existing files/settings are not copied or overwritten.
+  The appended instructions explain the optional MCP tools without importing the
+  SDK Studio agent's folder/shell/presentation restrictions into native chat.
+- Optional private `oneproduction` stdio MCP exposes the existing Studio tools,
+  including all source tools. It authenticates with a per-session bridge key.
+  Studio paid/GPU and source requests require a native PreToolUse prompt bound
+  to the exact tool/arguments once; disabling hooks prevents those calls.
+  Ordinary native tools keep their normal Claude Code permission settings.
+- WebSocket checks exact local origin, host, PIN/unlock state and the app token
+  supplied in the first frame. No tokens in URLs. Output replay is bounded to
+  4 MiB, sessions survive viewer disconnect/project switching, and End session
+  terminates only the process tree it created. Conversation IDs are persisted
+  without credentials; resume only targets an existing native transcript.
+- Installed `pywinpty==3.1.0` (2 MiB), added it to pyproject and both Windows
+  dependency locks. ConPTY is Backend.ConPTY **0**, passed as a string because
+  pywinpty treats an integer zero as absent; Backend 1 is legacy WinPTY.
+  Vendored integrity-checked xterm 6.0.0 + fit 0.11.0, with licenses/manifest.
+  `tools/vendor_claude_terminal.py` reproduces these local assets.
+- The installed MCP SDK **2.3** uses constructor callbacks (`on_list_tools`,
+  `on_call_tool`) rather than the older decorators. The bridge uses that API.
+  CLI lookup also falls back to the official SDK's bundled executable, including
+  when a legacy npm shim has no native executable; a bad explicit override fails.
+- Browser refresh still locks as previously designed (the session token is not
+  persisted in browser storage). Reopening the authenticated launch link for the
+  same running app reattaches; hash-only launch navigation now reloads once to
+  authenticate. Project selection stays in the query string. Native transcripts
+  and `/cost`/`/usage` are separate from Studio chat's history/per-call ledger.
+- Verification: focused agent/source/OAuth regression **49 passed** and native
+  CLI + existing Drive/MCP Chrome tests **2 passed**. Native browser assertions
+  cover real ConPTY, keyboard/Unicode/resize, file creation, official MCP stdio
+  discovery/call, permission-hook execution, reconnect, authenticated reopen and
+  end-session cleanup. Synthetic accounts only; no inference using Adiitya or
+  other owner credentials. The existing Windows asyncio subprocess-destructor
+  warning remains in the older voiceover agent test; no failures.
+  An additional installed-official-CLI `--help` launch-flag check passed using
+  an empty temporary setup and no account credentials (no model call).
+  Final evidence under `build/claude-terminal-regression-b`,
+  `build/claude-terminal-browser-final`; previews under
+  `.ui-previews/claude-code/`. Tests: `tests/p5/test_claude_terminal.py`,
+  `test_ui_claude_terminal.py`; fake app/CLI in `tests/p5/fakes/`.
+- Restart One Production to load the new backend routes before opening the new
+  tab. Service authorizations remain the owner's next task; Drive was previously
+  owner-confirmed. Voiceover outputs, approved Miles sections and rejected Peter
+  state remain untouched. No phase approval is implied.
+
+## 28 October 2026 - shared sources and MCP
+
+The owner connected Google Drive through the new card and confirmed it works.
+Then requested n8n, Nexlev, Neon, the existing ChatGPT-built Discord script
+workflow, and Agent Reach for followed X accounts. Guide:
+[Sources and MCP](docs/SOURCES_AND_MCP.md).
+
+- Added `web/sources.js`, `app/sources.py`, `sources_api.py`, `source_mcp.py`,
+  `agent_reach.py` and `agent/source_tools.py`. Source tools reach both Claude
+  and Codex, including team workers. Custom MCP connections still work.
+- OAuth uses the installed official MCP SDK 2.3.0, a loopback callback, PKCE
+  and Windows Credential Manager. Managed source cards use shared tools;
+  arbitrary remote calls require individual approval. Disable retains login;
+  disconnect removes it. Cancelled grants cannot repopulate credentials.
+- Adapted n8n workflow `HGTU978gZLJns4Nw` (Rogue MCU - Read Final Discord Scripts)
+  via the connected n8n MCP: private chat entry point, latest 100 messages,
+  chronological normalized messages with source/attachment links. Original
+  manual trigger and Discord credential retained. Read back as unpublished,
+  `public=false`, with no validation warnings. Did not execute it against Discord.
+  Original snapshot and local normalization test are in `build/`.
+- Agent Reach 1.6.0 core installed in isolated `build/agent-reach-core/`, from
+  pinned GitHub commit `14c213405669414492bda0f8d52cc6531d062c45`; version verified.
+  The app detects that development runtime or a configured/module/PATH install.
+  X dependencies and owner login remain deliberate UI steps. X support is
+  experimental; current upstream has no following-list action, so the card
+  accepts saved handles/profile links. An optional question asked for handles;
+  none supplied before this checkpoint. No X account was accessed or logged in.
+- Tests cover API configuration, Drive preservation, secret storage, both-agent
+  tool exposure/policy, Discord metadata/read/import boundaries and X batches.
+  The real SDK was exercised with a local stdio peer and a loopback OAuth
+  provider, including PKCE and cancellation. Browser walkthrough used simulated
+  accounts. Relevant regression groups passed; Python/Windows subprocess
+  destructor warnings appeared during agent tests without failing them.
+  Previews: `.ui-previews/sources/`. No live-source tokens copied from ChatGPT.
+- Restart the app to load new backend routes. Owner still needs to authorize
+  n8n, Nexlev and Neon in the cards, enable the Discord binding after n8n, and
+  enter X handles and finish X setup/login. Existing Drive account is preserved.
+
+No voice work was resumed or changed. Miles remains locked, Peter remains
+rejected, and automatic audio-review retakes remain off. Existing unrelated
+working-tree changes were preserved; no commit/push or publication was performed.
+
+## Session close: 27 October 2026 - start here tomorrow
+
+Read [the complete voiceover session checkpoint](../SESSION_HANDOFF_2026-10-27.md)
+before continuing. It contains this conversation's progress, exact source/output
+paths, latest approvals/rejections, installed runtimes, reviewer evidence, resume
+commands, preservation checks and a copy/paste trigger for Claude Code or Codex.
+Root `AGENTS.md` and `CLAUDE.md` now point both assistants to that checkpoint.
+
+**Current priority: Peter voice identity is rejected; all 15 mastered Miles
+sections are approved and locked.** No automatic audio-review retakes. MERaLiON's
+17 real requests failed the reviewer controls; ECAPA scored rejected Peter highly.
+Next voice work should begin with a small controlled Peter-only identity comparison,
+not a full episode rerender or another storytelling adjustment. No new VO was
+generated during the reviewer pilot or this closing documentation request.
+
+## Latest: fresh Peter Voice Perfect clone; approved Miles preserved
+
+**Latest owner feedback:** the cloned Peter voice itself still does not match
+`Peter Voice Perfect.wav`; set storytelling aside and focus on identity. No Peter
+delivery should be treated as approved. Miles remains approved and locked.
+Owner then asked whether Claude Code / Opus 5.5 / Sonnet 5.5 can listen and make
+perfect VO, followed by a request to search Hugging Face for local audio listeners
+that can suggest corrections. Current research is in the 27 October update of
+`docs/AUDIO_REVIEW_MODEL_RESEARCH.md`: MERaLiON-2-3B is the first proposed small
+pilot, paired with ECAPA speaker verification; larger candidates include
+Qwen2.5-Omni-7B, MiniCPM-o 4.5 and Step-Audio-R1.1.
+
+Owner then authorized the local pilot ("Ok go ahead"). MERaLiON-2-3B Q4_K_M with
+F16 audio projector and SpeechBrain ECAPA are installed, pinned and SHA256-checked
+under `../nvigi-downloads/audio-listener/`. Reuses CUDA llama.cpp b11899; isolated
+SpeechBrain 1.0.3 dependencies leave existing PyTorch 2.6 TTS/ASR unchanged.
+**MERaLiON fails automatic-review controls in this configuration:** invented a
+voice on digital silence, described different voices in identical copies, and
+missed a deliberate dropout/buzz. ECAPA gave rejected Peter 0.802 against the
+reference, higher than genuine held-out Peter 0.549. This metric does not capture
+the owner's identity objection; never reinterpret it as Peter approval or a match
+percentage. Results: `../voice-tests/audio-listener-calibration/`.
+
+Optional utility `tools/local_audio_listener.py` supports local observations,
+CPU-only speaker comparison, original-sample silence guard, intentional-radio
+context and JSON reports. It never rewrites or approves audio and is not wired
+into automatic Voice Studio review. Guide: `docs/LOCAL_AUDIO_LISTENER.md`.
+No new VO rendered, no audio uploaded, no paid calls. Approved Miles WAVs unchanged.
+These models are not verified human-level critics. Gemma's previous controls also
+failed; keep it skipped for current VO jobs and do not resume automatic retakes.
+Checked source stereo: identical channels, no cancellation on mono downmix.
+Official conditioning uses whole-input audio for its speaker encoder; a full-source
+identity test is possible, but no matched-text test was generated before the user
+steered this turn to listener-model research. Do not claim the voice match is fixed.
+
+Owner rejected full `Script-22-Peter-Storytelling-B.wav` as still AI-like, despite
+preferring its short B pilot. Owner supplied `../Rougue MCU Voices/Peter Voice Perfect.wav`
+and requested a fresh clone, all Script #22 Peter lines, merged with approved
+Miles. Delivered `../voice-tests/script22-peter-perfect-source/Script-22-Peter-Perfect-Source.wav`
+and `Peter-Perfect-Source-Only.wav` (69.75s) in that folder. Performance approval
+of this new-source delivery is pending; do not call it a perceptual pass.
+
+Runner `../nvigi-downloads/peter_perfect_revision.py` (`inspect`, `prepare`,
+`produce`; also `check-ready`, `preview`). New source is 70.2833s, 48k stereo PCM24; SHA256
+`db7ccc02cf3d7236931cbf14aa115290225f69525fe4d1ba7976a34eb72a49f2`.
+Reference is 11.80–20.24s. Both native 520M speech and Turbo laugh have **fresh
+speaker and reference conditioning solely from this source**; no frozen old Peter
+identity or old Peter laugh. The new Turbo laugh has a separate 0.58s prefix.
+The owner asked to confirm model size: yes, 520M multilingual in English for
+speech, Turbo only for the laugh. All 16 clean Peter clips and all 31 mastered
+clips pass normalized word/signal checks. All **15 approved mastered Miles clips
+are sample-identical**, including radio. Only Peter is mastered; global processing
+is avoided to preserve Miles. No Gemma, fixed WPM, tempo/pitch changes or paid calls.
+
+Final **112.945s**, **-14.39 LUFS / -1.47 dBTP**, 48k mono PCM16 WAV. SHA256
+`067a8017917b671190290042fac628b8fa8170b67b38ffb1f126851e058a180f`.
+Evidence: `delivery-report.json`, `cloning-audit.json`, `reference-provenance.json`,
+`laugh-provenance.json`, `Miles-locked.json`, `final-checks-B.json` in the new folder.
+The internal B runner label here does not reuse the rejected B voice: the wrapper
+overrides conditioning with entirely new identity/reference tensors. The cloning
+exporter now supports `--turbo`, loading only genuine conditioning/S3Gen/VE weights
+and calling official extraction methods, without allocating the unused Python
+generation backbone. All synthesis still uses the native NVIDIA plugins.
+
+## Earlier: rejected Peter storytelling B; approved Miles samples locked
+
+Owner approved Miles's voice/emotions in the expressive revision but called
+Peter flat, like newspaper reading. Two Peter pilots were produced; owner chose
+**“B sounds closer.”** B uses a reactive excerpt of the owner's original clean
+Peter recording (19.55–24.65s), with the approved T3 speaker token and S3Gen voice
+embedding retained. A used the older reference with greater intensity.
+
+Owner then identified only **“The Avengers had their doubts”** as sounding AI-like
+in B and liked its continuation. Replaced those five opening words at 0.45
+intensity after discarding a generated lead-in; copied the exact continuation
+from the B WAV the owner heard. `opening-clause-repair.json` verifies identical
+continuation PCM before Peter-only mastering. A corrected sentence WAV is also
+available. This targeted correction has not yet received owner listening approval.
+
+Delivered `../voice-tests/script22-peter-storytelling/Script-22-Peter-Storytelling-B.wav`
+and `Peter-Storytelling-B-Only.wav` (68.03s) in that folder. All 16 Peter sections
+use B; all **15 mastered Miles speech clips remain sample-identical** to the
+approved expressive delivery, including radio processing. Only Peter was
+mastered, to the previous Peter loudness; no global processing was applied to
+Miles. The laugh and 450 ms turn spacing are retained. No forced WPM, tempo/pitch
+changes, Gemma or paid API. All 31 actual final clips pass word/signal checks.
+
+Final **111.225s**, **-14.46 LUFS / -1.49 dBTP**, 48k mono PCM16 WAV. SHA256
+`037b0240a3d4d850f6aeacb62ad1bde53be57613612d005c3a8cf66032715c86`.
+Evidence: `delivery-report-B.json`, `Miles-locked.json`, `final-checks-B.json`.
+Runner `../nvigi-downloads/peter_storytelling_revision.py`; phases `prepare`,
+`pilot`, `pilot-check`, `lock-Miles`, `generate --style B`, `repair-opening`,
+`check-Peter --style B`, `finish --style B`. `check-ready` checks completed clips
+during generation; `repair` retries only failed word checks. The multilingual
+cloning exporter now accepts `--only Peter`. Full performance approval is pending.
+
+## Earlier: Script 22 delivery revised for the story's emotions
+
+Owner called the previous 520M voice **“perfect”** but found the acting did not
+match the script. Owner chose **“Yes, expressive but natural”** and explicitly
+asked the agent to understand the whole script before directing performance.
+
+Delivered `../voice-tests/script22-nvigi-520m-emotion/Script-22-NVIGI-520M-Expressive.wav`.
+Story direction: escalating comic banter; Miles teases, doubts, reacts and shows
+sympathy; Peter sets up dry reveals, chuckles at the Loki/mom joke, then turns
+serious for the dying-Peter/Tony/fake ending. All 31 lines have directions in
+`Acting-Direction.md` in that folder. Retook 21 lines and reused 10 approved
+introductions/setup lines. Runner: `../nvigi-downloads/emotion_520m_revision.py`.
+
+Used the same approved clean conditioning. The official checkpoint confirms the
+last conditioning token is the bias-free linear emotion projection; changed only
+that token to per-line strengths 0.30–0.60. Speaker/reference tokens, S3Gen prompts
+and voice embedding are asserted unchanged in `conditioning-provenance.json`.
+Directions are production notes, not unsupported model prompts. Intensity and
+punctuation can steer performance; they do not certify specific acted emotions.
+Owner listening approval of this acting revision is pending.
+
+Retained 450 ms turn spacing, phrase pauses, Miles radio after clean synthesis,
+and NVIGI Turbo laugh. No tempo/pitch changes, fixed WPM, Gemma or paid API.
+Native alignment logs show repeated tokens can force early EOS at a pause;
+isolated retakes for 7, 12, 21 repair omissions, with pauses added afterward.
+All 31 clean and 31 mastered chunks pass word/signal checks. **107.745s**,
+measured 147.01 WPM, **-14.18 LUFS / -1.5 dBTP**, 48k mono PCM16 WAV.
+SHA256 `163d13c5db7350e778cec1946032aeccdc23b95111b5c9b8859b143ebd8ce518`.
+The earlier approved voice/pacing file is preserved unchanged.
+
+## Earlier: Script 22 520M revision with approved voice and pacing
+
+Owner requested downloading/using **NVIGI Multilingual 520M** for speech and
+Turbo for nonverbal emotional cues. Installed and hash-verified official cloning
+checkpoints; see `docs/NVIGI_520M_VOICEOVER.md` for the setup and resume commands.
+The earlier Turbo natural v2 below was rejected as below the desired standard.
+The first 520M pilots were also rejected as too fast.
+
+Delivered `../voice-tests/script22-nvigi-520m-normal/Script-22-NVIGI-520M-Final.wav`.
+Owner heard the corrected Peter/Miles pacing previews and explicitly answered
+**“Now close to the samples.”** Final performance/listening approval is pending.
+Speech is native Vulkan 520M, with original clean voice conditioning at emotion
+exaggeration 0.2, restored quiet phrase pauses and 450 ms between replies. No
+forced WPM, tempo/pitch changes, Gemma or paid API calls. Basic CLI CFG remains
+the SDK default 0.5; no working custom CFG launcher was installed.
+
+Miles is cloned from **`Miles's voice CV Final New.wav`**, not the radio file.
+The actual 10-second reference matches the original clean 0.05–10.05s excerpt
+with waveform correlation 0.999999996; evidence is `Miles-reference-provenance.json`
+in the delivery folder. Radio processing is applied only after clean generation
+and checks. Peter uses his original clean opening exchanges, 0.05–9.20s. A
+retained NVIGI Turbo chuckle precedes Peter's newly generated Loki/mom line.
+
+Five isolated retakes (13, 19, 20, 21, 25) repaired omissions/word mismatches.
+All **31 clean and 31 mastered chunks** pass normalized word and signal checks.
+Final: **107.3075s**, measured 147.61 WPM (no target), **-14.16 LUFS / -1.5 dBTP**,
+48 kHz mono PCM16 WAV. SHA256
+`077898223a43a14c29335cc3570b3e1c91f3a8a1bf4c779970a52c157ae16094`.
+These checks do not certify acting quality; use the owner's listening feedback.
+
+## Earlier: Script 22 NVIGI-only natural revision
+
+Owner found Peter drawn out and Miles's "superhero's identity" hook unnatural;
+explicitly requested NVIGI only, no Gemma, no forced WPM, faster turnaround.
+Delivered `../voice-tests/script22-nvigi-v2/Script-22-NVIGI-Natural-v2.wav`.
+Runner: `../nvigi-downloads/revise_script22_nvigi.py`. Regenerated all 16 Peter
+sections from an unmodified 7.16s conversational excerpt (39.38–46.54s of own
+clean Peter reference), plus Miles's hook. Reused the other 14 passing Miles
+sections. Hook uses phonetic equivalent "superheroes identity" in synthesis;
+source script remains unchanged. Retained the checked NVIGI chuckle before
+Peter's newly generated Loki line. No tempo/pitch adjustment or Gemma calls.
+One Peter section 23 retake resolved a Wong recognition mismatch. All 31 clean
+and mastered chunks pass normalized word/signal checks. 100.4025s, measured
+157.76 WPM (no target), -14.12 LUFS / -1.5 dBTP, 48k mono PCM16 WAV. Matching
+hook/Peter previews accompany the final. Owner listening approval is pending.
+Earlier A/B files are preserved; this request applies to this NVIGI-only retry.
+
+## Checkpoint - 2026-10-26: local Gemma final-audio reviewer
+
+Owner authorized installing **Gemma 4 E4B Q4_0** and reviewing the mastered final
+before considering chunk corrections. Files are now installed and SHA256-verified
+under `../nvigi-downloads/audio-review/`; receipt/config pin model and runtime.
+See `docs/LOCAL_AUDIO_REVIEW.md` for the commands, measurements and limitations.
+
+`app/audio_reviewer.py` runs native audio input through a temporary local llama.cpp
+server. `VoiceStudio` invokes it after final mastering, records its report in the
+delivery manifest/result and shows a concise count in the existing flags. Takes
+are preserved. Restart an already-running app to load this code.
+
+Actual controls caught script anchoring (invented words on silence) and confusion
+between simultaneous reference/candidate recordings. The current implementation
+uses **one audio clip per request**, withholds the verbatim script from listening,
+caches separate reference descriptors, specifies intentional Miles radio and
+checks listener words against the script afterward. Exact identity is not proven
+by these descriptors. Original-sample silence rejection is a separate signal
+preflight, explicitly labeled; it is not evidence Gemma's critic passed silence.
+
+Gemma correctly transcribed the Peter test and, after separating reference calls,
+the actual Miles test. It accepted intentional radio, with a minor uncertain
+pronunciation comment. It also invented speech on silence in the broad critic
+prompt even with the script withheld. **Automatic retakes remain disabled pending
+reliable calibration/replacement validation.** Do not claim this is a perceptual
+pass or a perfect acting judge. Do not replace good takes merely on its confidence.
+
+The owner asks whether enough context can explain intentional effects: yes for
+an audio-capable LLM, while NISQA does not read text instructions. Context supplies
+the intended target; it does not guarantee reliable acoustic observations.
+The categorical architectural rejection in the pasted Gemini response was not
+established by its sources. The real local controls above are stronger evidence.
+
+Completed full local advisory review: all 24 mastered chunks, 366.8 seconds,
+25 local calls / 17,052 local model tokens. Decisions: 23 keep, 0 retry, 1 uncertain
+(section 19, "dam" versus "damn", a phonetic spelling issue). No major retake
+candidates. Several minor radio comments describe intentional processing and do
+not justify changes. Existing final hash still matches the original delivery;
+audio was preserved. Evidence: `../voice-tests/script3-production-v2/Audio-Review-Summary.md`
+and `audio-review-latest.json`; original delivery report now links this evidence.
+GPU memory returned to the desktop baseline after the reviewer exited.
+
+Validation: 50 targeted Voice Studio/NVIGI/reviewer tests passed; the latest eight
+reviewer tests also passed after cancellation handling. Earlier broad P12 run:
+111 passed, 1 unrelated headless-browser launch failure (`ui_drive.py`: undefined
+`page` after Chrome startup did not provide a page). No phase approval asserted.
+
+## Checkpoint - 2026-10-26: Script #3 production revision v2
+
+Owner subsequently describes this delivery as roughly 90% ready/perfect and wants
+better reference analysis despite burned-in gameplay/music. Requests research on
+true audio-understanding judges, including local models for this PC. Findings:
+`docs/AUDIO_REVIEW_MODEL_RESEARCH.md`. A local experimental judge is now installed
+as described above; word/technical passes do not certify auditory acting quality. Cloud pilot
+shortlist: Gemini 4 Argon and GPT-Audio-1.5. Local first memory-fit pilot: Gemma 4
+E2B Q4_0; larger alternative E4B Q4_0 with CPU projector/partial offload if needed.
+Both accept audio; current llama.cpp has Gemma audio encoder support. This is a
+research recommendation, not a benchmarked best model or proven runtime on this PC.
+Actual current PC: GTX 1660 SUPER 6 GB, Ryzen 5 3600, 15.93 GiB RAM; only 1.09 GiB
+system RAM free during the check. Published model+Q8 projector file sizes are
+about 3.40 GB E2B / 5.15 GB E4B, excluding runtime memory. Free RAM and stage GPU
+jobs before testing. SpeechJudge-GRM and Qwen2.5-Omni-3B published weights have
+non-commercial restrictions, so they are not default production recommendations.
+The research used no paid calls or hosted uploads; the later download was owner-authorized.
+
+Latest owner direction: prefers B/NVIGI, wants the full final with the fresh Peter
+voice, quality before strict WPM, and every chunk checked/repaired. WAV only.
+Do not claim independent auditory preference: no direct listening tool is connected.
+Measurable counterpoint to B: A generated faster; B used less memory. Acting/identity
+quality is supported by the owner's listening preference, not automatic ASR scores.
+
+Delivered `../voice-tests/script3-production-v2/Script-3-VO-Final-v2.wav` (canonical
+`#3 VO Final.wav` also retained): NVIGI Turbo, fresh natural-speed Peter retry takes
+plus passing Miles B source takes, same Miles-only calibrated radio chain. **No
+tempo or pitch adjustment**. Contextual 180–350 ms turn gaps retain internal
+performance pauses. 84.972 s, 175.12 WPM versus reference guidance 158.78; no forced
+WPM. -14.14 LUFS, -1.50 dBTP, 48 kHz mono PCM16. Precut and aligned stems retained.
+Runner: `../nvigi-downloads/produce_script3_v2.py`. All 24 clean chunks passed
+word/format/signal/hard-clipping checks. All 24 mastered chunks passed word checks;
+v2 resolved one v3 word-ending disagreement. Whole-file v3 transcript differs on
+sensed/sends and pulled/pull despite chunk passes; this is recorded, not hidden.
+No new TTS regeneration was necessary for this assembly because reused source
+chunks passed. Local retry supports affected-chunk replacement and retains takes.
+These are automatic checks, not a claim of perfect acting/voice/radio or auditory
+acceptance. Trial remains 0/3 approved, production-v2 owner review pending. Both
+engines remain available through the owner's original three-video trial.
+
+## Checkpoint - 2026-10-26: Script #3 dual-engine delivery
+
+Owner listening feedback after this delivery: prefers **B / NVIGI**, but Peter sounds
+compromised or insufficiently cloned. This is a preference, not full-video approval.
+All future requested delivery is **WAV only**. Requested a fresh Peter-only A/B of
+the 11 Peter script sections, natural speed with 0.5-second pauses between sections.
+Retry runner: `../nvigi-downloads/retry_peter.py`; output folder:
+`../voice-tests/script3-peter-retry/`. The previous reference-paced master used tempo
+0.9204 (A) / 0.8709 (B), so time stretching could contribute to the perceived change;
+it is not proof that cloning itself failed. Retry uses no tempo or pitch adjustment.
+An alternate clean Peter excerpt at 30.43–46.56 s supplies both engines' shared
+conditioning (16.13 s versus the old opening 10 s). Selection used speech activity
+and typical pitch, not listening. Owner must assess whether the new clone is better.
+Trial remains 0/3 approved with Peter revision requested; retain both engines.
+Peter retry delivered: `script3-peter-retry/A-Peter-Natural.wav` (53.510 s) and
+`B-Peter-Natural.wav` (54.195 s), 48 kHz mono PCM16. Both use natural tempo/pitch,
+11 Peter sections and ten inserted 0.5 s gaps. All cropped sections pass v3 script
+checks after one native section-16 repair. Final levels -14.19/-14.15 LUFS, both
+-1.5 dBTP. Root comparison report records files and checks; owner listening pending.
+
+This supersedes the older "scripts not supplied / instrumentation pending" trial
+status below. Script `../Scripts/Script #3.txt` was supplied and generated with both
+stock Chatterbox Turbo / PyTorch CUDA and native NVIGI Turbo / Vulkan, using the
+same own Peter/Miles 10-second clean conditioning. Outputs are in
+`../voice-tests/script3-dual/`; neutral owner listening copies are `comparison/A.wav`
+(stock) and `comparison/B.wav` (NVIGI), plus MP3s. Engine folders retain originals,
+previous repair takes, clean natural-speed conversations, aligned pre-master stems,
+precut, `#3 VO Final.wav/mp3`, turn SRT, resource logs and ASR checks. Trial state:
+**slot 1 awaiting owner listening review, 0/3 approved**. Do not retire either engine.
+
+Runners: `../nvigi-downloads/script3_workflow.py`, `finish_script3.py` and
+`package_script3.py`; instructions `docs/SCRIPT3_VOICEOVER_TRIAL.md`. They run in
+the installed SDK cloning venv and are not a new automated Voiceovers UI feature.
+Initial generation workers including imports: stock 135.422 s, native 440.062 s.
+Stock's 4 repair takes across turns 6/18/21 add 79.515 s; native's turn-18 repair
+adds 18.390 s. Initial sampled device VRAM peaks: 5275 / 2739 MB; initial process
+tree RSS peaks: 3940 / 1465 MB. Stock repair RSS reached 4813 MB. Record whole-device
+GPU counters separately from process-tree RSS. Report contains all measured stage
+times; accepted-final total time and actual Codex token counts remain unknown.
+Two initial CPU finishing runs (one per engine) failed on float WAV assembly and
+were corrected; their durations were not logged. Do not omit retries or describe
+worker durations as total production/accepted-final time.
+
+Parakeet v3 int8 ONNX CPU is now the primary checker. v2 remains for second opinions;
+both converted models and provenance/hashes are cached locally. First 24 stock takes
+had mean normalized script matches 0.988992 / 0.991740 (v2/v3). This is not human-
+verified ASR accuracy. Both full references were analyzed with v3: own published
+66.383 s / 167 words / 150.94 WPM / -15.56 LUFS; competitor 147.749 s / 391 words /
+158.78 WPM / -9.57 LUFS. Speaker estimation from radio bands is heuristic and must
+not be treated as verified diarization or acting analysis.
+
+All 24 cropped clean turns in both engines match the script after normalization
+with v3. Short-turn helper speech was cropped out and checked. Em-dash separation
+in "part—his" caused misreads; clearer sentence punctuation preserved the words.
+Final processed ASR: stock 248/248 matching words; native 247/248 (sense/sensed),
+despite that clean native turn passing. Leave this as a listening-review item.
+Both deliveries are 93.713 s / 158.78 WPM, explicitly slowed from their natural
+delivery using pitch-preserving tempo multipliers 0.9204 stock and 0.8709 native.
+Do not confuse matched output duration with identical natural engine delivery.
+WAV levels: -14.10/-14.09 LUFS and -1.50 dBTP; MP3: -14.36 LUFS / -1.74 dBTP.
+Miles-only radio uses the portable Resolve preset plus bounded smoothed spectral
+calibration against the supplied clean/radio pair (spectral RMS error fell from
+6.87 to 2.15 dB across measured bands). It remains an approximation pending owner
+listening approval. Contextual 120–180 ms gaps derive from the own reference's
+130 ms acoustic quiet-gap median; exact competitor pauses and emotional equivalence
+have not been established. No direct auditory review was performed. Do not claim
+perfect acting/identity/radio, automatic listening acceptance or production approval.
+
+## Checkpoint - 2026-10-26: NVIDIA NVIGI Chatterbox integration
+
+Owner's latest direction: optimize production-ready voiceovers by the fastest method
+that preserves quality; do not reproduce Resolve's manual steps just because the
+owner only knows Resolve. Use **both stock Python Chatterbox Turbo and NVIGI Turbo
+for the next three full videos**, then recommend a default using owner-reviewed
+quality, total time, GPU utilization/VRAM, system RAM, retries and actual assistant
+token usage. Local TTS computation is not a paid API-token charge. No automatic
+auditory acceptance, invented resource numbers or winner from the short Miles test.
+Protocol: `docs/VOICEOVER_ENGINE_TRIAL.md`; slots/state:
+`../voice-tests/three-video-trial.json` (0/3, scripts not yet supplied). Prefer cached
+voices, batched work, deterministic CPU processing and passage-only repair. Keep
+both engines until the owner makes the final choice. Paired trial automation and
+instrumentation still need implementation; this is the agreed policy, not a new
+working UI mode. The existing older Chatterbox worker loads the original 500M model;
+do not silently compare it against native Turbo and call that the same baseline.
+
+Real test now completed at the user's request: cloned the supplied Miles recording and
+generated "Pete, rank five superheroes with the craziest relationship gossip." through
+stock Python Chatterbox Turbo and native NVIGI Turbo, sharing the same 10-second
+reference/conditioning. Both outputs are 3.8 s. WAV/MP3 comparisons and original renders,
+embedding and reports are under `../voice-tests/miles-nvigi-20261026-141257/`.
+Comparison WAVs measure -14.39/-14.37 LUFS and -1.50/-1.92 dBTP. No auditory or ASR review
+was performed, so generation success is not a claim of perfect identity/pronunciation.
+Stock CUDA worked on the local GTX 1660 SUPER. The packaged NVIGI CUDA plugin crashed
+with "no kernel image is available for execution on the device"; native Vulkan worked.
+Use Vulkan for NVIGI on this PC. Do not generalize Python CUDA success to the native DLL.
+Public upstream Turbo extraction weights were downloaded with LFS SHA-256 checks to
+`../nvigi-downloads/stock-chatterbox-turbo/`. NVIDIA extraction was run against those
+local weights; normal Hugging Face downloads stalled. No account/token was needed for
+these public files. The stock reference conditionals were reused for generation and
+exported using NVIDIA's extraction implementation. These real tests supersede the
+earlier untested notes below for Turbo/Vulkan and the Miles sample only.
+
+Follow-up: downloaded official SDK 1.7 x64 plus Turbo/Multilingual model archives to
+`../nvigi-downloads`, extracted SDK under `sdk/nvigi_pack_1_7_0_x64`, and installed both
+models into its `nvigi.plugin.tts.chatterbox-ggml` GUID directories. Receipts record
+source URLs, sizes and SHA-256; ZIP CRCs and extracted model sizes passed. 29 sample
+voices found. This layout already includes core DLLs and has no `setup_sample.bat`.
+The cloning setup is `data/nvigi.test/nvigi.tts/chatterbox/voice_cloning/setup_venv.ps1`;
+the user requested running it and its Python 3.11 environment is now installed.
+The large PyTorch GET stalled; resumed with a local 2.6.0+cu124 wheel downloaded in
+chunks and verified against PyTorch's published SHA-256. Completed the original
+requirements inside the created venv. `pip check` passed; Turbo/Multilingual imports
+and the NVIDIA extractor's `--help` passed without model downloads. Versions and a
+portable dependency lock are recorded in `../nvigi-downloads/cloning-setup-check.json`
+and `cloning-requirements.lock.txt`. Python model weights/auth and real cloning have
+not been exercised; no real GPU inference was run.
+Adapter now recognizes `nvigi.basic.tts.cxx.exe`, the new model/voice/cloning paths,
+and its fixed sampling defaults. Unsupported temperature/CFG controls are hidden;
+clone comparisons rank repeated takes without claiming parameter refinement. Updated
+focused suites: 16 NVIGI tests and 43 existing voice/clone tests passed in separate runs.
+
+Voiceovers now has provider `nvigi`: local Developer Pack configuration, CUDA/Vulkan/D3D12,
+Turbo/Multilingual, compatible voice selection, clean identity embedding extraction,
+bounded clone comparison and the existing mastering/passage-repair/export flow. Shared
+Claude/Codex schemas expose it. Setup: `docs/NVIGI_TTS.md`; adapter: `app/nvigi_tts.py`.
+The pack is installed separately on each voice workstation. This checkout's downloaded
+pack/setup is recorded above; real GPU inference remains untested. Native process starts once per passage; model
+loading affects throughput. Transcript checking remains unavailable through this adapter.
+Clone comparison still needs the existing voice module's trained scorer.
+
+Validation: 66 tests passed across separate runs (43 existing Voiceovers/clone tests,
+15 NVIGI tests, 8 Codex adapter tests). The disposable browser walkthrough passed 32
+checks with no browser errors, including protected NVIGI configuration round-trip and
+model/language/CFG controls. Synthetic audio and native process stand-ins only; real
+runtime DLL loading, GPU speed and voice quality need the target workstation's preview.
+This does not supersede the incomplete full P12 gate noted below.
+
 ## Checkpoint — 2026-10-25: dedicated Voiceovers workspace
 
 Owner is beginning a real test on a friend's **RTX 5070 / 32 GB RAM** PC and requested a push

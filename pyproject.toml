@@ -11,6 +11,9 @@ dependencies = [
     "httpx",
     "keyring",
     "claude-agent-sdk",      # P5: drives the real Claude Code agent (official SDK)
+    "pywinpty==3.1.0; sys_platform == 'win32'",  # Native Claude Code in a ConPTY, without a shell wrapper
+    "ptyprocess>=0.7,<1; sys_platform != 'win32'",
+    "mcp>=2.3,<3",           # Shared external source access and OAuth for both agents
     "pypdf==6.19.0",          # P10: local PDF text and page citations, no OCR/models
     "yt-dlp",                # P10: competitor captions and channel lists (no download of video)
     "numpy",                 # P10: voice gate pitch measurement (autocorrelation, CPU)

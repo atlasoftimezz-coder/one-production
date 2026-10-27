@@ -6,6 +6,8 @@
 <meta name="referrer" content="no-referrer">
 <title>One Production</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%23ff6b4a'/%3E%3Cstop offset='1' stop-color='%23a855f7'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='16' fill='url(%23g)'/%3E%3Cpath d='M22 20l24 12-24 12z' fill='white'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/vendor/xterm/xterm.css">
+<link rel="stylesheet" href="/terminal.css">
 <style>
   :root {
     --bg: #0b0d12; --bg2: #10131a; --panel: #141821; --panel2: #1b2030; --line: #242b3b;
@@ -487,6 +489,59 @@
   .offer-blocked { margin-top: 10px; color: var(--faint); font-size: 12px; }
   .offer-foot { margin-top: 10px; display: flex; gap: 14px; }
   .modal.wide { width: min(1040px, 100%); }
+  .drive-connector { margin: 0; padding: 18px; display: grid; gap: 14px;
+    background: linear-gradient(120deg, rgba(66,133,244,.07), transparent 70%); }
+  .drive-heading, .drive-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .drive-heading h4 { margin: 0; font-size: 16px; }
+  .drive-logo { width: 48px; height: 48px; display: grid; place-items: center;
+    border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+  .drive-result { margin: 0; padding: 10px 12px; border-radius: 9px; background: var(--panel2);
+    overflow-wrap: anywhere; font-size: 13px; }
+  .drive-result.success { color: var(--ok); }
+  .drive-result.error { color: var(--bad); }
+  .drive-setup { border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+  .drive-setup summary { cursor: pointer; font-weight: 600; }
+  .drive-setup .drive-fields { display: grid; gap: 10px; padding-top: 12px; }
+  .drive-fields label, #mcp_form label { display: grid; gap: 5px; }
+  #stor_drv input:not([type=checkbox]), #mcp_form input, #mcp_form select, #mcp_form textarea {
+    width: 100%; min-width: 0; padding: 9px 11px; border: 1px solid var(--line);
+    border-radius: 8px; background: var(--bg2); color: var(--ink); }
+  #stor_drv input:focus-visible, #mcp_form input:focus-visible,
+  #mcp_form select:focus-visible, #mcp_form textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .drive-actions button:disabled, #stor_drv button:disabled, #stor_import:disabled, #stor_up:disabled {
+    opacity: .5; cursor: default; }
+  .drive-steps { margin: 0; padding-left: 20px; color: var(--dim); font-size: 13px; }
+  .drive-steps li + li { margin-top: 6px; }
+  .drive-steps a, .drive-result a { color: var(--accent); }
+  #stormodal.drive-focused .modal { width: min(760px, 100%); }
+  #stormodal.drive-focused #stor_int, #stormodal.drive-focused #stor_copies { display: none; }
+  #stormodal.drive-focused #stor_grid { grid-template-columns: minmax(0, 1fr); }
+  #stormodal.drive-focused #stor_loc { display: none; }
+  #stor_int { display: grid; }
+  #stor_items .storrow { overflow-wrap: anywhere; }
+  #stor_items .storrow input { flex: none; }
+  #stor_grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,320px),1fr)); gap: 12px; }
+  .source-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,270px),1fr)); gap: 12px; }
+  .source-card { margin: 0; display: flex; flex-direction: column; gap: 12px; padding: 16px; min-width: 0; }
+  .source-card h4 { margin: 0; font-size: 16px; }
+  .source-card .source-title { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .source-title h4 { flex: 1; }
+  .source-card form, .source-card details > div { display: grid; gap: 10px; }
+  .source-card details > div { padding-top: 12px; }
+  .source-card summary { cursor: pointer; font-weight: 600; }
+  .source-card label:not(.source-toggle) { display: grid; gap: 5px; }
+  .source-toggle { display: flex; align-items: center; gap: 7px; }
+  .source-card input:not([type=checkbox]), .source-card textarea, .source-card select {
+    width: 100%; min-width: 0; padding: 9px 10px; background: var(--bg2); color: var(--ink);
+    border: 1px solid var(--line); border-radius: 8px; }
+  .source-card input:focus-visible, .source-card textarea:focus-visible, .source-card select:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px; }
+  .source-card button:disabled { opacity: .5; cursor: default; }
+  .source-card [hidden] { display: none !important; }
+  .source-card .drive-actions { margin-top: auto; }
+  .source-result { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 220px; overflow: auto; }
+  .source-card a { color: var(--accent); }
+  #source_reach, #source_discord { grid-column: 1 / -1; }
   .hobody { white-space: pre-wrap; font: 12.5px/1.55 ui-monospace, Consolas, monospace; background: var(--bg2);
             border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin: 0; max-height: 64vh; overflow: auto; }
   .tabs { display: inline-flex; background: var(--panel2); border-radius: 12px; padding: 4px; gap: 4px; }
@@ -680,7 +735,7 @@
       <span class="badge" id="accbadge" style="display:none"></span></button>
     <button class="topbtn" id="voicepagebtn" title="Voiceovers: scripts, speakers and audio"><svg class="icon"><use href="#i-play"/></svg><span class="tlabel">Voiceovers</span></button>
     <button class="topbtn" id="compbtn" title="Learn the editing style of competitor videos"><svg class="icon"><use href="#i-play"/></svg><span class="tlabel">Competitors</span></button>
-    <button class="topbtn" id="mcpbtn" title="Outside MCP servers for Claude"><svg class="icon"><use href="#i-swap"/></svg><span class="tlabel">MCP</span></button>
+    <button class="topbtn" id="mcpbtn" title="Sources and MCP connections"><svg class="icon"><use href="#i-swap"/></svg><span class="tlabel">MCP</span></button>
     <button class="topbtn" id="storbtn" title="Internal and Google Drive storage"><svg class="icon"><use href="#i-drive"/></svg><span class="tlabel">Storage</span></button>
     <button class="topbtn" id="bkbtn" title="Backups of your projects"><svg class="icon"><use href="#i-archive"/></svg><span class="tlabel">Backups</span></button>
     <button class="topbtn" id="sysbtn" title="What this PC has"><svg class="icon"><use href="#i-cpu"/></svg><span class="tlabel">System</span></button>
@@ -703,6 +758,36 @@
   </nav>
 
   <main>
+    <div class="chat-modes" role="tablist" aria-label="Chat engine">
+      <button type="button" id="claudecodetab" role="tab" aria-selected="false" aria-controls="claudecode" title="A terminal for PowerShell, Claude Code or Codex">CLI</button>
+      <button type="button" id="studiochattab" role="tab" aria-selected="true" aria-controls="messages" title="Conversation UI with One Production's agent tools and approval cards">Studio chat</button>
+      <small id="ccmodehint">Your CLI, inside One Production</small>
+    </div>
+    <section id="claudecode" hidden aria-label="CLI workspace">
+      <div class="cc-heading"><div><b id="cctitle">CLI</b><span id="ccstatus" role="status">Choose a project to start</span></div>
+        <div class="cc-actions"><button class="btn" id="cccopy" hidden>Copy output</button><button class="btn" id="ccreconnect" hidden>Reconnect</button><button class="btn" id="ccend" hidden>End session</button></div></div>
+      <details id="ccsetup" open>
+        <summary>Session setup <small id="ccsummary"></small></summary>
+        <form id="ccform">
+          <p id="ccdescription">Open a shell, or launch an assistant with its native configuration and tools.</p>
+          <label>Launch<select id="ccprogram" aria-label="CLI program"></select></label>
+          <label id="ccaccountfield"><span id="ccaccountlabel">Saved account</span><select id="ccaccount" aria-label="CLI account" aria-describedby="ccaccountnotice"></select></label>
+          <div id="ccaccounttools" class="cc-account-tools"><button class="btn" id="ccaccounts" type="button">Manage accounts</button><button class="linkbtn" id="ccrefreshaccounts" type="button">Refresh accounts</button></div>
+          <div id="ccaccountnotice" class="cc-account-notice" role="status" hidden></div>
+          <label>Working folder<input id="cccwd" placeholder="Project files folder" spellcheck="false" autocomplete="off"></label>
+          <small id="cccwdhelp">Starts in this folder. Leave blank to use this project's files.</small>
+          <label id="ccconfigfield"><span id="ccconfiglabel">Setup folder</span><input id="ccconfig" placeholder="Saved account's setup" spellcheck="false" autocomplete="off"></label>
+          <div id="ccsetupshortcuts" class="cc-shortcuts"><button type="button" class="linkbtn" id="ccsavedsetup">Use saved account setup</button><button type="button" class="linkbtn" id="cclocalsetup">Use this PC's setup</button></div>
+          <small id="ccsetuphelp">The saved account supplies authentication. This folder supplies settings, skills, plugins and native session history.</small>
+          <label id="ccstudiofield" class="cc-check"><input id="ccstudio" type="checkbox" checked> Add One Production tools and connected sources</label>
+          <label id="ccfreshfield" class="cc-check"><input id="ccfresh" type="checkbox"><span id="ccfreshlabel">Start a new conversation (keep earlier transcripts)</span></label>
+          <div class="cc-launch"><button class="btn primary" id="ccstart" type="submit">Start CLI</button><span id="ccstartnote">Type directly in the terminal.</span></div>
+        </form>
+      </details>
+      <div id="ccerror" role="alert" hidden></div>
+      <div id="ccterminal" aria-label="Interactive CLI terminal"></div>
+      <div class="cc-keys"><span>Type directly in the terminal</span><button type="button" class="btn" data-cc-key="interrupt">Ctrl+C</button><button type="button" class="btn" data-cc-key="escape">Esc</button><button type="button" class="btn" data-cc-key="mode">Shift+Tab</button><span>Paste: Ctrl+Shift+V · New line: Ctrl+J</span></div>
+    </section>
     <div id="messages"></div>
     <div class="composer">
       <div class="allowstrip" id="allowstrip" hidden></div>
@@ -1020,6 +1105,11 @@ const TOKEN = (() => {
   if (m) history.replaceState(null, "", location.pathname + location.search);
   return m ? decodeURIComponent(m[1]) : null;
 })();
+// Opening a launch link in an already open, locked tab can be only a fragment
+// navigation. Reload once to authenticate that document, then scrub the token.
+window.addEventListener('hashchange', () => {
+  if (/(?:^#|&)t=/.test(location.hash)) location.reload();
+});
 
 const $ = s => document.querySelector(s);
 const state = { current: null, projects: [], busy: false };
@@ -1133,6 +1223,9 @@ async function openProject(id) {
   // attachAgent() replays everything when the user comes back
   if (state.consumer && state.consumer.pid !== id) state.consumer.cancel();
   state.current = id;
+  const projectUrl = new URL(location.href);
+  projectUrl.searchParams.set('project', id);
+  history.replaceState(null, '', projectUrl.pathname + projectUrl.search);
   refreshAllow(id);
   const p = state.projects.find(x => x.id === id);
   document.querySelectorAll("#projects li").forEach(li => li.classList.toggle("active", li.dataset.id === id));
@@ -1147,6 +1240,7 @@ async function openProject(id) {
   $("#input").disabled = false; $("#send").disabled = state.busy === id;
   $("#stop").classList.toggle("on", state.busy === id);
   $("#input").focus();
+  window.cliTerminal?.project(id);
 }
 
 // ---------- chat
@@ -1293,7 +1387,7 @@ function decorate(bubble, m) {
 function grow() { const t = $("#input"); t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, 180) + "px"; }
 $("#input").addEventListener("input", grow);
 $("#input").addEventListener("keydown", e => {
-  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("#composer").requestSubmit(); }
+  if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); $("#composer").requestSubmit(); }
 });
 
 $("#composer").onsubmit = async e => {
@@ -1987,6 +2081,7 @@ function meterHTML(rl) {
 }
 
 function renderAccounts() {
+  document.dispatchEvent(new Event('oneprod:accounts-changed'));
   const real = state.accounts.filter(a => a.id !== "demo");
   $("#acclist").innerHTML = real.length ? real.map(a => {
     const p = PROV[a.provider];
@@ -3293,5 +3388,9 @@ async function bootApp() {
 <script src="/competitors.js"></script>
 <script src="/mcp.js"></script>
 <script src="/storage.js"></script>
+<script src="/sources.js"></script>
+<script src="/vendor/xterm/xterm.js"></script>
+<script src="/vendor/xterm/addon-fit.js"></script>
+<script src="/terminal.js"></script>
 </body>
 </html>

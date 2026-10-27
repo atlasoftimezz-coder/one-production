@@ -5,6 +5,18 @@ description: Load the full context of One Production and get ready to continue t
 You are taking over the One Production project from a previous build session. Do this before
 writing any code:
 
+First read the newest checkpoint at the top of `HANDOFF.md`. It records the
+shared CLI and source work, local-only credentials, pending manual checks and
+the owner's cancellation of Gemini. For voiceover continuation, also read
+`../SESSION_HANDOFF_2026-10-27.md` when present and the 27 October session-close
+section of `HANDOFF.md`; a fresh clone does not include the parent workspace.
+If the owner asks to continue that existing VO task, follow its scoped resume
+checklist. The full-phase
+gate/new-PC onboarding below is for a broader project handoff, phase validation or
+a changed environment; it is not required just to resume a short Peter voice test.
+An explicit continuation request already supplies "start" for that requested work.
+Keep broader phase/manual approvals pending unless actually completed.
+
 1. Read `HANDOFF.md` completely - it holds the whole context: what the app is, architecture,
    every decision and why, phase status, verified tool facts, the owner's preferences, testing
    conventions, traps already hit, and open items.

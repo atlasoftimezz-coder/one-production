@@ -69,6 +69,8 @@ class Settings(BaseModel):
     allow_chaining: bool = False
     # Outside MCP servers for Claude chats (app/mcp_servers.py), e.g. a local OS server. Every call asks.
     mcp_servers: dict = {}
+    # Source preferences, never tokens: Discord workflow binding and Agent Reach X accounts.
+    source_connections: dict = {}
     # Custom storage (app/cloud_storage.py): an internal folder and/or Google Drive, for finished episodes and imports.
     storage: dict = {}
     # Where the image assets module lives (FLUX + BiRefNet, ~25 GB). Empty = the data folder if its drive has

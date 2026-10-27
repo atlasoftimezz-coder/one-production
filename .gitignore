@@ -6,3 +6,4 @@ __pycache__/
 docs/gates/*-auto.md
 build/
 dist/
+.ui-previews/
